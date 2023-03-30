@@ -8,3 +8,6 @@ edition = "2021"
 [dependencies]
 clap = { version = "4.1.8", features = ["derive"] }
 reqwest = "0.11.14"
+chrono = "0.4.1"
+keytar = "0.1.6"
+thiserror = "1.0.2"
