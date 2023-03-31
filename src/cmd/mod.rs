@@ -1,23 +1,16 @@
-use crate::api::DracoonBuilder;
-use self::models::DcCmdError;
+use tracing::debug;
+
+use crate::api::{DracoonBuilder, nodes::Nodes, constants::get_client_credentials, Dracoon, auth::{Connected, OAuth2Flow}};
+use self::{models::DcCmdError, credentials::get_dracoon_env};
 
 pub mod models;
 pub mod credentials;
+pub mod utils;
 
-const CLIENT_ID: &str = "xxxxxxxxxxx";
-const CLIENT_SECRET: &str = "xxxxxxxxxxx";
 
-pub fn download(source: String, target: String) -> Result<(), DcCmdError>{
 
-    let base_url = parse_base_url(source)?;
-
-    let dracoon = DracoonBuilder::new()
-                                 .with_base_url(base_url)
-                                 .with_client_id(CLIENT_ID)
-                                 .with_client_secret(CLIENT_SECRET)
-                                 .build()?;
-
-    Ok(())
+pub async fn download(source: String, target: String) -> Result<(), DcCmdError>{
+todo!()
 
 }
 
@@ -26,6 +19,56 @@ pub fn upload(source: String, target: String) {
     todo!()
 
 }
+
+pub async fn get_nodes(source: String) -> Result<(), DcCmdError> {
+    debug!("Fetching node list from {}", source);
+    let dracoon = init_dracoon(source).await?;
+    let node_list = dracoon.get_nodes(None).await?;
+
+
+    node_list.items
+    .iter()
+    .for_each(|node| println!("{}", node.name));
+
+    Ok(())
+
+}
+
+async fn init_dracoon(url_path: String) -> Result<Dracoon<Connected>, DcCmdError> {
+
+    let (client_id, client_secret) = get_client_credentials();
+    let base_url = parse_base_url(url_path)?;
+
+    let mut dracoon = DracoonBuilder::new()
+                                 .with_base_url(base_url.clone())
+                                 .with_client_id(client_id)
+                                 .with_client_secret(client_secret)
+                                 .build()?;
+
+    let dracoon = match get_dracoon_env(&base_url) {
+        Ok(refresh_token) => dracoon.connect(OAuth2Flow::RefreshToken(refresh_token)).await?,
+        Err(_) => {
+            debug!("No refresh token stored for {}", base_url);
+            println!("Please log in via browser (open url): ");
+            println!("{}", dracoon.get_authorize_url());
+            println!("Please enter authorization code: ");
+            let mut auth_code = String::new();
+            std::io::stdin()
+                .read_line(&mut auth_code)
+                .expect("Error parsing user input (auth code).");
+
+            dracoon.connect(OAuth2Flow::AuthCodeFlow(auth_code.trim_end().into())).await?
+
+//TODO: store credentials securely
+        }
+    };
+
+    debug!("Successfully authenticated to {}", base_url);
+
+    Ok(dracoon)
+
+}
+
 
 fn parse_base_url(url_str: String) -> Result<String, DcCmdError> {
 
@@ -38,7 +81,7 @@ let url_str = match url_str.starts_with("https://") {
     false => format!("https://{url_str}")
 };
 
-let uri_fragments: Vec<&str> = url_str[8..].split("/").collect();
+let uri_fragments: Vec<&str> = url_str[8..].split('/').collect();
 
 match uri_fragments.len() {
     2.. => Ok(format!("https://{}", uri_fragments[0])),

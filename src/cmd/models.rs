@@ -1,7 +1,7 @@
 use clap::Parser;
 use thiserror::Error;
 
-use crate::api::errors::DracoonClientError;
+use crate::api::auth::{errors::DracoonClientError, models::{DracoonErrorResponse, DracoonAuthErrorResponse}};
 
 
 #[derive(Debug, PartialEq, Error)]
@@ -17,7 +17,11 @@ pub enum DcCmdError {
     #[error("Deleting DRACOON credentials failed")]
     CredentialDeletionFailed,
     #[error("DRACOON account not found")]
-    InvalidAccount
+    InvalidAccount,
+    #[error("DRACOON HTTP API error")]
+    DracoonError(DracoonErrorResponse),
+    #[error("DRACOON HTTP authentication error")]
+    DracoonAuthError(DracoonAuthErrorResponse)
 }
 
 
@@ -41,4 +45,14 @@ pub enum DcCmd {
         source: String,
         target: String
     },
+
+    Ls {
+        source: String
+    }
+}
+
+#[derive(Clone, Copy)]
+pub enum PrintFormat {
+    Pretty,
+    Csv,
 }

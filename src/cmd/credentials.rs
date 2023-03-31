@@ -16,9 +16,9 @@ pub fn get_dracoon_env(dracoon_url: &str) -> Result<String, DcCmdError> {
     match get_password(SERVICE_NAME, dracoon_url) {
         Ok(pwd) => match pwd.success {
             true => Ok(pwd.password),
-            false => return Err(DcCmdError::InvalidAccount),
+            false => Err(DcCmdError::InvalidAccount),
         },
-        Err(_) => return Err(DcCmdError::InvalidAccount),
+        Err(_) => Err(DcCmdError::InvalidAccount),
     }
 }
 
