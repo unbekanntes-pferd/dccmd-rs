@@ -21,7 +21,10 @@ pub enum DcCmdError {
     #[error("DRACOON HTTP API error")]
     DracoonError(DracoonErrorResponse),
     #[error("DRACOON HTTP authentication error")]
-    DracoonAuthError(DracoonAuthErrorResponse)
+    DracoonAuthError(DracoonAuthErrorResponse),
+    #[error("IO error")]
+    IoError
+    
 }
 
 

@@ -1,7 +1,10 @@
+use url::ParseError;
+
 use chrono::Utc;
 use reqwest::{Response, StatusCode};
 use serde::{Deserialize, Serialize};
-use tracing::debug;
+
+use crate::cmd::utils::parse_body;
 
 use super::{errors::DracoonClientError, Connection};
 
@@ -58,6 +61,17 @@ pub struct DracoonErrorResponse {
     error_code: Option<i32>,
 }
 
+impl DracoonErrorResponse {
+    pub fn new(code: i32, message: &str) -> Self {
+        Self {
+            code,
+            message: message.to_string(),
+            debug_info: None,
+            error_code: None,
+        }
+    }
+}
+
 #[derive(Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct DracoonAuthErrorResponse {
@@ -67,14 +81,23 @@ pub struct DracoonAuthErrorResponse {
 
 impl OAuth2TokenResponse {
     pub async fn from_response(res: Response) -> Result<Self, DracoonClientError> {
+        parse_body::<Self, DracoonAuthErrorResponse>(res).await
+    }
+}
 
-        debug!("{:?}", res);
+pub enum StatusCodeState {
+    Ok(StatusCode),
+    Error(StatusCode)
+}
 
-        match res.status() {
-            StatusCode::OK => Ok(res.json::<OAuth2TokenResponse>().await?),
-            _ => Err(DracoonClientError::Auth(
-                res.json::<DracoonAuthErrorResponse>().await?,
-            )),
+impl From<StatusCode> for StatusCodeState {
+    fn from(value: StatusCode) -> Self {
+        match value {
+            StatusCode::OK => StatusCodeState::Ok(value),
+            StatusCode::CREATED => StatusCodeState::Ok(value),
+            StatusCode::ACCEPTED => StatusCodeState::Ok(value),
+            StatusCode::NO_CONTENT => StatusCodeState::Ok(value),
+            _ => StatusCodeState::Error(value),
         }
     }
 }
@@ -85,7 +108,26 @@ impl From<OAuth2TokenResponse> for Connection {
             connected_at: Utc::now(),
             access_token: value.access_token,
             refresh_token: value.refresh_token,
-            expires_in: value.expires_in.try_into().expect("only positive numbers")
+            expires_in: value.expires_in.try_into().expect("only positive numbers"),
         }
+    }
+}
+
+impl From<DracoonAuthErrorResponse> for DracoonClientError {
+    fn from(value: DracoonAuthErrorResponse) -> Self {
+        Self::Auth(value)
+    }
+}
+
+impl From<DracoonErrorResponse> for DracoonClientError {
+    fn from(value: DracoonErrorResponse) -> Self {
+        Self::Http(value)
+    }
+}
+
+
+impl From<ParseError> for DracoonClientError {
+    fn from(value: ParseError) -> Self {
+        Self::InvalidUrl
     }
 }

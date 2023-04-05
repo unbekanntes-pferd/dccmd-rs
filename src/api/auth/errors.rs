@@ -22,7 +22,9 @@ pub enum DracoonClientError {
     #[error("HTTP error")]
     Http(DracoonErrorResponse),
     #[error("Authentication error")]
-    Auth(DracoonAuthErrorResponse)
+    Auth(DracoonAuthErrorResponse),
+    #[error("IO error")]
+    IoError
 }
 
 impl From<ReqError> for DracoonClientError {
@@ -31,7 +33,6 @@ impl From<ReqError> for DracoonClientError {
         if value.is_builder() {
             return DracoonClientError::Internal
         }
-
 
         DracoonClientError::Unknown
 

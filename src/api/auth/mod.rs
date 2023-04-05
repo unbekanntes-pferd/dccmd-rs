@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use reqwest::{header, header::HeaderMap, Client};
+use reqwest::{header, header::HeaderMap, Client, Url};
 use std::marker::PhantomData;
 
 use base64;
@@ -33,12 +33,12 @@ pub struct Connection {
 }
 
 pub struct DracoonClient<State = Disconnected> {
-    pub base_url: String,
-    pub redirect_uri: Option<String>,
+    base_url: Url,
+    redirect_uri: Option<Url>,
     client_id: String,
     client_secret: String,
     pub http: Client,
-    pub connection: Option<Connection>,
+    connection: Option<Connection>,
     connected: PhantomData<State>,
 }
 
@@ -81,9 +81,11 @@ impl DracoonClientBuilder {
     pub fn build(self) -> Result<DracoonClient<Disconnected>, DracoonClientError> {
         let http = Client::builder().user_agent(APP_USER_AGENT).build()?;
 
-        let Some(base_url) = self.base_url else {
+        let Some(base_url) = self.base_url.clone() else {
             return Err(DracoonClientError::MissingBaseUrl)
         };
+
+        let base_url = Url::parse(&base_url)?;
 
         let Some(client_id) = self.client_id else {
             return Err(DracoonClientError::MissingClientId)
@@ -93,9 +95,17 @@ impl DracoonClientBuilder {
             return Err(DracoonClientError::MissingClientSecret)
         };
 
+        let redirect_uri = match self.redirect_uri {
+            Some(url) => Url::parse(&url)?,
+            None => Url::parse(&format!(
+                "{}/oauth/callback",
+                self.base_url.expect("missing base url already checked")
+            ))?,
+        };
+
         Ok(DracoonClient {
             base_url,
-            redirect_uri: self.redirect_uri,
+            redirect_uri: Some(redirect_uri),
             client_id,
             client_secret,
             connection: None,
@@ -150,19 +160,37 @@ impl DracoonClient<Disconnected> {
     }
 
     pub fn get_authorize_url(&mut self) -> String {
-
-        let default_redirect = format!("{}/oauth/callback", self.base_url);
-        let redirect_uri = self.redirect_uri.as_ref().unwrap_or(&default_redirect).to_owned();
+        let default_redirect = self
+            .base_url
+            .join("oauth/callback")
+            .expect("Correct base url");
+        let redirect_uri = self
+            .redirect_uri
+            .as_ref()
+            .unwrap_or(&default_redirect)
+            .to_owned();
 
         self.redirect_uri = Some(redirect_uri.clone());
 
-        let authorize_url = format!("oauth/authorize?response_type=code&client_id={}&redirect_uri={}&scope=all", self.client_id, redirect_uri);
+        let mut authorize_url = self
+            .base_url
+            .join("oauth/authorize")
+            .expect("Correct base url");
+        let authorize_url = authorize_url
+            .query_pairs_mut()
+            .append_pair("response_type", "code")
+            .append_pair("client_id", &self.client_id)
+            .append_pair("redirect_uri", &redirect_uri.to_string())
+            .append_pair("scope", "all")
+            .finish();
 
-        format!("{}/{}", &self.base_url.to_string(), authorize_url.as_str())
+        authorize_url.to_string()
     }
 
-    fn get_token_url(&self) -> String {
-        format!("{}/{}", self.base_url, DRACOON_TOKEN_URL)
+    fn get_token_url(&self) -> Url {
+        self.base_url
+            .join(DRACOON_TOKEN_URL)
+            .expect("Correct base url")
     }
 
     async fn connect_password_flow(
@@ -197,5 +225,75 @@ impl DracoonClient<Disconnected> {
         refresh_token: &str,
     ) -> Result<Connection, DracoonClientError> {
         todo!()
+    }
+}
+
+impl DracoonClient<Connected> {
+    pub async fn disconnect(self) -> Result<DracoonClient<Disconnected>, DracoonClientError> {
+        todo!()
+    }
+
+    pub fn get_base_url(&self) -> &Url {
+        &self.base_url
+    }
+
+    pub fn get_auth_header(&self) -> String {
+        format!(
+            "Bearer {}",
+            self.connection
+                .as_ref()
+                .expect("Connected client has a connection")
+                .access_token
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tokio_test::assert_ok;
+
+    use super::*;
+
+    #[test]
+    #[ignore]
+    fn test_auth_code_authentication() {
+        let mut mock_server = mockito::Server::new();
+        let base_url = mock_server.url();
+
+        let auth_res = include_str!("./tests/auth_ok.json");
+        //let auth_res_json = serde_json::from_str(auth_res).expect("Valid JSON format");
+
+        println!("{}", auth_res);
+
+        let auth_res_2 = r#"{
+        "access_token": "12345sdfjkdsfhk",
+        "token_type": "bearer",
+        "refresh_token": "4985985489fscjkfsjk",
+        "expires_in_inactive": 28800,
+        "expires_in": 28800,
+        "scope": "all"
+    }"#;
+
+        let auth_mock = mock_server
+            .mock("GET", "/oauth/token")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body_from_file("../tests/auth_ok.json")
+            .create();
+
+        let dracoon = DracoonClientBuilder::new()
+            .with_base_url(base_url)
+            .with_client_id("client_id")
+            .with_client_secret("client_secret")
+            .build()
+            .expect("valid client config");
+
+        let auth_code = OAuth2Flow::AuthCodeFlow("hello world".to_string());
+
+        let res = tokio_test::block_on(dracoon.connect(auth_code));
+
+        assert_ok!(res);
+
+        //assert!(res.connection.is_some());
     }
 }

@@ -1,0 +1,8 @@
+{
+    "access_token": "12345sdfjkdsfhk",
+    "token_type": "bearer",
+    "refresh_token": "4985985489fscjkfsjk",
+    "expires_in_inactive": 28800,
+    "expires_in": 28800,
+    "scope": "all"
+}

@@ -2,10 +2,10 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ListAllParams {
-    offset: Option<u64>,
-    limit: Option<u64>,
-    filter: Option<String>,
-    sort: Option<String>,
+    pub offset: Option<u64>,
+    pub limit: Option<u64>,
+    pub filter: Option<String>,
+    pub sort: Option<String>,
 }
 
 impl Default for ListAllParams {

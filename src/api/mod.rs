@@ -1,5 +1,7 @@
 use std::marker::PhantomData;
 
+use reqwest::Url;
+
 use self::{
     auth::{errors::DracoonClientError, Connected, Disconnected, OAuth2Flow},
     auth::{DracoonClient, DracoonClientBuilder},
@@ -80,9 +82,19 @@ impl Dracoon<Disconnected> {
     }
 }
 
-
 impl Dracoon<Connected> {
-    pub fn build_api_url(&self, url_part: &str) -> String {
-        format!("{}{}", self.client.base_url, url_part)
+    pub fn build_api_url(&self, url_part: &str) -> Url {
+        self.client.get_base_url().join(url_part).expect("Correct base url")
+    }
+
+    pub fn get_auth_header(&self) -> String {
+
+        //TODO: move implementation to DracoonClient
+        //TODO: verify if access_token is valid - if not refresh it (client should handle this)
+        self.client.get_auth_header()
+    }
+
+    pub fn get_base_url(&self) -> &Url {
+        self.client.get_base_url()
     }
 }

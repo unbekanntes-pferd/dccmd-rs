@@ -14,7 +14,11 @@ pub const DRACOON_TOKEN_REVOKE_URL: &str = "oauth/revoke";
 pub const DRACOON_API_PREFIX: &str = "api/v4";
 
 /// NODES
-pub const GET_NODES: &str = "nodes";
+pub const NODES_BASE: &str = "nodes";
+pub const FILES_BASE: &str = "files";
+pub const NODES_DOWNLOAD_URL: &str = "downloads";
+pub const NODES_SEARCH: &str = "search";
+
 
 /// user agent header
 pub const APP_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));

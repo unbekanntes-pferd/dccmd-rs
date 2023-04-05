@@ -1,52 +1,81 @@
 use tracing::debug;
 
-use crate::api::{DracoonBuilder, nodes::Nodes, constants::get_client_credentials, Dracoon, auth::{Connected, OAuth2Flow}};
-use self::{models::DcCmdError, credentials::get_dracoon_env};
+use self::{credentials::get_dracoon_env, models::DcCmdError};
+use crate::{
+    api::{
+        auth::{Connected, OAuth2Flow},
+        constants::get_client_credentials,
+        nodes::{Download, Nodes},
+        Dracoon, DracoonBuilder,
+    },
+    cmd::utils::strings::parse_node_path,
+};
 
-pub mod models;
 pub mod credentials;
+pub mod models;
 pub mod utils;
 
+pub async fn download(source: String, target: String) -> Result<(), DcCmdError> {
+    debug!("Fetching node list from {}", source);
+    let dracoon = init_dracoon(&source).await?;
 
+    let node = dracoon.get_node_from_path(&source).await.unwrap();
+    let mut out_file = std::fs::File::create(target).or(Err(DcCmdError::IoError))?;
+    dracoon.download(&node, &mut out_file).await?;
 
-pub async fn download(source: String, target: String) -> Result<(), DcCmdError>{
-todo!()
-
+    Ok(())
 }
 
 pub fn upload(source: String, target: String) {
-
     todo!()
-
 }
 
 pub async fn get_nodes(source: String) -> Result<(), DcCmdError> {
     debug!("Fetching node list from {}", source);
-    let dracoon = init_dracoon(source).await?;
-    let node_list = dracoon.get_nodes(None).await?;
+    let dracoon = init_dracoon(&source).await?;
 
+    let (parent_path, node_name, depth) = parse_node_path(&source, &dracoon.get_base_url().to_string())?;
 
-    node_list.items
-    .iter()
-    .for_each(|node| println!("{}", node.name));
+    let node_list = match parent_path.as_str()
+    {
+        "/" => {
+            // this is the root node
+            debug!("Fetching root node list");
+            dracoon.get_nodes(None, None, None).await?
+
+        },
+        _ => {
+            // this is a sub node
+            let node = dracoon.get_node_from_path(&parent_path).await?;
+            dracoon.get_nodes(Some(node.id), None, None).await?
+        },
+    };
+
+    
+    node_list
+        .items
+        .iter()
+        .for_each(|node| println!("{}", node.name));
 
     Ok(())
-
 }
 
-async fn init_dracoon(url_path: String) -> Result<Dracoon<Connected>, DcCmdError> {
-
+async fn init_dracoon(url_path: &str) -> Result<Dracoon<Connected>, DcCmdError> {
     let (client_id, client_secret) = get_client_credentials();
-    let base_url = parse_base_url(url_path)?;
+    let base_url = parse_base_url(url_path.to_string())?;
 
     let mut dracoon = DracoonBuilder::new()
-                                 .with_base_url(base_url.clone())
-                                 .with_client_id(client_id)
-                                 .with_client_secret(client_secret)
-                                 .build()?;
+        .with_base_url(base_url.clone())
+        .with_client_id(client_id)
+        .with_client_secret(client_secret)
+        .build()?;
 
     let dracoon = match get_dracoon_env(&base_url) {
-        Ok(refresh_token) => dracoon.connect(OAuth2Flow::RefreshToken(refresh_token)).await?,
+        Ok(refresh_token) => {
+            dracoon
+                .connect(OAuth2Flow::RefreshToken(refresh_token))
+                .await?
+        }
         Err(_) => {
             debug!("No refresh token stored for {}", base_url);
             println!("Please log in via browser (open url): ");
@@ -57,42 +86,40 @@ async fn init_dracoon(url_path: String) -> Result<Dracoon<Connected>, DcCmdError
                 .read_line(&mut auth_code)
                 .expect("Error parsing user input (auth code).");
 
-            dracoon.connect(OAuth2Flow::AuthCodeFlow(auth_code.trim_end().into())).await?
+            dracoon
+                .connect(OAuth2Flow::AuthCodeFlow(auth_code.trim_end().into()))
+                .await?
 
-//TODO: store credentials securely
+            //TODO: store credentials securely
         }
     };
 
     debug!("Successfully authenticated to {}", base_url);
 
     Ok(dracoon)
-
 }
-
 
 fn parse_base_url(url_str: String) -> Result<String, DcCmdError> {
+    if url_str.starts_with("http://") {
+        return Err(DcCmdError::InvalidUrl);
+    };
 
-if url_str.starts_with("http://") {
-    return Err(DcCmdError::InvalidUrl)
-};
+    let url_str = match url_str.starts_with("https://") {
+        true => url_str,
+        false => format!("https://{url_str}"),
+    };
 
-let url_str = match url_str.starts_with("https://") {
-    true => url_str,
-    false => format!("https://{url_str}")
-};
+    let uri_fragments: Vec<&str> = url_str[8..].split('/').collect();
 
-let uri_fragments: Vec<&str> = url_str[8..].split('/').collect();
-
-match uri_fragments.len() {
-    2.. => Ok(format!("https://{}", uri_fragments[0])),
-    _ => Err(DcCmdError::InvalidUrl)
-}
+    match uri_fragments.len() {
+        2.. => Ok(format!("https://{}", uri_fragments[0])),
+        _ => Err(DcCmdError::InvalidUrl),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
 
     #[test]
     fn test_base_url_parse_https() {
@@ -111,5 +138,4 @@ mod tests {
         let base_url = parse_base_url("bla.dracoon.com".into());
         assert_eq!(base_url, Err(DcCmdError::InvalidUrl));
     }
-
 }

@@ -1,8 +1,11 @@
 #![allow(dead_code, unused_imports)]
 
-use crate::api::{
-    auth::{errors::DracoonClientError, models::DracoonErrorResponse},
-    models::Range,
+use crate::{
+    api::{
+        auth::{errors::DracoonClientError, models::DracoonErrorResponse},
+        models::Range,
+    },
+    cmd::utils::parse_body,
 };
 use reqwest::{Response, StatusCode};
 use serde::{Deserialize, Serialize};
@@ -91,15 +94,18 @@ pub struct UserInfo {
 
 impl NodeList {
     pub async fn from_response(res: Response) -> Result<Self, DracoonClientError> {
-        match res.status() {
-            StatusCode::OK => Ok(res.json::<NodeList>().await?),
-            _ => Err(DracoonClientError::Http(
-                res.json::<DracoonErrorResponse>().await?,
-            )),
-        }
+        parse_body::<Self, DracoonErrorResponse>(res).await
     }
 }
 
-// async fn parse_body<T>(res: Response) -> Result<T, DracoonClientError> where T: Deserialize {
+#[derive(Serialize, Deserialize, Debug)]
+pub struct DownloadUrlResponse {
+    pub download_url: String,
+}
 
-// }
+
+impl DownloadUrlResponse {
+    pub async fn from_response(res: Response) -> Result<Self, DracoonClientError> {
+        parse_body::<Self, DracoonErrorResponse>(res).await
+    }
+}
