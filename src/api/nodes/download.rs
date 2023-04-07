@@ -1,16 +1,17 @@
 use super::{
-    models::{DownloadUrlResponse, Node},
+    models::{DownloadUrlResponse, Node, ProgressCallback},
     Download,
 };
 use crate::api::{
     auth::{errors::DracoonClientError, Connected},
-    constants::{CHUNK_SIZE, DRACOON_API_PREFIX, FILES_BASE, NODES_BASE, NODES_DOWNLOAD_URL},
-    nodes::models::{S3ErrorResponse, S3XmlError},
+    constants::{CHUNK_SIZE, DRACOON_API_PREFIX, FILES_BASE, NODES_BASE, NODES_DOWNLOAD_URL, FILES_FILE_KEY},
+    utils::{build_s3_error, FromResponse},
     Dracoon,
 };
 use async_trait::async_trait;
+use dco3_crypto::FileKey;
+use futures_util::TryStreamExt;
 use reqwest::header::{self, CONTENT_LENGTH, RANGE};
-use serde_xml_rs::from_str;
 use std::{cmp::min, io::Write};
 use tracing::debug;
 
@@ -20,26 +21,38 @@ impl<T: DownloadInternal + Sync> Download for T {
         &'w self,
         node: &Node,
         writer: &'w mut (dyn Write + Send),
+        callback: Option<ProgressCallback>,
     ) -> Result<(), DracoonClientError> {
         let download_url_response = self.get_download_url(node.id).await?;
 
         match node.is_encrypted {
-            Some(val) => {
-                if val {
-                    self.download_encrypted(&download_url_response.download_url, writer)
-                        .await
+            Some(encrypted) => {
+                if encrypted {
+                    self.download_encrypted(
+                        &download_url_response.download_url,
+                        writer,
+                        node.size,
+                        callback,
+                    )
+                    .await
                 } else {
                     self.download_unencrypted(
                         &download_url_response.download_url,
-                        node.size,
                         writer,
+                        node.size,
+                        callback,
                     )
                     .await
                 }
             }
             None => {
-                self.download_unencrypted(&download_url_response.download_url, node.size, writer)
-                    .await
+                self.download_unencrypted(
+                    &download_url_response.download_url,
+                    writer,
+                    node.size,
+                    callback,
+                )
+                .await
             }
         }
     }
@@ -52,17 +65,22 @@ trait DownloadInternal {
         node_id: u64,
     ) -> Result<DownloadUrlResponse, DracoonClientError>;
 
+    async fn get_file_key(&self, node_id: u64) -> Result<FileKey, DracoonClientError>;
+
     async fn download_unencrypted(
         &self,
         url: &str,
-        size: Option<u64>,
         writer: &mut (dyn Write + Send),
+        size: Option<u64>,
+        mut callback: Option<ProgressCallback>,
     ) -> Result<(), DracoonClientError>;
 
     async fn download_encrypted(
         &self,
         url: &str,
         writer: &mut (dyn Write + Send),
+        size: Option<u64>,
+        mut callback: Option<ProgressCallback>,
     ) -> Result<(), DracoonClientError>;
 }
 
@@ -94,10 +112,10 @@ impl DownloadInternal for Dracoon<Connected> {
     async fn download_unencrypted(
         &self,
         url: &str,
-        size: Option<u64>,
         writer: &mut (dyn Write + Send),
+        size: Option<u64>,
+        mut callback: Option<ProgressCallback>,
     ) -> Result<(), DracoonClientError> {
-
         // get content length from header
         let content_length = self
             .client
@@ -121,13 +139,12 @@ impl DownloadInternal for Dracoon<Connected> {
 
         // loop until all bytes are downloaded
         while downloaded_bytes < content_length {
-
             // calculate range
             let start = downloaded_bytes;
             let end = min(start + CHUNK_SIZE as u64 - 1, content_length - 1);
             let range = format!("bytes={}-{}", start, end);
 
-             // get chunk
+            // get chunk
             let response = self
                 .client
                 .http
@@ -135,23 +152,29 @@ impl DownloadInternal for Dracoon<Connected> {
                 .header(RANGE, range)
                 .send()
                 .await?;
-            
+
             // handle error
             if !response.error_for_status_ref().is_ok() {
-                let status = &response.status();
-                let text = response.text().await?;
-                let error: S3XmlError = from_str(&text).expect("Valid S3 XML error");
-                let err_response = S3ErrorResponse::from_xml_error(status.clone(), error);
-                return Err(DracoonClientError::S3Error(err_response));
+                let error = build_s3_error(response).await;
+                return Err(error);
             }
 
             // write chunk to writer
-            let chunk = response.bytes().await?;
-            writer.write(&chunk).or(Err(DracoonClientError::IoError))?;
+            let mut stream = response.bytes_stream();
 
-            // update offset
-            let offset = min(downloaded_bytes + (chunk.len() as u64), content_length);
-            downloaded_bytes = offset;
+            while let Some(chunk) = stream.try_next().await? {
+                let len = chunk.len() as u64;
+                writer.write(&chunk).or(Err(DracoonClientError::IoError))?;
+                downloaded_bytes += len;
+
+                // call progress callback if provided
+                if let Some(ref mut callback) = callback {
+                    callback(downloaded_bytes, content_length);
+                }
+                if downloaded_bytes >= content_length {
+                    break;
+                }
+            }
         }
 
         Ok(())
@@ -161,7 +184,27 @@ impl DownloadInternal for Dracoon<Connected> {
         &self,
         url: &str,
         writer: &mut (dyn Write + Send),
+        size: Option<u64>,
+        callback: Option<ProgressCallback>,
     ) -> Result<(), DracoonClientError> {
         todo!()
+    }
+
+    async fn get_file_key(&self, node_id: u64) -> Result<FileKey, DracoonClientError> {
+        
+        let url_part = format!(
+            "{}/{}/{}/{}/{}",
+            DRACOON_API_PREFIX, NODES_BASE, FILES_BASE, node_id, FILES_FILE_KEY
+        );
+
+        let response = self
+            .client
+            .http
+            .get(self.build_api_url(&url_part))
+            .header(header::AUTHORIZATION, self.get_auth_header().await?)
+            .send()
+            .await?;
+
+        FileKey::from_response(response).await
     }
 }

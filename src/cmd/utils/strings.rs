@@ -2,19 +2,20 @@ use crate::{
     api::nodes::models::NodeList,
     cmd::models::{DcCmdError, PrintFormat},
 };
-use colored::Colorize;
+
+use console::style;
 
 const ERROR_PREFIX: &str = "Error: ";
 const SUCCESS_PREFIX: &str = "Success: ";
 
 pub fn format_error_message(message: &str) -> String {
-    let err_prefix_red = format!("{}", ERROR_PREFIX.red());
+    let err_prefix_red = format!("{}", style(ERROR_PREFIX).red().bold());
 
     format!("{} {}", err_prefix_red, message)
 }
 
 pub fn format_success_message(message: &str) -> String {
-    let succ_prefix_green = format!("{}", SUCCESS_PREFIX.green());
+    let succ_prefix_green = format!("{}", style(SUCCESS_PREFIX).green().bold());
 
     format!("{} {}", succ_prefix_green, message)
 }
@@ -92,7 +93,7 @@ mod tests {
     fn test_format_success_message() {
         let message = "All good here.";
         assert_eq!(
-            "\u{1b}[32mSuccess: \u{1b}[0m All good here.",
+            "\u{1b}[32m\u{1b}[1mSuccess: \u{1b}[0m All good here.",
             format_success_message(message)
         );
     }
@@ -101,7 +102,7 @@ mod tests {
     fn test_format_error_message() {
         let message = "We have a problem.";
         assert_eq!(
-            "\u{1b}[31mError: \u{1b}[0m We have a problem.",
+            "\u{1b}[31m\u{1b}[1mError: \u{1b}[0m We have a problem.",
             format_error_message(message)
         );
     }

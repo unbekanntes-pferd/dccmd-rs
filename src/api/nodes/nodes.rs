@@ -7,7 +7,7 @@ use crate::{
         auth::{errors::DracoonClientError, Connected, models::DracoonErrorResponse},
         constants::{DRACOON_API_PREFIX, NODES_BASE, NODES_SEARCH},
         models::ListAllParams,
-        Dracoon,
+        Dracoon, utils::FromResponse,
     },
     cmd::utils::strings::parse_node_path,
 };

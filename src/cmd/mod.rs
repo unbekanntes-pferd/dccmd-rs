@@ -1,3 +1,4 @@
+use indicatif::{ProgressBar, ProgressStyle};
 use tracing::debug;
 
 use self::{credentials::get_dracoon_env, models::DcCmdError};
@@ -19,9 +20,28 @@ pub async fn download(source: String, target: String) -> Result<(), DcCmdError> 
     debug!("Fetching node list from {}", source);
     let dracoon = init_dracoon(&source).await?;
 
-    let node = dracoon.get_node_from_path(&source).await.unwrap();
+    let node = dracoon.get_node_from_path(&source).await?;
     let mut out_file = std::fs::File::create(target).or(Err(DcCmdError::IoError))?;
-    dracoon.download(&node, &mut out_file).await?;
+
+
+    let progress_bar = ProgressBar::new(node.size.unwrap_or(0));
+    progress_bar.set_style(
+        ProgressStyle::default_bar()
+        .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta}) {msg}").unwrap()
+        .progress_chars("=>-"),
+    );
+
+    let progress_bar_mv = progress_bar.clone();
+
+    let node_name = node.name.clone();
+
+    dracoon.download(&node, &mut out_file, Some(Box::new(move |progress, total| {
+        progress_bar_mv.set_message("Downloading");
+        progress_bar_mv.set_length(total);
+        progress_bar_mv.set_position(progress);
+    }))).await?;
+
+    progress_bar.finish_with_message(format!("Download of {} complete", node_name));
 
     Ok(())
 }

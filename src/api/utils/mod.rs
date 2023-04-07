@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use reqwest::Response;
 use serde::de::DeserializeOwned;
 use serde_xml_rs::from_str;
@@ -22,10 +23,17 @@ where
     body.into()
 }
 
-async fn build_s3_error(response: Response) -> DracoonClientError {
+pub async fn build_s3_error(response: Response) -> DracoonClientError {
     let status = &response.status();
     let text = response.text().await.expect("Valid S3 XML error");
     let error: S3XmlError = from_str(&text).expect("Valid S3 XML error");
     let err_response = S3ErrorResponse::from_xml_error(status.clone(), error);
     return DracoonClientError::S3Error(err_response);
+}
+
+#[async_trait]
+pub trait FromResponse {
+    async fn from_response(res: Response) -> Result<Self, DracoonClientError>
+    where
+        Self: Sized;
 }

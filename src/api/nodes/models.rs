@@ -4,17 +4,30 @@ use crate::{
     api::{
         auth::{errors::DracoonClientError, models::DracoonErrorResponse},
         models::Range, utils::parse_body,
+        utils::FromResponse
     }
+
 };
+use async_trait::async_trait;
+use dco3_crypto::FileKey;
 use reqwest::{Response, StatusCode};
 use serde::{Deserialize, Serialize};
 
+/// A callback function that is called after each chunk is processed (upload and download)
+pub type ProgressCallback = Box<dyn FnMut(u64, u64) + Send + Sync>;
+
+/// file meta information (name, size)
+pub type FileMeta = (String, u64);
+
+
+/// A list of nodes in DRACOON - GET /nodes
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NodeList {
     pub range: Range,
     pub items: Vec<Node>,
 }
 
+/// A node in DRACOON - GET /nodes/{nodeId}
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Node {
@@ -57,6 +70,7 @@ pub struct Node {
     pub auth_parent_id: Option<u64>,
 }
 
+/// DRACOOON node permissions
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NodePermissions {
@@ -72,6 +86,7 @@ pub struct NodePermissions {
     delete_recycle_bin: bool,
 }
 
+/// DRACOOON encryption info (rescue keys)
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EncryptionInfo {
@@ -80,6 +95,7 @@ pub struct EncryptionInfo {
     data_space_key_state: String,
 }
 
+/// DRACOON user info on nodes (created_by, updated_by)
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserInfo {
@@ -91,25 +107,31 @@ pub struct UserInfo {
     email: Option<String>,
 }
 
-impl NodeList {
-    pub async fn from_response(res: Response) -> Result<Self, DracoonClientError> {
+#[async_trait]
+impl FromResponse for NodeList {
+    /// transforms a response into a NodeList
+    async fn from_response(res: Response) -> Result<Self, DracoonClientError> {
         parse_body::<Self, DracoonErrorResponse>(res).await
     }
 }
 
+/// Response for download url of a node - POST /nodes/files/{nodeId}/download
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct DownloadUrlResponse {
     pub download_url: String,
 }
 
-
-impl DownloadUrlResponse {
-    pub async fn from_response(res: Response) -> Result<Self, DracoonClientError> {
+#[async_trait]
+impl FromResponse for DownloadUrlResponse {
+    /// transforms a response into a DownloadUrlResponse
+    async fn from_response(res: Response) -> Result<Self, DracoonClientError> {
         parse_body::<Self, DracoonErrorResponse>(res).await
     }
 }
 
+
+/// Error response for S3 requests (XML)
 #[derive(Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub struct S3XmlError {
@@ -120,6 +142,7 @@ pub struct S3XmlError {
     argument_name: Option<String>,
 }
 
+/// Error response for S3 requests
 #[derive(Debug, PartialEq)]
 pub struct S3ErrorResponse {
     pub status: StatusCode,
@@ -127,7 +150,46 @@ pub struct S3ErrorResponse {
 }
 
 impl S3ErrorResponse {
+    /// transforms a S3XmlError into a S3ErrorResponse
     pub fn from_xml_error(status: StatusCode, error: S3XmlError) -> Self {
         Self { status, error }
     }
+}
+
+#[async_trait]
+impl FromResponse for FileKey { 
+  /// transforms a response into a FileKey
+  async fn from_response(res: Response) -> Result<Self, DracoonClientError> {
+    parse_body::<Self, DracoonErrorResponse>(res).await
+  }
+}
+
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateFileUploadResponse {
+    pub upload_url: Option<String>,
+    pub upload_id: String,
+    pub token: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PresignedUrl {
+    pub url: String,
+    pub part_number: u32,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PresignedUrlList {
+    pub urls: Vec<PresignedUrl>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct S3FileUploadStatus {
+    pub status: String,
+    pub node: Option<Node>,
+    pub error_details: Option<DracoonErrorResponse>
 }
