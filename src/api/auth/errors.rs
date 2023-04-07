@@ -1,3 +1,4 @@
+use dco3_crypto::DracoonCryptoError;
 use reqwest::Error as ReqError;
 use thiserror::Error;
 
@@ -29,6 +30,10 @@ pub enum DracoonClientError {
     Auth(DracoonAuthErrorResponse),
     #[error("IO error")]
     IoError,
+    #[error("Crypto error")]
+    CryptoError(DracoonCryptoError),
+    #[error("Missing encryption secret")]
+    MissingEncryptionSecret,
 }
 
 impl From<ReqError> for DracoonClientError {
@@ -38,5 +43,11 @@ impl From<ReqError> for DracoonClientError {
         }
 
         DracoonClientError::Unknown
+    }
+}
+
+impl From<DracoonCryptoError> for DracoonClientError {
+    fn from(value: DracoonCryptoError) -> Self {
+        DracoonClientError::CryptoError(value)
     }
 }

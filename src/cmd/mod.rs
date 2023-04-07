@@ -17,12 +17,11 @@ pub mod models;
 pub mod utils;
 
 pub async fn download(source: String, target: String) -> Result<(), DcCmdError> {
-    debug!("Fetching node list from {}", source);
+    debug!("Downloading {} to {}", source, target);
     let dracoon = init_dracoon(&source).await?;
 
     let node = dracoon.get_node_from_path(&source).await?;
     let mut out_file = std::fs::File::create(target).or(Err(DcCmdError::IoError))?;
-
 
     let progress_bar = ProgressBar::new(node.size.unwrap_or(0));
     progress_bar.set_style(

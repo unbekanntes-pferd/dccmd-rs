@@ -1,21 +1,26 @@
 use std::marker::PhantomData;
 
+use dco3_crypto::PlainUserKeyPairContainer;
 use reqwest::Url;
 
 use self::{
     auth::{errors::DracoonClientError, Connected, Disconnected, OAuth2Flow},
     auth::{DracoonClient, DracoonClientBuilder},
+    user::{models::UserAccount, User, UserAccountKeypairs},
 };
 
 pub mod auth;
 pub mod constants;
 pub mod models;
 pub mod nodes;
+pub mod user;
 pub mod utils;
 
 pub struct Dracoon<State = Disconnected> {
     client: DracoonClient<State>,
     state: PhantomData<State>,
+    user_info: Option<UserAccount>,
+    keypair: Option<PlainUserKeyPairContainer>,
 }
 
 pub struct DracoonBuilder {
@@ -61,6 +66,8 @@ impl DracoonBuilder {
         Ok(Dracoon {
             client: dracoon,
             state: PhantomData,
+            user_info: None,
+            keypair: None,
         })
     }
 }
@@ -75,6 +82,8 @@ impl Dracoon<Disconnected> {
         Ok(Dracoon {
             client,
             state: PhantomData,
+            user_info: None,
+            keypair: None,
         })
     }
 
@@ -101,5 +110,31 @@ impl Dracoon<Connected> {
 
     pub fn get_refresh_token(&self) -> &str {
         self.client.get_refresh_token()
+    }
+
+    pub async fn get_user_info(&mut self) -> Result<&UserAccount, DracoonClientError> {
+        match self.user_info {
+            Some(ref user_info) => Ok(user_info),
+            None => {
+                let user_info = self.get_user_account().await?;
+                self.user_info = Some(user_info);
+                Ok(self.user_info.as_ref().expect("Just set user info"))
+            }
+        }
+    }
+
+    pub async fn get_keypair(
+        &mut self,
+        secret: Option<&str>,
+    ) -> Result<&PlainUserKeyPairContainer, DracoonClientError> {
+        match self.keypair {
+            Some(ref keypair) => Ok(keypair),
+            None => {
+                let secret = secret.ok_or(DracoonClientError::MissingEncryptionSecret)?;
+                let keypair = self.get_user_keypair(secret).await?;
+                self.keypair = Some(keypair);
+                Ok(self.keypair.as_ref().expect("Just set keypair"))
+            }
+        }
     }
 }
