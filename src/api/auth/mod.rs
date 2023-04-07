@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use reqwest::{header, header::HeaderMap, Client, Url};
+use reqwest::{Client, Url};
 use std::marker::PhantomData;
 
 use base64;
@@ -9,22 +9,24 @@ pub mod models;
 
 use crate::api::{
     auth::models::{OAuth2AuthCodeFlow, OAuth2TokenResponse},
-    constants::{DRACOON_TOKEN_URL, GRANT_TYPE_AUTH_CODE},
+    constants::DRACOON_TOKEN_URL,
 };
 
-use self::errors::DracoonClientError;
+use self::{errors::DracoonClientError, models::OAuth2RefreshTokenFlow};
 use super::constants::APP_USER_AGENT;
 
+/// represents the possible OAuth2 flows
 pub enum OAuth2Flow {
     PasswordFlow(String, String),
     AuthCodeFlow(String),
     RefreshToken(String),
 }
 
-// states of a client
+/// represents possible states for the DracoonClient
 pub struct Connected;
 pub struct Disconnected;
 
+/// represents a connection to DRACOON (OAuth2 tokens)
 pub struct Connection {
     pub access_token: String,
     pub refresh_token: String,
@@ -32,6 +34,7 @@ pub struct Connection {
     pub connected_at: DateTime<Utc>,
 }
 
+/// represents the DRACOON client (stateful)
 pub struct DracoonClient<State = Disconnected> {
     base_url: Url,
     redirect_uri: Option<Url>,
@@ -115,6 +118,7 @@ impl DracoonClientBuilder {
     }
 }
 
+/// DracoonClient implementation for Disconnected state
 impl DracoonClient<Disconnected> {
     pub async fn connect(
         self,
@@ -128,20 +132,6 @@ impl DracoonClient<Disconnected> {
             OAuth2Flow::RefreshToken(token) => self.connect_refresh_token(&token).await?,
         };
 
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            header::AUTHORIZATION,
-            connection
-                .access_token
-                .parse()
-                .expect("correct access token format"),
-        );
-
-        let http = Client::builder()
-            .user_agent(APP_USER_AGENT)
-            .default_headers(headers)
-            .build()?;
-
         Ok(DracoonClient {
             client_id: self.client_id,
             client_secret: self.client_secret,
@@ -149,7 +139,7 @@ impl DracoonClient<Disconnected> {
             base_url: self.base_url,
             redirect_uri: self.redirect_uri,
             connected: PhantomData,
-            http,
+            http: self.http,
         })
     }
 
@@ -204,17 +194,16 @@ impl DracoonClient<Disconnected> {
     async fn connect_authcode_flow(&self, code: &str) -> Result<Connection, DracoonClientError> {
         let token_url = self.get_token_url();
 
-        let auth = OAuth2AuthCodeFlow {
-            client_id: self.client_id.clone(),
-            client_secret: self.client_secret.clone(),
-            code: code.into(),
-            grant_type: GRANT_TYPE_AUTH_CODE.into(),
-            redirect_uri: self
+        let auth = OAuth2AuthCodeFlow::new(
+            &self.client_id,
+            &self.client_secret,
+            &code,
+            &self
                 .redirect_uri
                 .as_ref()
-                .expect("Redirect URI must be available for authorization code")
-                .to_string(),
-        };
+                .expect("redirect uri is set")
+                .as_str(),
+        );
 
         let res = self.http.post(token_url).form(&auth).send().await?;
         Ok(OAuth2TokenResponse::from_response(res).await?.into())
@@ -224,10 +213,17 @@ impl DracoonClient<Disconnected> {
         &self,
         refresh_token: &str,
     ) -> Result<Connection, DracoonClientError> {
-        todo!()
+        let token_url = self.get_token_url();
+
+        let auth =
+            OAuth2RefreshTokenFlow::new(&self.client_id, &self.client_secret, &refresh_token);
+
+        let res = self.http.post(token_url).form(&auth).send().await?;
+        Ok(OAuth2TokenResponse::from_response(res).await?.into())
     }
 }
 
+/// DracoonClient implementation for Connected state
 impl DracoonClient<Connected> {
     pub async fn disconnect(self) -> Result<DracoonClient<Disconnected>, DracoonClientError> {
         todo!()
@@ -237,14 +233,61 @@ impl DracoonClient<Connected> {
         &self.base_url
     }
 
-    pub fn get_auth_header(&self) -> String {
-        format!(
+    fn get_token_url(&self) -> Url {
+        self.base_url
+            .join(DRACOON_TOKEN_URL)
+            .expect("Correct base url")
+    }
+
+    async fn connect_refresh_token(&self) -> Result<Connection, DracoonClientError> {
+        let token_url = self.get_token_url();
+
+        let connection = self
+            .connection
+            .as_ref()
+            .expect("Connected client has a connection");
+
+        let auth = OAuth2RefreshTokenFlow::new(
+            &self.client_id,
+            &self.client_secret,
+            connection.refresh_token.as_str(),
+        );
+
+        let res = self.http.post(token_url).form(&auth).send().await?;
+        Ok(OAuth2TokenResponse::from_response(res).await?.into())
+    }
+
+    pub async fn get_auth_header(&self) -> Result<String, DracoonClientError> {
+        if !self.check_access_token_validity() {
+            let connection = self.connect_refresh_token().await?;
+        }
+
+        Ok(format!(
             "Bearer {}",
             self.connection
                 .as_ref()
                 .expect("Connected client has a connection")
                 .access_token
-        )
+        ))
+    }
+
+    pub fn get_refresh_token(&self) -> &str {
+        self.connection
+            .as_ref()
+            .expect("Connected client has a connection")
+            .refresh_token
+            .as_str()
+    }
+
+    fn check_access_token_validity(&self) -> bool {
+        let connection = self
+            .connection
+            .as_ref()
+            .expect("Connected client has a connection");
+
+        let now = Utc::now();
+
+        (now - connection.connected_at).num_seconds() < connection.expires_in.into()
     }
 }
 

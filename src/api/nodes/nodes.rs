@@ -48,7 +48,7 @@ impl Nodes for Dracoon<Connected> {
             .client
             .http
             .get(api_url)
-            .header(header::AUTHORIZATION, self.get_auth_header())
+            .header(header::AUTHORIZATION, self.get_auth_header().await?)
             .header(header::CONTENT_TYPE, "application/json")
             .send()
             .await?;
@@ -77,7 +77,7 @@ impl Nodes for Dracoon<Connected> {
 
         api_url.query_pairs_mut()
             .append_pair("search_string", &name)
-            .append_pair("depth", &depth.to_string())
+            .append_pair("depth_level", &depth.to_string())
             .append_pair("filter", &format!("parentPath:eq:{}", parent_path))
             .finish();
         
@@ -86,7 +86,7 @@ impl Nodes for Dracoon<Connected> {
             .client
             .http
             .get(api_url)
-            .header(header::AUTHORIZATION, self.get_auth_header())
+            .header(header::AUTHORIZATION, self.get_auth_header().await?)
             .header(header::CONTENT_TYPE, "application/json")
             .send()
             .await?;
@@ -94,7 +94,6 @@ impl Nodes for Dracoon<Connected> {
         let nodes = NodeList::from_response(response).await?;
 
         debug!("Found {} nodes", nodes.items.len());
-        debug!("Found nodes: {:?}", nodes.items);
 
         match nodes.items.len() {
             1 => Ok(nodes.items.into_iter().next().ok_or(DracoonClientError::Http(DracoonErrorResponse::new(404, "Not found")))?),

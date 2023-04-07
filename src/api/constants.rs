@@ -19,6 +19,8 @@ pub const FILES_BASE: &str = "files";
 pub const NODES_DOWNLOAD_URL: &str = "downloads";
 pub const NODES_SEARCH: &str = "search";
 
+pub const CHUNK_SIZE: usize = 1024 * 1024 * 32; // 32 MB
+
 
 /// user agent header
 pub const APP_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));

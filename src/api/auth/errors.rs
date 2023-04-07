@@ -1,7 +1,9 @@
-use thiserror::Error;
 use reqwest::Error as ReqError;
+use thiserror::Error;
 
-use super::models::{DracoonErrorResponse, DracoonAuthErrorResponse};
+use crate::api::nodes::models::S3ErrorResponse;
+
+use super::models::{DracoonAuthErrorResponse, DracoonErrorResponse};
 
 #[derive(Debug, Error)]
 pub enum DracoonClientError {
@@ -21,20 +23,20 @@ pub enum DracoonClientError {
     Internal,
     #[error("HTTP error")]
     Http(DracoonErrorResponse),
+    #[error("S3 error")]
+    S3Error(S3ErrorResponse),
     #[error("Authentication error")]
     Auth(DracoonAuthErrorResponse),
     #[error("IO error")]
-    IoError
+    IoError,
 }
 
 impl From<ReqError> for DracoonClientError {
     fn from(value: ReqError) -> Self {
-
         if value.is_builder() {
-            return DracoonClientError::Internal
+            return DracoonClientError::Internal;
         }
 
         DracoonClientError::Unknown
-
     }
 }

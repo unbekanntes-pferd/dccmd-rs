@@ -8,7 +8,7 @@ use crate::{
         nodes::{Download, Nodes},
         Dracoon, DracoonBuilder,
     },
-    cmd::utils::strings::parse_node_path,
+    cmd::{utils::strings::{parse_node_path, build_node_path}, credentials::set_dracoon_env},
 };
 
 pub mod credentials;
@@ -35,6 +35,11 @@ pub async fn get_nodes(source: String) -> Result<(), DcCmdError> {
     let dracoon = init_dracoon(&source).await?;
 
     let (parent_path, node_name, depth) = parse_node_path(&source, &dracoon.get_base_url().to_string())?;
+    let node_path = build_node_path((parent_path.clone(), node_name.clone(), depth));
+
+    debug!("Parent path: {}", parent_path);
+    debug!("Node name: {}", node_name);
+    debug!("Depth: {}", depth);
 
     let node_list = match parent_path.as_str()
     {
@@ -46,7 +51,8 @@ pub async fn get_nodes(source: String) -> Result<(), DcCmdError> {
         },
         _ => {
             // this is a sub node
-            let node = dracoon.get_node_from_path(&parent_path).await?;
+            debug!("Fetching node list from path {}", node_path);
+            let node = dracoon.get_node_from_path(&node_path).await?;
             dracoon.get_nodes(Some(node.id), None, None).await?
         },
     };
@@ -86,11 +92,14 @@ async fn init_dracoon(url_path: &str) -> Result<Dracoon<Connected>, DcCmdError> 
                 .read_line(&mut auth_code)
                 .expect("Error parsing user input (auth code).");
 
-            dracoon
+            let dracoon = dracoon
                 .connect(OAuth2Flow::AuthCodeFlow(auth_code.trim_end().into()))
-                .await?
+                .await?;
 
-            //TODO: store credentials securely
+
+            set_dracoon_env(&base_url, dracoon.get_refresh_token())?;
+
+            dracoon
         }
     };
 

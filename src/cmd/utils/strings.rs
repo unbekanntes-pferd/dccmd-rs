@@ -53,6 +53,7 @@ pub fn parse_node_path(path: &str, base_url: &str) -> Result<ParsedPath, DcCmdEr
             let name = path.last().ok_or(DcCmdError::InvalidUrl)?.to_string();
             let parent_path = path[..path.len() - 1].join("/");
             let parent_path = format!("{}/", parent_path);
+            let parent_path = parent_path.trim_start_matches(base_url).to_string();
             let depth = path.len() as u64 - 1;
 
             (parent_path, name, depth)
@@ -63,6 +64,7 @@ pub fn parse_node_path(path: &str, base_url: &str) -> Result<ParsedPath, DcCmdEr
             let name = path.last().ok_or(DcCmdError::InvalidUrl)?.to_string();
             let parent_path = path[..path.len() - 1].join("/");
             let parent_path = format!("{}/", parent_path);
+            let parent_path = parent_path.trim_start_matches(base_url).to_string();
             let depth = path.len() as u64 - 2;
 
             (parent_path, name, depth)
@@ -70,6 +72,16 @@ pub fn parse_node_path(path: &str, base_url: &str) -> Result<ParsedPath, DcCmdEr
     };
 
     Ok((parent_path, name, depth))
+}
+
+pub fn build_node_path(path: ParsedPath) -> String {
+    let (parent_path, name, depth) = path;
+
+    if depth == 0 {
+        return format!("/{}/", name);
+    }
+
+    format!("{}{}/", parent_path, name)
 }
 
 #[cfg(test)]

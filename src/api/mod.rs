@@ -11,6 +11,7 @@ pub mod auth;
 pub mod constants;
 pub mod models;
 pub mod nodes;
+pub mod utils;
 
 pub struct Dracoon<State = Disconnected> {
     client: DracoonClient<State>,
@@ -84,17 +85,21 @@ impl Dracoon<Disconnected> {
 
 impl Dracoon<Connected> {
     pub fn build_api_url(&self, url_part: &str) -> Url {
-        self.client.get_base_url().join(url_part).expect("Correct base url")
+        self.client
+            .get_base_url()
+            .join(url_part)
+            .expect("Correct base url")
     }
 
-    pub fn get_auth_header(&self) -> String {
-
-        //TODO: move implementation to DracoonClient
-        //TODO: verify if access_token is valid - if not refresh it (client should handle this)
-        self.client.get_auth_header()
+    pub async fn get_auth_header(&self) -> Result<String, DracoonClientError> {
+        self.client.get_auth_header().await
     }
 
     pub fn get_base_url(&self) -> &Url {
         self.client.get_base_url()
+    }
+
+    pub fn get_refresh_token(&self) -> &str {
+        self.client.get_refresh_token()
     }
 }

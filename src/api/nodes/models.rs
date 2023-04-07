@@ -3,9 +3,8 @@
 use crate::{
     api::{
         auth::{errors::DracoonClientError, models::DracoonErrorResponse},
-        models::Range,
-    },
-    cmd::utils::parse_body,
+        models::Range, utils::parse_body,
+    }
 };
 use reqwest::{Response, StatusCode};
 use serde::{Deserialize, Serialize};
@@ -87,8 +86,8 @@ pub struct UserInfo {
     id: u64,
     user_type: String,
     avatar_uuid: String,
-    first_name: String,
-    last_name: String,
+    first_name: Option<String>,
+    last_name: Option<String>,
     email: Option<String>,
 }
 
@@ -99,6 +98,7 @@ impl NodeList {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct DownloadUrlResponse {
     pub download_url: String,
 }
@@ -107,5 +107,27 @@ pub struct DownloadUrlResponse {
 impl DownloadUrlResponse {
     pub async fn from_response(res: Response) -> Result<Self, DracoonClientError> {
         parse_body::<Self, DracoonErrorResponse>(res).await
+    }
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "PascalCase")]
+pub struct S3XmlError {
+    code: Option<String>,
+    request_id: Option<String>,
+    host_id: Option<String>,
+    message: Option<String>,
+    argument_name: Option<String>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct S3ErrorResponse {
+    pub status: StatusCode,
+    pub error: S3XmlError,
+}
+
+impl S3ErrorResponse {
+    pub fn from_xml_error(status: StatusCode, error: S3XmlError) -> Self {
+        Self { status, error }
     }
 }
