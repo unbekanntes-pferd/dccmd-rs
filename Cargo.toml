@@ -11,7 +11,7 @@ reqwest = {version = "0.11.14", features = ["json", "stream"]}
 chrono = "0.4.1"
 keytar = "0.1.6"
 thiserror = "1.0.2"
-base64 = "0.13.0"
+base64 = "0.21.0"
 dotenv = "0.15.0"
 serde = { version = "1.0.159", features = ["derive"] }
 tokio = { version = "1.27.0", features = ["full"] }
@@ -25,7 +25,7 @@ serde-xml-rs = "0.6.0"
 indicatif = "0.17.3"
 console = "0.15.5"
 dialoguer = "0.10.4"
-dco3_crypto = "0.4.1"
+dco3_crypto = { git = "https://github.com/unbekanntes-pferd/dco3-crypto", branch = "features/0.5.0" }
 
 
 [dev-dependencies]

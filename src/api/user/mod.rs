@@ -8,6 +8,7 @@ pub mod models;
 pub mod account;
 pub mod keypairs;
 
+
 #[async_trait]
 pub trait User {
     async fn get_user_account(&self) -> Result<UserAccount, DracoonClientError>;

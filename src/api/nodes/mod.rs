@@ -1,6 +1,7 @@
-use self::{models::{NodeList, Node, ProgressCallback, FileMeta}};
+use self::{models::{NodeList, Node, ProgressCallback, FileMeta, UploadOptions}};
 use super::{auth::errors::DracoonClientError, models::ListAllParams};
 use async_trait::async_trait;
+use tokio::io::AsyncRead;
 use std::io::{Write, Read};
 
 pub mod download;
@@ -34,5 +35,5 @@ pub trait Download {
 #[async_trait]
 pub trait Upload {
     /// Uploads a file (buffer reader) with given file meta info to the given parent node
-    async fn upload<'r>(&'r self, file_meta: FileMeta, parent_node: &Node, reader: &'r mut (dyn Read + Send), mut callback: Option<ProgressCallback>) -> Result<(), DracoonClientError>;
+    async fn upload<'r>(&'r self, file_meta: FileMeta, parent_node: &Node, upload_options: UploadOptions, reader: &'r mut (dyn AsyncRead + Send), mut callback: Option<ProgressCallback>) -> Result<Node, DracoonClientError>;
 }

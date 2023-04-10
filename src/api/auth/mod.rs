@@ -2,7 +2,10 @@ use chrono::{DateTime, Utc};
 use reqwest::{Client, Url};
 use std::marker::PhantomData;
 
-use base64;
+use base64::{
+    self, alphabet,
+    engine::{self, general_purpose}, Engine,
+};
 
 pub mod errors;
 pub mod models;
@@ -144,9 +147,11 @@ impl DracoonClient<Disconnected> {
     }
 
     fn client_credentials(&self) -> String {
+        const B64_URLSAFE: engine::GeneralPurpose =
+            engine::GeneralPurpose::new(&alphabet::URL_SAFE, general_purpose::NO_PAD);
         let client_credentials = format!("{}:{}", &self.client_id, &self.client_secret);
 
-        base64::encode(client_credentials)
+        B64_URLSAFE.encode(client_credentials)
     }
 
     pub fn get_authorize_url(&mut self) -> String {

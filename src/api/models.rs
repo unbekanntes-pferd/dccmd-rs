@@ -45,3 +45,24 @@ pub struct Range {
     limit: u64,
     total: u64,
 }
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ObjectExpiration {
+    pub enable_expiration: bool,
+    pub expire_at: Option<String>,
+}
+
+impl Default for ObjectExpiration {
+    fn default() -> Self {
+        Self {
+            enable_expiration: false,
+            expire_at: None,
+        }
+    }
+}
+
+impl AsRef<ObjectExpiration> for ObjectExpiration {
+    fn as_ref(&self) -> &Self {
+        self
+    }
+}

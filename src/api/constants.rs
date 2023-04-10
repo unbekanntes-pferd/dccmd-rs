@@ -17,6 +17,9 @@ pub const DRACOON_API_PREFIX: &str = "api/v4";
 pub const NODES_BASE: &str = "nodes";
 pub const FILES_BASE: &str = "files";
 pub const FILES_FILE_KEY: &str = "user_file_key";
+pub const FILES_UPLOAD: &str = "uploads";
+pub const FILES_S3_URLS: &str = "s3_urls";
+pub const FILES_S3_COMPLETE: &str = "s3";
 pub const NODES_DOWNLOAD_URL: &str = "downloads";
 pub const NODES_SEARCH: &str = "search";
 
