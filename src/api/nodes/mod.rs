@@ -2,7 +2,8 @@ use self::{models::{NodeList, Node, ProgressCallback, FileMeta, UploadOptions}};
 use super::{auth::errors::DracoonClientError, models::ListAllParams};
 use async_trait::async_trait;
 use tokio::io::AsyncRead;
-use std::io::{Write, Read};
+use tokio_util::io::ReaderStream;
+use std::io::{Write};
 
 pub mod download;
 pub mod folders;
@@ -22,8 +23,10 @@ pub trait Nodes {
     ) -> Result<NodeList, DracoonClientError>;
 
     /// Searches for a node by path (returns 404 if no node was found)
+    /// TODO: This should return a Result<Option<Node>, DracoonClientError>
     async fn get_node_from_path(&self, path: &str) -> Result<Node, DracoonClientError>;
 }
+
 
 #[async_trait]
 pub trait Download {
@@ -33,7 +36,7 @@ pub trait Download {
 
 
 #[async_trait]
-pub trait Upload {
+pub trait Upload<R: AsyncRead> {
     /// Uploads a file (buffer reader) with given file meta info to the given parent node
-    async fn upload<'r>(&'r self, file_meta: FileMeta, parent_node: &Node, upload_options: UploadOptions, reader: &'r mut (dyn AsyncRead + Send), mut callback: Option<ProgressCallback>) -> Result<Node, DracoonClientError>;
+    async fn upload<'r>(&'r self, file_meta: FileMeta, parent_node: &Node, upload_options: UploadOptions, stream: &'r mut ReaderStream<R>, mut callback: Option<ProgressCallback>) -> Result<Node, DracoonClientError>;
 }

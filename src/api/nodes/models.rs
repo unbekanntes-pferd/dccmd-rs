@@ -19,7 +19,8 @@ use serde::{Deserialize, Serialize};
 pub type ProgressCallback = Box<dyn FnMut(u64, u64) + Send + Sync>;
 
 /// file meta information (name, size, timestamp creation, timestamp modification)
-pub type FileMeta = (String, u64, Option<DateTime<Utc>>, Option<DateTime<Utc>>);
+#[derive(Debug, Clone)]
+pub struct FileMeta(pub String, pub u64, pub Option<DateTime<Utc>>, pub Option<DateTime<Utc>>);
 
 /// upload options (expiration, classification)
 #[derive(Debug, Clone)]

@@ -1,8 +1,10 @@
+use std::{cmp::min, pin::Pin};
+
 use super::{
     models::{
         CompleteS3FileUploadRequest, CreateFileUploadRequest, CreateFileUploadResponse, FileMeta,
         GeneratePresignedUrlsRequest, Node, PresignedUrlList, ProgressCallback, S3FileUploadStatus,
-        UploadOptions,
+        UploadOptions, PresignedUrl,
     },
     Upload,
 };
@@ -18,17 +20,19 @@ use crate::api::{
 };
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use futures_util::StreamExt;
+use reqwest::Body;
 use tokio::io::AsyncRead;
-use std::{io::Read};
+use tokio_util::io::ReaderStream;
 
 #[async_trait]
-impl<C: UploadInternal + Sync> Upload for C {
+impl<C: UploadInternal<R> + Sync, R: AsyncRead + Sync + Send> Upload<R> for C {
     async fn upload<'r>(
         &'r self,
         file_meta: FileMeta,
         parent_node: &Node,
         upload_options: UploadOptions,
-        reader: &'r mut (dyn AsyncRead + Send),
+        stream: &'r mut ReaderStream<R>,
         callback: Option<ProgressCallback>,
     ) -> Result<Node, DracoonClientError> {
         match parent_node.is_encrypted {
@@ -38,7 +42,7 @@ impl<C: UploadInternal + Sync> Upload for C {
                         file_meta,
                         parent_node,
                         upload_options,
-                        reader,
+                        stream,
                         callback,
                     )
                     .await
@@ -47,7 +51,7 @@ impl<C: UploadInternal + Sync> Upload for C {
                         file_meta,
                         parent_node,
                         upload_options,
-                        reader,
+                        stream,
                         callback,
                     )
                     .await
@@ -58,7 +62,7 @@ impl<C: UploadInternal + Sync> Upload for C {
                     file_meta,
                     parent_node,
                     upload_options,
-                    reader,
+                    stream,
                     callback,
                 )
                 .await
@@ -68,7 +72,7 @@ impl<C: UploadInternal + Sync> Upload for C {
 }
 
 #[async_trait]
-trait UploadInternal {
+trait UploadInternal<R: AsyncRead> {
     async fn create_upload_channel(
         &self,
         req: CreateFileUploadRequest,
@@ -85,7 +89,7 @@ trait UploadInternal {
         file_meta: FileMeta,
         parent_node: &Node,
         upload_options: UploadOptions,
-        reader: &mut (dyn AsyncRead + Send),
+        reader: &mut ReaderStream<R>,
         mut callback: Option<ProgressCallback>,
     ) -> Result<Node, DracoonClientError>;
     async fn upload_to_s3_encrypted(
@@ -93,7 +97,7 @@ trait UploadInternal {
         file_meta: FileMeta,
         parent_node: &Node,
         upload_options: UploadOptions,
-        reader: &mut (dyn AsyncRead + Send),
+        reader: &mut ReaderStream<R>,
         mut callback: Option<ProgressCallback>,
     ) -> Result<Node, DracoonClientError>;
 
@@ -110,7 +114,7 @@ trait UploadInternal {
 }
 
 #[async_trait]
-impl UploadInternal for Dracoon<Connected> {
+impl<R: AsyncRead + Sync + Send + Unpin> UploadInternal<R> for Dracoon<Connected> {
     async fn create_upload_channel(
         &self,
         req: CreateFileUploadRequest,
@@ -175,68 +179,68 @@ impl UploadInternal for Dracoon<Connected> {
         file_meta: FileMeta,
         parent_node: &Node,
         upload_options: UploadOptions,
-        reader: &mut (dyn AsyncRead + Send),
+        stream: &mut ReaderStream<R>,
         mut callback: Option<ProgressCallback>,
     ) -> Result<Node, DracoonClientError> {
         // parse upload options
         let (classification, timestamp_creation, timestamp_modification, expiration) =
             parse_upload_options(&file_meta, &upload_options);
+        
+        let fm = file_meta.clone();
 
         // create upload channel
-        let req = CreateFileUploadRequest::new(parent_node.id, file_meta.0)
+        let req = CreateFileUploadRequest::new(parent_node.id, fm.0)
             .with_classification(classification)
-            .with_size(file_meta.1)
+            .with_size(fm.1)
             .with_timestamp_modification(timestamp_modification)
             .with_timestamp_creation(timestamp_creation)
             .with_expiration(expiration)
+
             .build();
 
-        let upload_channel = self.create_upload_channel(req).await?;
-        let upload_id = upload_channel.upload_id;
-        let mut buffer = [0u8; CHUNK_SIZE];
+        let upload_channel =
+            <Dracoon<Connected> as UploadInternal<R>>::create_upload_channel::<'_, '_>(self, req)
+                .await?;
+            
+
 
         // Initialize a variable to keep track of the number of bytes read
         let mut bytes_read = 0u64;
+        let fm = &file_meta.clone();
+        // Create an async stream from the reader
+        let async_stream = async_stream::stream! {
 
-        loop {
-            // Read the next chunk of data from the reader into the buffer
-            let num_bytes = match reader.read(&mut buffer) {
-                Ok(n) if n > 0 => n,
-                Ok(_) => break,                                    // end of file
-                Err(e) => return Err(DracoonClientError::IoError), // handle error
-            };
+            while let Some(chunk) = stream.next().await {
+                if let Ok(chunk) = &chunk {
+                    let processed = min(bytes_read + (chunk.len() as u64), fm.1);
+                    bytes_read = processed;
 
-            // Create a slice of the buffer that contains only the data that was read
-            let data = &buffer[..num_bytes];
-            let chunk_len = data.len() as u64;
-            let req = GeneratePresignedUrlsRequest::new(chunk_len, 1, 1);
+                    if let Some(cb) = &mut callback {
+                        cb(bytes_read, fm.1);
+                    }
+                }
+                yield chunk
+            }
 
-            let s3_url = self.create_s3_upload_urls(upload_id.clone(), req).await?;
+        let (count_urls, last_chunk_size) = calculate_s3_url_count(fm.1, CHUNK_SIZE as u64);
 
-            // Update the number of bytes read so far
-            bytes_read += num_bytes as u64;
+        match count_urls {
+            1 => {
+                // only one request for small files
+                let req = GeneratePresignedUrlsRequest::new(fm.1, 1, 1);
+                let url = <Dracoon<Connected> as UploadInternal<R>>::create_s3_upload_urls::<'_, '_>(self, upload_channel.upload_id, req).await;
 
-            let s3_url = &s3_url
-                .urls
-                .iter()
-                .next()
-                .expect("S3 url creation failed")
-                .url;
-
-            // upload to s3
-            let res = self
-                .client
-                .http
-                .put(s3_url)
-                .body(data.to_vec())
-                .send()
-                .await?;
-
-            // If a progress callback function was provided, call it with the current progress
-            if let Some(ref mut cb) = callback {
-                cb(bytes_read as u64, file_meta.1);
+            },
+            _ => {
+                // first request for all urls except the last one
+                let req = GeneratePresignedUrlsRequest::new(CHUNK_SIZE as u64, 1, count_urls);
             }
         }
+
+        
+
+
+        };
 
         todo!()
     }
@@ -246,7 +250,7 @@ impl UploadInternal for Dracoon<Connected> {
         file_meta: FileMeta,
         parent_node: &Node,
         upload_options: UploadOptions,
-        reader: &mut (dyn AsyncRead + Send),
+        reader: &mut ReaderStream<R>,
         mut callback: Option<ProgressCallback>,
     ) -> Result<Node, DracoonClientError> {
         todo!()
@@ -269,4 +273,54 @@ fn parse_upload_options(
         timestamp_modification,
         expiration,
     )
+}
+
+/// helper to calculate the number of S3 urls and the size of the last chunk
+fn calculate_s3_url_count(total_size: u64, chunk_size: u64) -> (u32, u64) {
+    let mut urls = total_size / chunk_size;
+    if total_size % chunk_size != 0 {
+        urls += 1;
+    }
+
+    // return url count and last chunk size
+    (urls.try_into().expect("overflow size to chunk"), total_size % chunk_size)
+}
+
+async fn upload_stream_to_s3<'a, R>(
+    stream: ReaderStream<R>,
+    url: &PresignedUrl,
+    file_meta: FileMeta,
+    mut callback: Option<ProgressCallback>,
+)  -> Result<(), DracoonClientError> where R: AsyncRead + Unpin + Send  + Sync + 'static {
+
+    let mut boxed_stream = Box::pin(stream);
+
+    // Initialize a variable to keep track of the number of bytes read
+    let mut bytes_read = 0u64;
+    // Create an async stream from the reader
+    let async_stream = async_stream::stream! {
+
+        while let Some(chunk) = boxed_stream.next().await {
+            if let Ok(chunk) = &chunk {
+                let processed = min(bytes_read + (chunk.len() as u64), file_meta.1);
+                bytes_read = processed;
+
+                if let Some(cb) = &mut callback {
+                    cb(bytes_read, file_meta.1);
+                }
+            }
+            yield chunk
+        }
+    };
+
+    let body = Body::wrap_stream(async_stream);
+
+    let res = reqwest::Client::new()
+        .put(&url.url)
+        .body(body)
+        .send()
+        .await?;
+
+    Ok(())
+
 }
