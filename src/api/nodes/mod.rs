@@ -1,4 +1,4 @@
-use self::{models::{NodeList, Node, ProgressCallback, FileMeta, UploadOptions, TransferNodesRequest}};
+use self::{models::{NodeList, Node, ProgressCallback, FileMeta, UploadOptions, TransferNodesRequest, CreateFolderRequest, UpdateFolderRequest}};
 use super::{auth::errors::DracoonClientError, models::ListAllParams};
 use async_trait::async_trait;
 use tokio::io::AsyncRead;
@@ -47,9 +47,9 @@ pub trait Nodes {
 
 #[async_trait]
 pub trait Folders {
-    async fn create_folder(&self, parent_id: u64, name: &str) -> Result<Node, DracoonClientError>;
+    async fn create_folder(&self, req: CreateFolderRequest) -> Result<Node, DracoonClientError>;
 
-    async fn update_folder(&self, node_id: u64, name: &str) -> Result<Node, DracoonClientError>;
+    async fn update_folder(&self, folder_id: u64, req: UpdateFolderRequest) -> Result<Node, DracoonClientError>;
     
 }
 

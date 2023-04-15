@@ -97,7 +97,7 @@ impl FromResponse for Node {
 }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub enum NodeType {
     #[serde(rename = "room")]
     Room,
@@ -647,3 +647,139 @@ impl TransferNode {
         }
     }
 }
+
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateFolderRequest {
+    name: String,
+    parent_id: u64,
+    notes: Option<String>,
+    timestamp_creation: Option<String>,
+    timestamp_modification: Option<String>,
+    classification: Option<u8>
+}
+
+pub struct CreateFolderRequestBuilder {
+    name: String,
+    parent_id: u64,
+    notes: Option<String>,
+    timestamp_creation: Option<String>,
+    timestamp_modification: Option<String>,
+    classification: Option<u8>
+}
+
+impl CreateFolderRequest {
+    pub fn new(name: String, parent_id: u64) -> CreateFolderRequestBuilder {
+        CreateFolderRequestBuilder {
+            name,
+            parent_id,
+            notes: None,
+            timestamp_creation: None,
+            timestamp_modification: None,
+            classification: None,
+        }
+    }
+
+}
+
+impl CreateFolderRequestBuilder {
+    pub fn with_notes(mut self, notes: String) -> Self {
+        self.notes = Some(notes);
+        self
+    }
+
+    pub fn with_timestamp_creation(mut self, timestamp_creation: String) -> Self {
+        self.timestamp_creation = Some(timestamp_creation);
+        self
+    }
+
+    pub fn with_timestamp_modification(mut self, timestamp_modification: String) -> Self {
+        self.timestamp_modification = Some(timestamp_modification);
+        self
+    }
+
+    pub fn with_classification(mut self, classification: u8) -> Self {
+        self.classification = Some(classification);
+        self
+    }
+
+    pub fn build(self) -> CreateFolderRequest {
+        CreateFolderRequest {
+            name: self.name,
+            parent_id: self.parent_id,
+            notes: self.notes,
+            timestamp_creation: self.timestamp_creation,
+            timestamp_modification: self.timestamp_modification,
+            classification: self.classification,
+        }
+}
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateFolderRequest {
+    name: Option<String>,
+    notes: Option<String>,
+    timestamp_creation: Option<String>,
+    timestamp_modification: Option<String>,
+    classification: Option<u8>
+}
+
+pub struct UpdateFolderRequestBuilder {
+    name: Option<String>,
+    notes: Option<String>,
+    timestamp_creation: Option<String>,
+    timestamp_modification: Option<String>,
+    classification: Option<u8>
+}
+
+impl UpdateFolderRequest {
+    pub fn new() -> UpdateFolderRequestBuilder {
+        UpdateFolderRequestBuilder {
+            name: None,
+            notes: None,
+            timestamp_creation: None,
+            timestamp_modification: None,
+            classification: None,
+        }
+    }
+}
+
+impl UpdateFolderRequestBuilder {
+    pub fn with_name(mut self, name: String) -> Self {
+        self.name = Some(name);
+        self
+    }
+
+    pub fn with_notes(mut self, notes: String) -> Self {
+        self.notes = Some(notes);
+        self
+    }
+
+    pub fn with_timestamp_creation(mut self, timestamp_creation: String) -> Self {
+        self.timestamp_creation = Some(timestamp_creation);
+        self
+    }
+
+    pub fn with_timestamp_modification(mut self, timestamp_modification: String) -> Self {
+        self.timestamp_modification = Some(timestamp_modification);
+        self
+    }
+
+    pub fn with_classification(mut self, classification: u8) -> Self {
+        self.classification = Some(classification);
+        self
+    }
+
+    pub fn build(self) -> UpdateFolderRequest {
+        UpdateFolderRequest {
+            name: self.name,
+            notes: self.notes,
+            timestamp_creation: self.timestamp_creation,
+            timestamp_modification: self.timestamp_modification,
+            classification: self.classification,
+        }
+    }
+}
+

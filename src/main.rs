@@ -3,7 +3,7 @@
 
 use clap::Parser;
 use cmd::{
-    download, get_nodes, handle_error,
+    create_folder, delete_node, download, get_nodes, handle_error,
     models::{DcCmd, DcCmdCommand},
 };
 use console::Term;
@@ -29,8 +29,25 @@ async fn main() -> () {
             long,
             human_readable,
             managed,
-            all
-        } => get_nodes(term, source, Some(long), Some(human_readable), Some(managed), Some(all)).await,
+            all,
+        } => {
+            get_nodes(
+                term,
+                source,
+                Some(long),
+                Some(human_readable),
+                Some(managed),
+                Some(all),
+            )
+            .await
+        }
+        DcCmdCommand::Mkdir {
+            source,
+            classification,
+            notes,
+        } => create_folder(term, source, classification, notes).await,
+        DcCmdCommand::Mkroom { source } => Ok(println!("Creating room {}", source)),
+        DcCmdCommand::Rm { source } => delete_node(term, source).await,
     };
 
     if let Err(e) = res {

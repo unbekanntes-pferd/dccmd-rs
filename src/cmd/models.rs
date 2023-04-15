@@ -41,7 +41,7 @@ impl From<DracoonClientError> for DcCmdError {
             DracoonClientError::ConnectionFailed => DcCmdError::ConnectionFailed,
             DracoonClientError::Http(err) => DcCmdError::DracoonError(err),
             DracoonClientError::Auth(err) => DcCmdError::DracoonAuthError(err),
-            DracoonClientError::InvalidUrl(url)=> DcCmdError::InvalidUrl(url),
+            DracoonClientError::InvalidUrl(url) => DcCmdError::InvalidUrl(url),
             DracoonClientError::IoError => DcCmdError::IoError,
             DracoonClientError::S3Error(err) => DcCmdError::DracoonS3Error(err),
             _ => DcCmdError::Unknown,
@@ -72,7 +72,7 @@ pub enum DcCmdCommand {
         #[clap(short, long)]
         long: bool,
 
-        #[clap(short='r', long)]
+        #[clap(short = 'r', long)]
         human_readable: bool,
 
         #[clap(long)]
@@ -80,6 +80,24 @@ pub enum DcCmdCommand {
 
         #[clap(long)]
         all: bool,
+    },
+
+    Mkdir {
+        source: String,
+
+        #[clap(long)]
+        classification: Option<u8>,
+
+        #[clap(long)]
+        notes: Option<String>,
+    },
+
+    Mkroom {
+        source: String,
+    },
+
+    Rm {
+        source: String,
     },
 }
 

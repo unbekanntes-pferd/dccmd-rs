@@ -1,17 +1,20 @@
 use console::Term;
+use dialoguer::Confirm;
 use futures_util::{stream::FuturesUnordered, StreamExt};
 use indicatif::{ProgressBar, ProgressStyle};
 use tracing::debug;
 
 use self::{
-    credentials::get_dracoon_env, models::DcCmdError, utils::strings::format_error_message,
+    credentials::get_dracoon_env,
+    models::DcCmdError,
+    utils::strings::{format_error_message, format_success_message},
 };
 use crate::{
     api::{
         auth::{Connected, OAuth2Flow},
         constants::get_client_credentials,
         models::ListAllParams,
-        nodes::{Download, Nodes},
+        nodes::{models::{NodeType, CreateFolderRequest}, Download, Nodes, Folders},
         Dracoon, DracoonBuilder,
     },
     cmd::{
@@ -265,6 +268,72 @@ fn get_error_message(err: &DcCmdError) -> String {
     }
 }
 
+pub async fn delete_node(term: Term, source: String) -> Result<(), DcCmdError> {
+
+    let dracoon = init_dracoon(&source).await?;
+    let (parent_path, node_name, depth) = parse_node_path(&source, &dracoon.get_base_url().to_string())?;
+    let node_path = build_node_path((parent_path.clone(), node_name.clone(), depth));
+    let node = dracoon.get_node_from_path(&node_path).await?.ok_or(DcCmdError::InvalidPath(source.clone()))?;
+
+    // define async block to delete node
+    let delete_node = async {
+        dracoon.delete_node(node.id).await?;
+        let msg = format!("Node {} deleted.", node_name);
+        let msg = format_success_message(&msg);
+        term.write_line(&msg).expect("Error writing message to terminal.");
+        Ok(())
+    };
+    
+    // check if node is a room
+    match node.node_type {
+        NodeType::Room => {
+            // ask for confirmation if node is a room
+            let confirmed = Confirm::new()
+                .with_prompt(format!("Do you really want to delete room {}?", node_name))
+                .interact()
+                .expect("Error reading user input.");
+
+            if confirmed {
+                delete_node.await
+            } else {
+                let msg = format_error_message("Deleting room not confirmed.");
+                term.write_line(&msg).expect("Error writing message to terminal.");
+                Ok(())
+            }
+        }
+        _ => delete_node.await,
+    }
+
+    }
+
+pub async fn create_folder(term: Term, source: String, classification: Option<u8>, notes: Option<String>) -> Result<(), DcCmdError> {
+    let dracoon = init_dracoon(&source).await?;
+    let (parent_path, node_name, _) = parse_node_path(&source, &dracoon.get_base_url().to_string())?;
+
+    let parent_node = dracoon.get_node_from_path(&parent_path).await?.ok_or(DcCmdError::InvalidPath(source.clone()))?;
+
+    let req = CreateFolderRequest::new(node_name.clone(), parent_node.id);
+
+    let req = match classification {
+        Some(classification) => req.with_classification(classification),
+        None => req,
+    };
+
+    let req = match notes {
+        Some(notes) => req.with_notes(notes),
+        None => req,
+    };  
+
+    let req = req.build();
+
+    let folder = dracoon.create_folder(req).await?;
+
+    let msg = format!("Folder {} created.", node_name);
+    let msg = format_success_message(&msg);
+    term.write_line(&msg).expect("Error writing message to terminal.");
+
+    Ok(())
+}
 #[cfg(test)]
 mod tests {
     use super::*;

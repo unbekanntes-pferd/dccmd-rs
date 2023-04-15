@@ -22,6 +22,7 @@ pub const FILES_FILE_KEY: &str = "user_file_key";
 pub const FILES_UPLOAD: &str = "uploads";
 pub const FILES_S3_URLS: &str = "s3_urls";
 pub const FILES_S3_COMPLETE: &str = "s3";
+pub const FOLDERS_BASE: &str = "folders";
 pub const NODES_DOWNLOAD_URL: &str = "downloads";
 pub const NODES_SEARCH: &str = "search";
 

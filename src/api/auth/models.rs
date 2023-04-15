@@ -95,7 +95,8 @@ pub struct DracoonErrorResponse {
 
 impl Display for DracoonErrorResponse {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Error: {} ({})", self.message, self.code)
+        let dbg_info = self.debug_info.as_deref().unwrap_or("No details".into());
+        write!(f, "{} - {} ({})", self.message, dbg_info, self.code)
     }
 }
 
