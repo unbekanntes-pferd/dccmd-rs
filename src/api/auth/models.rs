@@ -1,3 +1,5 @@
+use std::fmt::{Formatter, Display};
+
 use url::ParseError;
 
 use chrono::Utc;
@@ -91,6 +93,12 @@ pub struct DracoonErrorResponse {
     error_code: Option<i32>,
 }
 
+impl Display for DracoonErrorResponse {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Error: {} ({})", self.message, self.code)
+    }
+}
+
 impl DracoonErrorResponse {
     /// creates a DRACOON compatible error type
     pub fn new(code: i32, message: &str) -> Self {
@@ -109,6 +117,13 @@ impl DracoonErrorResponse {
 pub struct DracoonAuthErrorResponse {
     error: String,
     error_description: String,
+}
+
+
+impl Display for DracoonAuthErrorResponse {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Error: {} ({})", self.error_description, self.error)
+    }
 }
 
 impl OAuth2TokenResponse {
@@ -170,6 +185,7 @@ impl From<DracoonErrorResponse> for DracoonClientError {
 impl From<ParseError> for DracoonClientError {
     /// transforms a URL parse error into a DRACOON client error
     fn from(value: ParseError) -> Self {
-        Self::InvalidUrl
+
+        Self::InvalidUrl("parsing url failed (invalid)".into())
     }
 }

@@ -16,7 +16,9 @@ pub enum DcCmdError {
     #[error("Unknown error")]
     Unknown,
     #[error("Invalid DRACOON url format")]
-    InvalidUrl,
+    InvalidUrl(String),
+    #[error("Invalid DRACOON path")]
+    InvalidPath(String),
     #[error("Saving DRACOON credentials failed")]
     CredentialStorageFailed,
     #[error("Deleting DRACOON credentials failed")]
@@ -39,7 +41,7 @@ impl From<DracoonClientError> for DcCmdError {
             DracoonClientError::ConnectionFailed => DcCmdError::ConnectionFailed,
             DracoonClientError::Http(err) => DcCmdError::DracoonError(err),
             DracoonClientError::Auth(err) => DcCmdError::DracoonAuthError(err),
-            DracoonClientError::InvalidUrl => DcCmdError::InvalidUrl,
+            DracoonClientError::InvalidUrl(url)=> DcCmdError::InvalidUrl(url),
             DracoonClientError::IoError => DcCmdError::IoError,
             DracoonClientError::S3Error(err) => DcCmdError::DracoonS3Error(err),
             _ => DcCmdError::Unknown,
@@ -49,11 +51,36 @@ impl From<DracoonClientError> for DcCmdError {
 
 #[derive(Parser)]
 #[clap(rename_all = "kebab-case", about = "DRACOON Commander (dccmd-rs)")]
-pub enum DcCmd {
-    Upload { source: String, target: String },
-    Download { source: String, target: String },
+pub struct DcCmd {
+    #[clap(subcommand)]
+    pub cmd: DcCmdCommand,
+}
 
-    Ls { source: String },
+#[derive(Parser)]
+pub enum DcCmdCommand {
+    Upload {
+        source: String,
+        target: String,
+    },
+    Download {
+        source: String,
+        target: String,
+    },
+    Ls {
+        source: String,
+
+        #[clap(short, long)]
+        long: bool,
+
+        #[clap(short='r', long)]
+        human_readable: bool,
+
+        #[clap(long)]
+        managed: bool,
+
+        #[clap(long)]
+        all: bool,
+    },
 }
 
 #[derive(Clone, Copy)]

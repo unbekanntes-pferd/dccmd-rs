@@ -1,12 +1,16 @@
 use crate::{
-    api::nodes::models::NodeList,
-    cmd::models::{DcCmdError, PrintFormat},
+    api::nodes::models::{Node, NodeList, NodeType},
+    cmd::models::DcCmdError,
 };
 
-use console::style;
+use chrono::{DateTime, Utc};
+use console::{style, Term};
 
 const ERROR_PREFIX: &str = "Error: ";
 const SUCCESS_PREFIX: &str = "Success: ";
+
+const NODE_LIST_HEADER: &str =
+    "id\tname\ttype\tsize\tmodified\tcreated\tparent id\tparent path\tDe";
 
 pub fn format_error_message(message: &str) -> String {
     let err_prefix_red = format!("{}", style(ERROR_PREFIX).red().bold());
@@ -20,8 +24,98 @@ pub fn format_success_message(message: &str) -> String {
     format!("{} {}", succ_prefix_green, message)
 }
 
-pub fn format_node_list(node_list: NodeList, format: PrintFormat) -> String {
+pub fn format_node_list(
+    term: Term,
+    node_list: NodeList,
+    long: Option<bool>,
+    human_readable: Option<bool>,
+) -> String {
     todo!()
+}
+
+pub fn print_node(
+    term: &Term,
+    node: &Node,
+    long: Option<bool>,
+    human_readable: Option<bool>,
+) -> () {
+    let mut node_str = String::new();
+
+    let long = long.unwrap_or(false);
+    let human_readable = human_readable.unwrap_or(false);
+
+    // add metadata if long
+    if long {
+        // add node id
+        node_str.push_str(&format!("{:<12} ", node.id));
+
+        // add node permissions
+
+        node_str.push_str(&format!("{} ", to_printable_permissions(&node)));
+
+        // add node updated by
+        match &node.updated_by {
+            Some(user_info) => node_str.push_str(&format!(
+                "{:<15} {:<15} ",
+                user_info.first_name.clone().unwrap_or("n/a".to_string()),
+                user_info.last_name.clone().unwrap_or("n/a".to_string())
+            )),
+            None => node_str.push_str(&"n/a n/a"),
+        }
+        // add node size
+        match human_readable {
+            true => node_str.push_str(&format!("{:<8} ", to_readable_size(node.size.unwrap_or(0)))),
+            false => node_str.push_str(&format!("{:<16} ", node.size.unwrap_or(0))),
+        }
+
+        match &node.timestamp_modification {
+            Some(timestamp) => {
+                let dt: DateTime<Utc> = DateTime::parse_from_rfc3339(&timestamp)
+                    .expect("Malformed date")
+                    .into();
+                node_str.push_str(&format!("{:<16} ", dt.format("%Y %b %e %H:%M")))
+            }
+            None => node_str.push_str(&"n/a"),
+        }
+    }
+
+    // add node name
+    match node.node_type {
+        NodeType::File => node_str.push_str(&format!("{} ", node.name)),
+        _ => node_str.push_str(&format!("{:<45} ", style(node.name.clone()).bold().yellow())),
+    }
+
+    term.write_line(&node_str)
+        .expect("Could not write to terminal");
+}
+
+fn to_printable_permissions(node: &Node) -> String {
+    let mut out_str = String::new();
+
+    // add node type
+    match node.node_type {
+        NodeType::File => {
+            out_str.push_str(&format!("{:<2}", style("--").bold()));
+        }
+        NodeType::Folder => {
+            out_str.push_str(&format!("{:<2}", style("d-").bold()));
+        }
+        NodeType::Room => {
+            out_str.push_str(&format!("{:<2}", style("R-").bold()));
+        }
+    };
+
+    // add node permissions
+    match &node.permissions {
+        Some(permissions) => {
+            out_str.push_str(&format!("{:<13} ", style(permissions.to_string()).bold()));
+        }
+        None => {
+            out_str.push_str(&format!("{:<13} ", style("-------------").bold()));
+        }
+    };
+
+    out_str
 }
 
 fn to_readable_size(size: u64) -> String {
@@ -51,7 +145,7 @@ pub fn parse_node_path(path: &str, base_url: &str) -> Result<ParsedPath, DcCmdEr
         true => {
             let path = path.trim_end_matches('/');
             let path = path.split('/').collect::<Vec<&str>>();
-            let name = path.last().ok_or(DcCmdError::InvalidUrl)?.to_string();
+            let name = path.last().ok_or(DcCmdError::InvalidPath(path.clone().join("/")))?.to_string();
             let parent_path = path[..path.len() - 1].join("/");
             let parent_path = format!("{}/", parent_path);
             let parent_path = parent_path.trim_start_matches(base_url).to_string();
@@ -62,7 +156,7 @@ pub fn parse_node_path(path: &str, base_url: &str) -> Result<ParsedPath, DcCmdEr
         // this is a file
         false => {
             let path = path.split('/').collect::<Vec<&str>>();
-            let name = path.last().ok_or(DcCmdError::InvalidUrl)?.to_string();
+            let name = path.last().ok_or(DcCmdError::InvalidPath(path.clone().join("/")))?.to_string();
             let parent_path = path[..path.len() - 1].join("/");
             let parent_path = format!("{}/", parent_path);
             let parent_path = parent_path.trim_start_matches(base_url).to_string();

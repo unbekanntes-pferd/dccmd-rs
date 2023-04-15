@@ -1,6 +1,7 @@
 #![allow(dead_code, unused_imports)]
 
 use std::fmt::Debug;
+use std::fmt::Display;
 use std::fmt::Formatter;
 
 use crate::api::{
@@ -20,7 +21,12 @@ pub type ProgressCallback = Box<dyn FnMut(u64, u64) + Send + Sync>;
 
 /// file meta information (name, size, timestamp creation, timestamp modification)
 #[derive(Debug, Clone)]
-pub struct FileMeta(pub String, pub u64, pub Option<DateTime<Utc>>, pub Option<DateTime<Utc>>);
+pub struct FileMeta(
+    pub String,
+    pub u64,
+    pub Option<DateTime<Utc>>,
+    pub Option<DateTime<Utc>>,
+);
 
 /// upload options (expiration, classification)
 #[derive(Debug, Clone)]
@@ -45,7 +51,8 @@ pub struct NodeList {
 pub struct Node {
     pub id: u64,
     pub reference_id: Option<u64>,
-    pub r#type: String,
+    #[serde(rename = "type")]
+    pub node_type: NodeType,
     pub name: String,
     pub timestamp_creation: Option<String>,
     pub timestamp_modification: Option<String>,
@@ -82,6 +89,24 @@ pub struct Node {
     pub auth_parent_id: Option<u64>,
 }
 
+#[async_trait]
+impl FromResponse for Node {
+
+    async fn from_response(response: Response) -> Result<Self, DracoonClientError> {
+        parse_body::<Self, DracoonErrorResponse>(response).await
+}
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum NodeType {
+    #[serde(rename = "room")]
+    Room,
+    #[serde(rename = "folder")]
+    Folder,
+    #[serde(rename = "file")]
+    File,
+}
+
 /// DRACOOON node permissions
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -98,6 +123,64 @@ pub struct NodePermissions {
     delete_recycle_bin: bool,
 }
 
+impl ToString for NodePermissions {
+    fn to_string(&self) -> String {
+        let mut perms = String::new();
+
+        match self.manage {
+            true => perms.push_str("m"),
+            false => perms.push_str("-"),
+        };
+
+        match self.read {
+            true => perms.push_str("r"),
+            false => perms.push_str("-"),
+        };
+
+        match self.create {
+            true => perms.push_str("w"),
+            false => perms.push_str("-"),
+        };
+
+        match self.change {
+            true => perms.push_str("c"),
+            false => perms.push_str("-"),
+        };
+
+        match self.delete {
+            true => perms.push_str("d-"),
+            false => perms.push_str("--"),
+        };
+
+        match self.manage_download_share {
+            true => perms.push_str("m"),
+            false => perms.push_str("-"),
+        };
+
+        match self.manage_upload_share {
+            true => perms.push_str("m-"),
+            false => perms.push_str("--"),
+        };
+
+        match self.read_recycle_bin {
+            true => perms.push_str("r"),
+            false => perms.push_str("-"),
+        };
+
+        match self.restore_recycle_bin {
+            true => perms.push_str("r"),
+            false => perms.push_str("-"),
+        };
+
+        match self.delete_recycle_bin {
+            true => perms.push_str("d"),
+            false => perms.push_str("-"),
+        };
+
+        perms
+    }
+}
+
 /// DRACOOON encryption info (rescue keys)
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -111,12 +194,12 @@ pub struct EncryptionInfo {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserInfo {
-    id: u64,
-    user_type: String,
-    avatar_uuid: String,
-    first_name: Option<String>,
-    last_name: Option<String>,
-    email: Option<String>,
+    pub id: u64,
+    pub user_type: String,
+    pub avatar_uuid: String,
+    pub first_name: Option<String>,
+    pub last_name: Option<String>,
+    pub email: Option<String>,
 }
 
 #[async_trait]
@@ -158,6 +241,17 @@ pub struct S3XmlError {
 pub struct S3ErrorResponse {
     pub status: StatusCode,
     pub error: S3XmlError,
+}
+
+impl Display for S3ErrorResponse {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Error: {} ({})",
+            self.error.message.as_ref().unwrap_or(&String::from("Unknown S3 error")),
+            self.status,
+        )
+    }
 }
 
 impl S3ErrorResponse {
@@ -416,5 +510,140 @@ pub struct S3FileUploadPart {
 impl S3FileUploadPart {
     pub fn new(part_number: u32, etag: String) -> Self {
         Self { part_number, etag }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteNodesRequest {
+    node_ids: Vec<u64>
+}
+
+impl From<Vec<u64>> for DeleteNodesRequest {
+    fn from(node_ids: Vec<u64>) -> Self {
+        Self { node_ids }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransferNodesRequest {
+    items: Vec<TransferNode>,
+    resolution_strategy: Option<ResolutionStrategy>,
+    keep_share_links: Option<bool>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransferNode {
+    id: u64,
+    name: Option<String>,
+    timestamp_creation: Option<String>,
+    timestamp_modification: Option<String>,
+}
+
+impl From<u64> for TransferNode {
+    fn from(node_id: u64) -> Self {
+        Self {
+            id: node_id,
+            name: None,
+            timestamp_creation: None,
+            timestamp_modification: None,
+        }
+    }
+}
+
+impl From<Vec<u64>> for TransferNodesRequest {
+    fn from(node_ids: Vec<u64>) -> Self {
+        Self {
+            items: node_ids.into_iter().map(|id| id.into()).collect(),
+            resolution_strategy: None,
+            keep_share_links: None,
+        }
+    }
+}
+
+pub struct TransferNodesRequestBuilder {
+    items: Vec<TransferNode>,
+    resolution_strategy: Option<ResolutionStrategy>,
+    keep_share_links: Option<bool>,
+}
+
+impl TransferNodesRequest {
+    pub fn new(items: Vec<TransferNode>) -> TransferNodesRequestBuilder {
+        TransferNodesRequestBuilder {
+            items,
+            resolution_strategy: None,
+            keep_share_links: None,
+        }
+    }
+
+    pub fn new_from_ids(node_ids: Vec<u64>) -> TransferNodesRequestBuilder {
+        TransferNodesRequestBuilder {
+            items: node_ids.into_iter().map(|id| id.into()).collect(),
+            resolution_strategy: None,
+            keep_share_links: None,
+        }
+    }
+
+    pub fn with_resolution_strategy(mut self, resolution_strategy: ResolutionStrategy) -> Self {
+        self.resolution_strategy = Some(resolution_strategy);
+        self
+    }
+
+    pub fn with_keep_share_links(mut self, keep_share_links: bool) -> Self {
+        self.keep_share_links = Some(keep_share_links);
+        self
+    }
+
+    pub fn build(self) -> TransferNodesRequest {
+        TransferNodesRequest {
+            items: self.items,
+            resolution_strategy: self.resolution_strategy,
+            keep_share_links: self.keep_share_links,
+        }
+    }
+}
+
+pub struct TransferNodeBuilder {
+    id: u64,
+    name: Option<String>,
+    timestamp_creation: Option<String>,
+    timestamp_modification: Option<String>,
+}
+
+impl TransferNode {
+    pub fn new(id: u64) -> TransferNodeBuilder {
+        TransferNodeBuilder {
+            id,
+            name: None,
+            timestamp_creation: None,
+            timestamp_modification: None,
+        }
+
+    }
+
+    pub fn with_name(mut self, name: String) -> Self {
+        self.name = Some(name);
+        self
+    }
+
+    pub fn with_timestamp_creation(mut self, timestamp_creation: String) -> Self {
+        self.timestamp_creation = Some(timestamp_creation);
+        self
+    }
+
+    pub fn with_timestamp_modification(mut self, timestamp_modification: String) -> Self {
+        self.timestamp_modification = Some(timestamp_modification);
+        self
+    }
+
+    pub fn build(self) -> TransferNode {
+        TransferNode {
+            id: self.id,
+            name: self.name,
+            timestamp_creation: self.timestamp_creation,
+            timestamp_modification: self.timestamp_modification,
+        }
     }
 }

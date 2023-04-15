@@ -41,9 +41,9 @@ impl From<ListAllParams> for String {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Range {
-    offset: u64,
-    limit: u64,
-    total: u64,
+    pub offset: u64,
+    pub limit: u64,
+    pub total: u64,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

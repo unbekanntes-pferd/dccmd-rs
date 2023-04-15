@@ -1,8 +1,9 @@
+use async_trait::async_trait;
 use dco3_crypto::DracoonCryptoError;
-use reqwest::Error as ReqError;
+use reqwest::{Error as ReqError, Response};
 use thiserror::Error;
 
-use crate::api::nodes::models::S3ErrorResponse;
+use crate::api::{nodes::models::S3ErrorResponse, utils::FromResponse};
 
 use super::models::{DracoonAuthErrorResponse, DracoonErrorResponse};
 
@@ -15,7 +16,7 @@ pub enum DracoonClientError {
     #[error("Base url required")]
     MissingBaseUrl,
     #[error("Invalid DRACOON url")]
-    InvalidUrl,
+    InvalidUrl(String),
     #[error("Connection to DRACOON failed")]
     ConnectionFailed,
     #[error("Unknown error")]
@@ -43,6 +44,19 @@ impl From<ReqError> for DracoonClientError {
         }
 
         DracoonClientError::Unknown
+    }
+}
+
+#[async_trait]
+impl FromResponse for DracoonClientError {
+    async fn from_response(value: Response) -> Result<Self, DracoonClientError> {
+
+        if !value.status().is_success() {
+            let error = value.json::<DracoonErrorResponse>().await?;
+            return Ok(DracoonClientError::Http(error));
+        }
+
+        Err(DracoonClientError::Unknown)
     }
 }
 

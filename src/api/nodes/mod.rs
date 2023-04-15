@@ -1,4 +1,4 @@
-use self::{models::{NodeList, Node, ProgressCallback, FileMeta, UploadOptions}};
+use self::{models::{NodeList, Node, ProgressCallback, FileMeta, UploadOptions, TransferNodesRequest}};
 use super::{auth::errors::DracoonClientError, models::ListAllParams};
 use async_trait::async_trait;
 use tokio::io::AsyncRead;
@@ -22,11 +22,59 @@ pub trait Nodes {
         params: Option<ListAllParams>,
     ) -> Result<NodeList, DracoonClientError>;
 
-    /// Searches for a node by path (returns 404 if no node was found)
-    /// TODO: This should return a Result<Option<Node>, DracoonClientError>
-    async fn get_node_from_path(&self, path: &str) -> Result<Node, DracoonClientError>;
+    /// Searches for a node by path
+    /// Returns the node if found (or None if not found)
+    async fn get_node_from_path(&self, path: &str) -> Result<Option<Node>, DracoonClientError>;
+
+    /// Searches for nodes by search string
+    async fn search_nodes(&self, search_string: &str, parent_id: Option<u64>, depth_level: Option<u8>, params: Option<ListAllParams>) -> Result<NodeList, DracoonClientError>;
+
+    /// Returns a node by id
+    async fn get_node(&self, node_id: u64) -> Result<Node, DracoonClientError>;
+
+    /// Deletes a node by id
+    async fn delete_node(&self, node_id: u64) -> Result<(), DracoonClientError>;
+
+    /// Deletes multiple nodes by ids
+    async fn delete_nodes(&self, node_ids: Vec<u64>) -> Result<(), DracoonClientError>;
+
+    /// Move nodes to a target parent node
+    async fn move_nodes(&self, req: TransferNodesRequest, target_parent_id: u64) -> Result<Node, DracoonClientError>;
+
+    /// Copy nodes to a target parent node
+    async fn copy_nodes(&self, req: TransferNodesRequest, target_parent_id: u64) -> Result<Node, DracoonClientError>;
 }
 
+#[async_trait]
+pub trait Folders {
+    async fn create_folder(&self, parent_id: u64, name: &str) -> Result<Node, DracoonClientError>;
+
+    async fn update_folder(&self, node_id: u64, name: &str) -> Result<Node, DracoonClientError>;
+    
+}
+
+#[async_trait]
+pub trait Rooms {
+    async fn create_room(&self, parent_id: u64, name: &str) -> Result<Node, DracoonClientError>;
+
+    async fn update_room(&self, node_id: u64, name: &str) -> Result<Node, DracoonClientError>;
+
+    async fn config_room(&self, node_id: u64, name: &str) -> Result<Node, DracoonClientError>;
+
+    async fn encrypt_room(&self, node_id: u64, name: &str) -> Result<Node, DracoonClientError>;
+
+    async fn get_room_groups(&self, node_id: u64) -> Result<Node, DracoonClientError>;
+
+    async fn update_room_groups(&self, node_id: u64, name: &str) -> Result<Node, DracoonClientError>;
+
+    async fn delete_room_groups(&self, node_id: u64, name: &str) -> Result<Node, DracoonClientError>;
+
+    async fn get_room_users(&self, node_id: u64) -> Result<Node, DracoonClientError>;
+
+    async fn update_room_users(&self, node_id: u64, name: &str) -> Result<Node, DracoonClientError>;
+
+    async fn delete_room_users(&self, node_id: u64, name: &str) -> Result<Node, DracoonClientError>;
+}
 
 #[async_trait]
 pub trait Download {
@@ -38,5 +86,5 @@ pub trait Download {
 #[async_trait]
 pub trait Upload<R: AsyncRead> {
     /// Uploads a file (buffer reader) with given file meta info to the given parent node
-    async fn upload<'r>(&'r self, file_meta: FileMeta, parent_node: &Node, upload_options: UploadOptions, stream: &'r mut ReaderStream<R>, mut callback: Option<ProgressCallback>) -> Result<Node, DracoonClientError>;
+    async fn upload<'r>(&'r self, file_meta: FileMeta, parent_node: &Node, upload_options: UploadOptions, mut stream: ReaderStream<R>, mut callback: Option<ProgressCallback>) -> Result<Node, DracoonClientError>;
 }
