@@ -38,6 +38,7 @@ Currently, the following commands are working:
 - `download` - downloads a file to a desired file on disk (encrypted, unencrypted)
 - `ls` - lists all nodes for a given path
 - `mkdir` - creates a folder in given path
+- `rm` - removes a node by given path
 
 ## What is not working?
 
@@ -78,9 +79,11 @@ Options:
 To delete nodes, use the `rm` command:
 
 ```
-dccmd rm your.dracoon.domain/some/path
-
+dccmd rm your.dracoon.domain/some/path/some_file.pdf
+dccmd rm -r your.dracoon.domain/some/path/some/room
 ```
+*Note*: If you intend to delete a container (room or folder), use the recursive flag.
+*Note*: Room deletion always requires additional confirmation.
 
 ### Creating folders
 
