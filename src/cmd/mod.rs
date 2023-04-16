@@ -1,20 +1,25 @@
+use std::pin::Pin;
+
 use console::Term;
 use dialoguer::Confirm;
-use futures_util::{stream::FuturesUnordered, StreamExt};
+use futures_util::{future::join_all, stream::FuturesUnordered, Future, StreamExt};
 use indicatif::{ProgressBar, ProgressStyle};
 use tracing::debug;
 
 use self::{
-    credentials::get_dracoon_env,
+    credentials::{get_dracoon_crypto_env, get_dracoon_env, set_dracoon_crypto_env},
     models::DcCmdError,
     utils::strings::{format_error_message, format_success_message},
 };
 use crate::{
     api::{
-        auth::{Connected, OAuth2Flow},
-        constants::get_client_credentials,
+        auth::{ Connected, OAuth2Flow},
+        constants::{get_client_credentials},
         models::ListAllParams,
-        nodes::{models::{NodeType, CreateFolderRequest}, Download, Nodes, Folders},
+        nodes::{
+            models::{CreateFolderRequest, Node, NodeType},
+            Download, Folders, Nodes,
+        },
         Dracoon, DracoonBuilder,
     },
     cmd::{
@@ -29,7 +34,7 @@ pub mod utils;
 
 pub async fn download(source: String, target: String) -> Result<(), DcCmdError> {
     debug!("Downloading {} to {}", source, target);
-    let dracoon = init_dracoon(&source).await?;
+    let mut dracoon = init_dracoon(&source).await?;
 
     let node = dracoon.get_node_from_path(&source).await?;
 
@@ -37,6 +42,21 @@ pub async fn download(source: String, target: String) -> Result<(), DcCmdError> 
         return Err(DcCmdError::InvalidPath(source.clone()))
     };
 
+    if node.is_encrypted == Some(true) {
+        dracoon = init_encryption(dracoon).await?;
+    }
+
+    match node.node_type {
+        NodeType::File => download_file(&mut dracoon, &node, &target).await,
+        _ => unimplemented!(),
+    }
+}
+
+async fn download_file(
+    dracoon: &mut Dracoon<Connected>,
+    node: &Node,
+    target: &str,
+) -> Result<(), DcCmdError> {
     let mut out_file = std::fs::File::create(target).or(Err(DcCmdError::IoError))?;
 
     let progress_bar = ProgressBar::new(node.size.unwrap_or(0));
@@ -67,8 +87,112 @@ pub async fn download(source: String, target: String) -> Result<(), DcCmdError> 
     Ok(())
 }
 
+async fn download_container(
+    dracoon: &mut Dracoon<Connected>,
+    node: &Node,
+    target: &str,
+) -> Result<(), DcCmdError> {
+    // first get a list of all files recursively via search
+    let mut params = ListAllParams::default();
+    params.filter = Some("type:eq:file".into());
+
+    let mut files = dracoon
+        .search_nodes("*", Some(node.id), Some(-1), Some(params))
+        .await?;
+
+    if files.range.total > 500 {
+        let mut offset = 500;
+        let limit = 500;
+        let mut futures = vec![];
+
+        while offset < files.range.total {
+            let mut params = ListAllParams::default();
+            params.filter = Some("type:eq:file".into());
+            params.offset = Some(offset);
+            params.limit = Some(limit);
+            let next_files_req = dracoon.search_nodes("*", Some(node.id), Some(-1), Some(params));
+            futures.push(next_files_req);
+            offset += limit;
+        }
+
+        let mut next_files_items = vec![];
+        let results = join_all(futures).await;
+        for result in results {
+            debug!("Result: {:?}", result);
+            let next_files = result?.items;
+            next_files_items.extend(next_files);
+        }
+        files.items.append(&mut next_files_items);
+    }
+
+    // then get a list of all containers recursively via search
+    let mut params = ListAllParams::default();
+    params.filter = Some("type:eq:folder:room".into());
+
+    let mut containers = dracoon
+        .search_nodes("*", Some(node.id), Some(-1), Some(params))
+        .await?;
+
+    if containers.range.total > 500 {
+        let mut offset = 500;
+        let limit = 500;
+        let mut futures = vec![];
+
+        while offset < containers.range.total {
+            let mut params = ListAllParams::default();
+            params.filter = Some("type:eq:file".into());
+            params.offset = Some(offset);
+            params.limit = Some(limit);
+            let next_containers_req =
+                dracoon.search_nodes("*", Some(node.id), Some(-1), Some(params));
+            futures.push(next_containers_req);
+            offset += limit;
+        }
+
+        let mut next_containers_items = vec![];
+        let results = join_all(futures).await;
+        for result in results {
+            debug!("Result: {:?}", result);
+            let next_containers = result?.items;
+            next_containers_items.extend(next_containers);
+        }
+        containers.items.append(&mut next_containers_items);
+    }
+
+    // then recreate the structure in the target directory, beginning with creating the top container
+    // TODO 
+
+    // then download all files into the target directories
+    // TODO
+
+    Ok(())
+}
+
 pub fn upload(source: String, target: String) {
     todo!()
+}
+
+async fn init_encryption(
+    mut dracoon: Dracoon<Connected>,
+) -> Result<Dracoon<Connected>, DcCmdError> {
+    let (secret, store) = match get_dracoon_crypto_env(&dracoon.get_base_url().to_string()) {
+        Ok(secret) => (secret, false),
+        Err(_) => {
+            let secret = dialoguer::Password::new()
+                .with_prompt("Please enter your encryption secret")
+                .interact()
+                .or(Err(DcCmdError::IoError))?;
+            (secret, true)
+        }
+    };
+
+    let keypair = dracoon.get_keypair(Some(&secret)).await?;
+
+    if store {
+        set_dracoon_crypto_env(&dracoon.get_base_url().to_string(), &secret)?;
+    }
+
+    Ok(dracoon)
 }
 
 pub async fn get_nodes(
@@ -101,41 +225,25 @@ pub async fn get_nodes(
             if all && node_list.range.total > 500 {
                 let mut offset = 500;
                 let limit = 500;
-                let mut futures = FuturesUnordered::new();
+                let mut futures = vec![];
 
                 while offset < node_list.range.total {
-                    let next_node_list_req = dracoon.get_nodes(
-                        None,
-                        managed,
-                        Some(ListAllParams {
-                            offset: Some(offset),
-                            limit: Some(limit),
-                            filter: None,
-                            sort: None,
-                        }),
-                    );
+                    let mut params = ListAllParams::default();
+                    params.offset = Some(offset);
+                    params.limit = Some(limit);
+                    let next_node_list_req = dracoon.get_nodes(None, managed, Some(params));
                     futures.push(next_node_list_req);
                     offset += limit;
                 }
 
-                let mut results = vec![];
-                while let Some(next_node_list) = futures.next().await {
-                    results.push(next_node_list?.items);
-                    if futures.len() < 10 {
-                        break;
-                    }
+                let mut next_node_list_items = vec![];
+                let results = join_all(futures).await;
+                for result in results {
+                    debug!("Result: {:?}", result);
+                    let next_node_list = result?.items;
+                    next_node_list_items.extend(next_node_list);
                 }
-
-                while let Some(next_node_list) = futures.next().await {
-                    results.push(next_node_list?.items);
-                }
-
-                node_list
-                    .items
-                    .reserve(results.iter().map(|v| v.len()).sum());
-                for mut next_node_list_items in results {
-                    node_list.items.append(&mut next_node_list_items);
-                }
+                node_list.items.append(&mut next_node_list_items);
             }
 
             node_list
@@ -156,20 +264,26 @@ pub async fn get_nodes(
                 let limit = 500;
 
                 while offset < node_list.range.total {
-                    let mut next_node_list = dracoon
-                        .get_nodes(
-                            None,
-                            managed,
-                            Some(ListAllParams {
-                                offset: Some(offset),
-                                limit: Some(limit),
-                                filter: None,
-                                sort: None,
-                            }),
-                        )
-                        .await?;
-                    node_list.items.append(&mut next_node_list.items);
-                    offset += limit;
+                    let mut futures = vec![];
+
+                    while offset < node_list.range.total {
+                        let mut params = ListAllParams::default();
+                        params.offset = Some(offset);
+                        params.limit = Some(limit);
+                        let next_node_list_req =
+                            dracoon.get_nodes(Some(node.id), managed, Some(params));
+                        futures.push(next_node_list_req);
+                        offset += limit;
+                    }
+
+                    let mut next_node_list_items = vec![];
+
+                    let results = join_all(futures).await;
+                    for result in results {
+                        let next_node_list = result?.items;
+                        next_node_list_items.extend(next_node_list);
+                    }
+                    node_list.items.append(&mut next_node_list_items);
                 }
             }
 
@@ -268,22 +382,41 @@ fn get_error_message(err: &DcCmdError) -> String {
     }
 }
 
-pub async fn delete_node(term: Term, source: String) -> Result<(), DcCmdError> {
-
+pub async fn delete_node(
+    term: Term,
+    source: String,
+    recursive: Option<bool>,
+) -> Result<(), DcCmdError> {
     let dracoon = init_dracoon(&source).await?;
-    let (parent_path, node_name, depth) = parse_node_path(&source, &dracoon.get_base_url().to_string())?;
+    let (parent_path, node_name, depth) =
+        parse_node_path(&source, &dracoon.get_base_url().to_string())?;
     let node_path = build_node_path((parent_path.clone(), node_name.clone(), depth));
-    let node = dracoon.get_node_from_path(&node_path).await?.ok_or(DcCmdError::InvalidPath(source.clone()))?;
+    let node = dracoon
+        .get_node_from_path(&node_path)
+        .await?
+        .ok_or(DcCmdError::InvalidPath(source.clone()))?;
+
+    // check if recursive flag is set
+    let recursive = recursive.unwrap_or(false);
+
+    // if node type is folder or room and not recursive, abort
+    if !recursive && (node.node_type == NodeType::Folder || node.node_type == NodeType::Room) {
+        let msg = format_error_message("Deleting non-empty folder or room not allowed. Use --recursive flag to delete recursively.");
+        term.write_line(&msg)
+            .expect("Error writing message to terminal.");
+        return Ok(());
+    }
 
     // define async block to delete node
     let delete_node = async {
         dracoon.delete_node(node.id).await?;
         let msg = format!("Node {} deleted.", node_name);
         let msg = format_success_message(&msg);
-        term.write_line(&msg).expect("Error writing message to terminal.");
+        term.write_line(&msg)
+            .expect("Error writing message to terminal.");
         Ok(())
     };
-    
+
     // check if node is a room
     match node.node_type {
         NodeType::Room => {
@@ -297,20 +430,29 @@ pub async fn delete_node(term: Term, source: String) -> Result<(), DcCmdError> {
                 delete_node.await
             } else {
                 let msg = format_error_message("Deleting room not confirmed.");
-                term.write_line(&msg).expect("Error writing message to terminal.");
+                term.write_line(&msg)
+                    .expect("Error writing message to terminal.");
                 Ok(())
             }
         }
         _ => delete_node.await,
     }
+}
 
-    }
-
-pub async fn create_folder(term: Term, source: String, classification: Option<u8>, notes: Option<String>) -> Result<(), DcCmdError> {
+pub async fn create_folder(
+    term: Term,
+    source: String,
+    classification: Option<u8>,
+    notes: Option<String>,
+) -> Result<(), DcCmdError> {
     let dracoon = init_dracoon(&source).await?;
-    let (parent_path, node_name, _) = parse_node_path(&source, &dracoon.get_base_url().to_string())?;
+    let (parent_path, node_name, _) =
+        parse_node_path(&source, &dracoon.get_base_url().to_string())?;
 
-    let parent_node = dracoon.get_node_from_path(&parent_path).await?.ok_or(DcCmdError::InvalidPath(source.clone()))?;
+    let parent_node = dracoon
+        .get_node_from_path(&parent_path)
+        .await?
+        .ok_or(DcCmdError::InvalidPath(source.clone()))?;
 
     let req = CreateFolderRequest::new(node_name.clone(), parent_node.id);
 
@@ -322,7 +464,7 @@ pub async fn create_folder(term: Term, source: String, classification: Option<u8
     let req = match notes {
         Some(notes) => req.with_notes(notes),
         None => req,
-    };  
+    };
 
     let req = req.build();
 
@@ -330,7 +472,8 @@ pub async fn create_folder(term: Term, source: String, classification: Option<u8
 
     let msg = format!("Folder {} created.", node_name);
     let msg = format_success_message(&msg);
-    term.write_line(&msg).expect("Error writing message to terminal.");
+    term.write_line(&msg)
+        .expect("Error writing message to terminal.");
 
     Ok(())
 }

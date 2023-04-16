@@ -47,7 +47,7 @@ async fn main() -> () {
             notes,
         } => create_folder(term, source, classification, notes).await,
         DcCmdCommand::Mkroom { source } => Ok(println!("Creating room {}", source)),
-        DcCmdCommand::Rm { source } => delete_node(term, source).await,
+        DcCmdCommand::Rm { source, recursive } => delete_node(term, source, Some(recursive)).await,
     };
 
     if let Err(e) = res {

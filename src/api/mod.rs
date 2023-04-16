@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use dco3_crypto::PlainUserKeyPairContainer;
+use dco3_crypto::{PlainUserKeyPairContainer, PrivateKeyContainer, PublicKeyContainer};
 use reqwest::Url;
 
 use self::{

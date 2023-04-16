@@ -54,6 +54,9 @@ impl From<DracoonClientError> for DcCmdError {
 pub struct DcCmd {
     #[clap(subcommand)]
     pub cmd: DcCmdCommand,
+
+    #[clap(long)]
+    pub debug: bool,
 }
 
 #[derive(Parser)]
@@ -98,6 +101,9 @@ pub enum DcCmdCommand {
 
     Rm {
         source: String,
+
+        #[clap(short, long)]
+        recursive: bool,
     },
 }
 

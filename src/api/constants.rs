@@ -26,7 +26,11 @@ pub const FOLDERS_BASE: &str = "folders";
 pub const NODES_DOWNLOAD_URL: &str = "downloads";
 pub const NODES_SEARCH: &str = "search";
 
+
+/// DEFAULTS
 pub const CHUNK_SIZE: usize = 1024 * 1024 * 32; // 32 MB
+/// concurrent requests
+pub const BATCH_SIZE: usize = 20;
 
 /// USER
 pub const USER_BASE: &str = "user";

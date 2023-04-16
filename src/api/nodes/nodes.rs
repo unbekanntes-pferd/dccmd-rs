@@ -119,7 +119,7 @@ impl Nodes for Dracoon<Connected> {
         &self,
         search_string: &str,
         parent_id: Option<u64>,
-        depth_level: Option<u8>,
+        depth_level: Option<i8>,
         params: Option<ListAllParams>,
     ) -> Result<NodeList, DracoonClientError> {
         let params = params.unwrap_or_default();

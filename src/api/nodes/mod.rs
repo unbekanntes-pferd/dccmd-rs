@@ -27,7 +27,7 @@ pub trait Nodes {
     async fn get_node_from_path(&self, path: &str) -> Result<Option<Node>, DracoonClientError>;
 
     /// Searches for nodes by search string
-    async fn search_nodes(&self, search_string: &str, parent_id: Option<u64>, depth_level: Option<u8>, params: Option<ListAllParams>) -> Result<NodeList, DracoonClientError>;
+    async fn search_nodes(&self, search_string: &str, parent_id: Option<u64>, depth_level: Option<i8>, params: Option<ListAllParams>) -> Result<NodeList, DracoonClientError>;
 
     /// Returns a node by id
     async fn get_node(&self, node_id: u64) -> Result<Node, DracoonClientError>;
@@ -47,8 +47,10 @@ pub trait Nodes {
 
 #[async_trait]
 pub trait Folders {
+    /// Creates a folder with given params in the given parent node
     async fn create_folder(&self, req: CreateFolderRequest) -> Result<Node, DracoonClientError>;
 
+    /// Updates a folder with given params by id
     async fn update_folder(&self, folder_id: u64, req: UpdateFolderRequest) -> Result<Node, DracoonClientError>;
     
 }
@@ -79,7 +81,7 @@ pub trait Rooms {
 #[async_trait]
 pub trait Download {
     /// Downloads a file (node) to the given writer buffer
-    async fn download<'w>(&'w self, node: &Node, writer: &'w mut (dyn Write + Send), mut callback: Option<ProgressCallback>) -> Result<(), DracoonClientError>;
+    async fn download<'w>(&'w mut self, node: &Node, writer: &'w mut (dyn Write + Send), mut callback: Option<ProgressCallback>) -> Result<(), DracoonClientError>;
 }
 
 
