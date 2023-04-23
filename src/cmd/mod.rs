@@ -114,8 +114,16 @@ async fn download_container(
             futures.push(next_files_req);
             offset += limit;
         }
-
+        
         let mut next_files_items = vec![];
+
+        // parallelize the requests in batches of 20
+
+        
+
+    
+
+        //TODO: refactor this to process only a given batch size in parallel instead of all at once
         let results = join_all(futures).await;
         for result in results {
             debug!("Result: {:?}", result);

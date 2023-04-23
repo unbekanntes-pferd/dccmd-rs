@@ -302,31 +302,27 @@ mod tests {
 
     use super::*;
 
+    fn get_test_client(url: &str) -> DracoonClient<Disconnected> {
+        DracoonClientBuilder::new()
+            .with_base_url(url)
+            .with_client_id("client_id")
+            .with_client_secret("client_secret")
+            .build()
+            .expect("valid client config")
+    }
+
     #[test]
-    #[ignore]
     fn test_auth_code_authentication() {
         let mut mock_server = mockito::Server::new();
         let base_url = mock_server.url();
 
         let auth_res = include_str!("./tests/auth_ok.json");
-        //let auth_res_json = serde_json::from_str(auth_res).expect("Valid JSON format");
-
-        println!("{}", auth_res);
-
-        let auth_res_2 = r#"{
-        "access_token": "12345sdfjkdsfhk",
-        "token_type": "bearer",
-        "refresh_token": "4985985489fscjkfsjk",
-        "expires_in_inactive": 28800,
-        "expires_in": 28800,
-        "scope": "all"
-    }"#;
 
         let auth_mock = mock_server
-            .mock("GET", "/oauth/token")
+            .mock("POST", "/oauth/token")
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body_from_file("../tests/auth_ok.json")
+            .with_body(auth_res)
             .create();
 
         let dracoon = DracoonClientBuilder::new()
@@ -340,8 +336,99 @@ mod tests {
 
         let res = tokio_test::block_on(dracoon.connect(auth_code));
 
-        assert_ok!(res);
+        auth_mock.assert();
+        assert_ok!(&res);
 
-        //assert!(res.connection.is_some());
+        assert!(res.unwrap().connection.is_some());
+    }
+
+    #[test]
+    fn test_refresh_token_authentication() {
+        let mut mock_server = mockito::Server::new();
+        let base_url = mock_server.url();
+
+        let auth_res = include_str!("./tests/auth_ok.json");
+
+        let auth_mock = mock_server
+            .mock("POST", "/oauth/token")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(auth_res)
+            .create();
+
+        let dracoon = get_test_client(base_url.as_str());
+
+        let refresh_token_auth = OAuth2Flow::RefreshToken("hello world".to_string());
+
+        let res = tokio_test::block_on(dracoon.connect(refresh_token_auth));
+
+        auth_mock.assert();
+        assert_ok!(&res);
+
+        assert!(res.as_ref().unwrap().connection.is_some());
+
+        let access_token  = res.as_ref().unwrap().connection.as_ref().unwrap().access_token.clone();
+        let refresh_token = res.as_ref().unwrap().connection.as_ref().unwrap().refresh_token.clone();
+        let expires_in  = res.unwrap().connection.unwrap().expires_in.clone();
+
+        assert_eq!(access_token, "access_token");
+        assert_eq!(refresh_token, "refresh_token");
+        assert_eq!(expires_in, 3600);
+
+    }
+
+
+    #[test]
+    fn test_auth_error_handling() {
+
+        let mut mock_server = mockito::Server::new();
+        let base_url = mock_server.url();
+
+        let auth_res = include_str!("./tests/auth_error.json");
+
+        let auth_mock = mock_server
+            .mock("POST", "/oauth/token")
+            .with_status(401)
+            .with_header("content-type", "application/json")
+            .with_body(auth_res)
+            .create();
+
+        let dracoon = get_test_client(base_url.as_str());
+
+        let auth_code = OAuth2Flow::AuthCodeFlow("hello world".to_string());
+
+        let res = tokio_test::block_on(dracoon.connect(auth_code));
+
+        auth_mock.assert();
+
+        assert!(res.is_err());
+        
+    }
+
+    #[test]
+    fn test_get_auth_header() {
+        let mut mock_server = mockito::Server::new();
+        let base_url = mock_server.url();
+
+        let auth_res = include_str!("./tests/auth_ok.json");
+
+        let auth_mock = mock_server
+            .mock("POST", "/oauth/token")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(auth_res)
+            .create();
+
+        let dracoon = get_test_client(base_url.as_str());
+        let refresh_token_auth = OAuth2Flow::RefreshToken("hello world".to_string());
+
+        let res = tokio_test::block_on(dracoon.connect(refresh_token_auth));
+        let connected_client = res.unwrap();
+
+        let access_token = tokio_test::block_on(connected_client.get_auth_header()).unwrap();
+
+        auth_mock.assert();
+        assert_eq!(access_token, "Bearer access_token");
+        
     }
 }

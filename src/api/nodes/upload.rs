@@ -1,10 +1,10 @@
-use std::{cmp::min};
+use std::{cmp::min, time::Duration};
 
 use super::{
     models::{
         CompleteS3FileUploadRequest, CreateFileUploadRequest, CreateFileUploadResponse, FileMeta,
-        GeneratePresignedUrlsRequest, Node, PresignedUrlList, ProgressCallback, S3FileUploadStatus,
-        UploadOptions, PresignedUrl,
+        GeneratePresignedUrlsRequest, Node, PresignedUrl, PresignedUrlList, ProgressCallback,
+        ResolutionStrategy, S3FileUploadStatus, S3UploadStatus, UploadOptions,
     },
     Upload,
 };
@@ -12,9 +12,10 @@ use crate::api::{
     auth::{errors::DracoonClientError, Connected},
     constants::{
         CHUNK_SIZE, DRACOON_API_PREFIX, FILES_BASE, FILES_S3_COMPLETE, FILES_S3_URLS, FILES_UPLOAD,
-        NODES_BASE,
+        NODES_BASE, POLLING_START_DELAY,
     },
     models::ObjectExpiration,
+    nodes::models::S3FileUploadPart,
     utils::FromResponse,
     Dracoon,
 };
@@ -185,7 +186,7 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
         // parse upload options
         let (classification, timestamp_creation, timestamp_modification, expiration) =
             parse_upload_options(&file_meta, &upload_options);
-        
+
         let fm = file_meta.clone();
 
         // create upload channel
@@ -195,14 +196,11 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
             .with_timestamp_modification(timestamp_modification)
             .with_timestamp_creation(timestamp_creation)
             .with_expiration(expiration)
-
             .build();
 
         let upload_channel =
             <Dracoon<Connected> as UploadInternal<R>>::create_upload_channel::<'_, '_>(self, req)
                 .await?;
-        
-
 
         // Initialize a variable to keep track of the number of bytes read
         let mut bytes_read = 0u64;
@@ -210,33 +208,109 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
 
         let (count_urls, last_chunk_size) = calculate_s3_url_count(fm.1, CHUNK_SIZE as u64);
 
-        match count_urls {
+        let s3_parts = match count_urls {
             1 => {
                 // only one request for small files
                 let req = GeneratePresignedUrlsRequest::new(fm.1, 1, 1);
-                let url = <Dracoon<Connected> as UploadInternal<R>>::create_s3_upload_urls::<'_, '_>(self, upload_channel.upload_id, req).await?;
+                let url =
+                    <Dracoon<Connected> as UploadInternal<R>>::create_s3_upload_urls::<'_, '_>(
+                        self,
+                        upload_channel.upload_id.clone(),
+                        req,
+                    )
+                    .await?;
                 let url = url.urls.iter().next().expect("Creating S3 url failed");
-                upload_stream_to_s3(stream, url, file_meta, callback).await?;
+                let e_tag = upload_stream_to_s3(stream, url, file_meta, callback).await?;
 
-            },
+                vec![S3FileUploadPart::new(1, e_tag)]
+            }
             _ => {
                 // first request for all urls except the last one
-                let req = GeneratePresignedUrlsRequest::new(CHUNK_SIZE as u64, 1, count_urls);
+                let req = GeneratePresignedUrlsRequest::new(CHUNK_SIZE as u64, 1, count_urls - 1);
+
                 // last request for the last url
-                let last_chunk_req = GeneratePresignedUrlsRequest::new(last_chunk_size, count_urls, count_urls);
+                let last_chunk_req =
+                    GeneratePresignedUrlsRequest::new(last_chunk_size, count_urls, count_urls);
+
                 // get all urls
-                let chunk_urls = <Dracoon<Connected> as UploadInternal<R>>::create_s3_upload_urls::<'_, '_>(self, upload_channel.upload_id.clone(), req).await?;
-                let last_chunk_url = <Dracoon<Connected> as UploadInternal<R>>::create_s3_upload_urls::<'_, '_>(self, upload_channel.upload_id, last_chunk_req).await?;
+                let chunk_urls =
+                    <Dracoon<Connected> as UploadInternal<R>>::create_s3_upload_urls::<'_, '_>(
+                        self,
+                        upload_channel.upload_id.clone(),
+                        req,
+                    )
+                    .await?;
+                let mut last_chunk_url =
+                    <Dracoon<Connected> as UploadInternal<R>>::create_s3_upload_urls::<'_, '_>(
+                        self,
+                        upload_channel.upload_id.clone(),
+                        last_chunk_req,
+                    )
+                    .await?;
+
+                // merge all urls
+                let mut urls = chunk_urls.urls;
+                urls.append(&mut last_chunk_url.urls);
+
+                let mut parts = Vec::new();
+
+                // upload all chunks
+                for url in urls {
+                    //TODO: this does not compile (stream has no method read_chunk)
+                    //let chunk = stream.read_chunk(CHUNK_SIZE).await?;
+                    let chunk = vec![0u8; CHUNK_SIZE];
+                    bytes_read += chunk.len() as u64;
+                    //let e_tag = upload_stream_to_s3(chunk, &url, file_meta, callback).await?;
+                    let e_tag = String::from("etag");
+                    let part = S3FileUploadPart::new(url.part_number, e_tag);
+                    parts.push(part);
+                }
+
+                parts
+            }
+        };
+
+        // finalize upload
+        let req = CompleteS3FileUploadRequest::new(s3_parts)
+            .with_resolution_strategy(ResolutionStrategy::Overwrite)
+            .with_keep_share_links(true)
+            .build();
+
+        <Dracoon<Connected> as UploadInternal<R>>::finalize_upload::<'_, '_>(
+            self,
+            upload_channel.upload_id.clone(),
+            req,
+        )
+        .await?;
+
+        // get upload status 
+        // return node if upload is done
+        // return error if upload failed
+        // polling with exponential backoff
+        let mut sleep_duration = POLLING_START_DELAY;
+        loop {
+            let status_response = <Dracoon<Connected> as UploadInternal<R>>::get_upload_status(&self, upload_channel.upload_id.clone()).await?;
+            
+            match status_response.status {
+                S3UploadStatus::Done => {
+                    return Ok(status_response
+                        .node
+                        .expect("Node must be set if status is done"));
+                }
+                S3UploadStatus::Error => {
+                    return Err(DracoonClientError::Http(
+                        status_response
+                            .error_details
+                            .expect("Error message must be set if status is error"),
+                    ));
+                }
+                _ => {
+                    tokio::time::sleep(Duration::from_millis(sleep_duration)).await;
+                    sleep_duration = sleep_duration * 2;
+                }
             }
         }
-
-        
-        todo!()
-
-        }
-
-        
-    
+    }
 
     async fn upload_to_s3_encrypted(
         &self,
@@ -248,7 +322,6 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
     ) -> Result<Node, DracoonClientError> {
         todo!()
     }
-
 }
 /// helper to parse upload options (file meta and upload options)
 fn parse_upload_options(
@@ -276,7 +349,10 @@ fn calculate_s3_url_count(total_size: u64, chunk_size: u64) -> (u32, u64) {
     }
 
     // return url count and last chunk size
-    (urls.try_into().expect("overflow size to chunk"), total_size % chunk_size)
+    (
+        urls.try_into().expect("overflow size to chunk"),
+        total_size % chunk_size,
+    )
 }
 
 async fn upload_stream_to_s3<'a, R>(
@@ -284,8 +360,10 @@ async fn upload_stream_to_s3<'a, R>(
     url: &PresignedUrl,
     file_meta: FileMeta,
     mut callback: Option<ProgressCallback>,
-)  -> Result<String, DracoonClientError> where R: AsyncRead + Unpin + Send  + Sync + 'static {
-
+) -> Result<String, DracoonClientError>
+where
+    R: AsyncRead + Unpin + Send + Sync + 'static,
+{
     // Initialize a variable to keep track of the number of bytes read
     let mut bytes_read = 0u64;
     // Create an async stream from the reader
@@ -312,10 +390,13 @@ async fn upload_stream_to_s3<'a, R>(
         .send()
         .await?;
 
-    let e_tag_header = res.headers().get("ETag").expect("ETag header missing").to_str().expect("ETag header invalid");
+    let e_tag_header = res
+        .headers()
+        .get("ETag")
+        .expect("ETag header missing")
+        .to_str()
+        .expect("ETag header invalid");
     let e_tag = e_tag_header.trim_start_matches('"').trim_end_matches('"');
 
     Ok(e_tag.to_string())
-
 }
- 

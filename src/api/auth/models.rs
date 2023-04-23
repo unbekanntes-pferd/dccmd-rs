@@ -6,7 +6,7 @@ use chrono::Utc;
 use reqwest::{Response, StatusCode};
 use serde::{Deserialize, Serialize};
 
-use crate::{api::{constants::{GRANT_TYPE_REFRESH_TOKEN, GRANT_TYPE_AUTH_CODE}, utils::parse_body}};
+use crate::{api::{constants::{GRANT_TYPE_REFRESH_TOKEN, GRANT_TYPE_AUTH_CODE, GRANT_TYPE_PASSWORD}, utils::parse_body}};
 
 use super::{errors::DracoonClientError, Connection};
 
@@ -17,6 +17,17 @@ pub struct OAuth2PasswordFlow {
     pub username: String,
     pub password: String,
     pub grant_type: String,
+}
+
+impl OAuth2PasswordFlow {
+    /// creates a new password flow payload
+    pub fn new(username: &str, password: &str) -> Self {
+        Self {
+            username: username.to_string(),
+            password: password.to_string(),
+            grant_type: GRANT_TYPE_PASSWORD.to_string(),
+        }
+    }
 }
 
 /// represents form data payload for OAuth2 authorization code flow

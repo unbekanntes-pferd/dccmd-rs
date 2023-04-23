@@ -31,6 +31,7 @@ pub const NODES_SEARCH: &str = "search";
 pub const CHUNK_SIZE: usize = 1024 * 1024 * 32; // 32 MB
 /// concurrent requests
 pub const BATCH_SIZE: usize = 20;
+pub const POLLING_START_DELAY: u64 = 300;
 
 /// USER
 pub const USER_BASE: &str = "user";
