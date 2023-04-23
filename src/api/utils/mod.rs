@@ -5,6 +5,7 @@ use serde_xml_rs::from_str;
 
 use super::{auth::{errors::DracoonClientError, models::StatusCodeState}, nodes::models::{S3ErrorResponse, S3XmlError}};
 
+/// Parses the response body and returns the result into desired JSON parsed response or error
 pub async fn parse_body<T, E>(res: Response) -> Result<T, DracoonClientError>
 where
     T: DeserializeOwned,
@@ -16,6 +17,7 @@ where
     }
 }
 
+/// Builds the error body from the response
 async fn build_error_body<E>(body: E) -> DracoonClientError
 where
     E: DeserializeOwned + Into<DracoonClientError>,
@@ -23,6 +25,7 @@ where
     body.into()
 }
 
+/// Builds the error body from the response for S3 errors (XML)
 pub async fn build_s3_error(response: Response) -> DracoonClientError {
     let status = &response.status();
     let text = response.text().await.expect("Valid S3 XML error");
@@ -33,6 +36,7 @@ pub async fn build_s3_error(response: Response) -> DracoonClientError {
 
 #[async_trait]
 pub trait FromResponse {
+    /// Trait that allows to convert a response into a specific type (async)
     async fn from_response(res: Response) -> Result<Self, DracoonClientError>
     where
         Self: Sized;
