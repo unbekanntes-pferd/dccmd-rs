@@ -95,9 +95,9 @@ impl DownloadInternal for Dracoon<Connected> {
         node_id: u64,
     ) -> Result<DownloadUrlResponse, DracoonClientError> {
         let url_part = format!(
-            "{}/{}/{}/{}/{}",
-            DRACOON_API_PREFIX, NODES_BASE, FILES_BASE, node_id, NODES_DOWNLOAD_URL
+            "{DRACOON_API_PREFIX}/{NODES_BASE}/{FILES_BASE}/{node_id}/{NODES_DOWNLOAD_URL}"
         );
+
 
         let api_url = self.build_api_url(&url_part);
 
@@ -146,7 +146,7 @@ impl DownloadInternal for Dracoon<Connected> {
             // calculate range
             let start = downloaded_bytes;
             let end = min(start + CHUNK_SIZE as u64 - 1, content_length - 1);
-            let range = format!("bytes={}-{}", start, end);
+            let range = format!("bytes={start}-{end}");
 
             // get chunk
             let response = self
@@ -158,7 +158,7 @@ impl DownloadInternal for Dracoon<Connected> {
                 .await?;
 
             // handle error
-            if !response.error_for_status_ref().is_ok() {
+            if response.error_for_status_ref().is_err() {
                 let error = build_s3_error(response).await;
                 return Err(error);
             }
@@ -168,7 +168,7 @@ impl DownloadInternal for Dracoon<Connected> {
 
             while let Some(chunk) = stream.try_next().await? {
                 let len = chunk.len() as u64;
-                writer.write(&chunk).or(Err(DracoonClientError::IoError))?;
+                writer.write_all(&chunk).or(Err(DracoonClientError::IoError))?;
                 downloaded_bytes += len;
 
                 // call progress callback if provided
@@ -231,7 +231,7 @@ impl DownloadInternal for Dracoon<Connected> {
             // calculate range
             let start = downloaded_bytes;
             let end = min(start + CHUNK_SIZE as u64 - 1, content_length - 1);
-            let range = format!("bytes={}-{}", start, end);
+            let range = format!("bytes={start}-{end}");
 
             // get chunk
             let response = self
@@ -243,7 +243,7 @@ impl DownloadInternal for Dracoon<Connected> {
                 .await?;
 
             // handle error
-            if !response.error_for_status_ref().is_ok() {
+            if response.error_for_status_ref().is_err() {
                 let error = build_s3_error(response).await;
                 return Err(error);
             }
@@ -270,14 +270,13 @@ impl DownloadInternal for Dracoon<Connected> {
 
         crypter.finalize()?;
 
-        writer.write(&buffer).or(Err(DracoonClientError::IoError))?;
+        writer.write_all(&buffer).or(Err(DracoonClientError::IoError))?;
         Ok(())
     }
 
     async fn get_file_key(&self, node_id: u64) -> Result<FileKey, DracoonClientError> {
         let url_part = format!(
-            "{}/{}/{}/{}/{}",
-            DRACOON_API_PREFIX, NODES_BASE, FILES_BASE, node_id, FILES_FILE_KEY
+            "{DRACOON_API_PREFIX}/{NODES_BASE}/{FILES_BASE}/{node_id}/{FILES_FILE_KEY}"
         );
 
         let response = self

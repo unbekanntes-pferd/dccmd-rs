@@ -33,14 +33,14 @@ pub fn delete_dracoon_env(dracoon_url: &str) -> Result<(), DcCmdError> {
 }
 
 pub fn set_dracoon_crypto_env(dracoon_url: &str, crypto_env: &str) -> Result<(), DcCmdError> {
-    match set_password(SERVICE_NAME, &format!("{}-crypto", dracoon_url), crypto_env) {
+    match set_password(SERVICE_NAME, &format!("{dracoon_url}-crypto"), crypto_env) {
         Ok(_) => Ok(()),
         Err(_) => Err(DcCmdError::CredentialStorageFailed),
     }
 }
 
 pub fn get_dracoon_crypto_env(dracoon_url: &str) -> Result<String, DcCmdError> {
-    match get_password(SERVICE_NAME, &format!("{}-crypto", dracoon_url)) {
+    match get_password(SERVICE_NAME, &format!("{dracoon_url}-crypto")) {
         Ok(pwd) => match pwd.success {
             true => Ok(pwd.password),
             false => Err(DcCmdError::InvalidAccount),
@@ -51,7 +51,7 @@ pub fn get_dracoon_crypto_env(dracoon_url: &str) -> Result<String, DcCmdError> {
 
 pub fn delete_dracoon_crypto_env(dracoon_url: &str) -> Result<(), DcCmdError> {
     match get_dracoon_crypto_env(dracoon_url) {
-        Ok(_) => match delete_password(SERVICE_NAME, &format!("{}-crypto", dracoon_url)) {
+        Ok(_) => match delete_password(SERVICE_NAME, &format!("{dracoon_url}-crypto")) {
             Ok(_) => Ok(()),
             Err(_) => Err(DcCmdError::CredentialDeletionFailed),
         },

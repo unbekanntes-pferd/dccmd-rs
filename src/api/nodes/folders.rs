@@ -16,7 +16,8 @@ use super::{
 #[async_trait]
 impl Folders for Dracoon<Connected> {
     async fn create_folder(&self, req: CreateFolderRequest) -> Result<Node, DracoonClientError> {
-        let url_part = format!("/{}/{}/{}", DRACOON_API_PREFIX, NODES_BASE, FOLDERS_BASE);
+        let url_part = format!("/{DRACOON_API_PREFIX}/{NODES_BASE}/{FOLDERS_BASE}");
+    
 
         let api_url = self.build_api_url(&url_part);
         let response = self
@@ -33,7 +34,8 @@ impl Folders for Dracoon<Connected> {
     }
 
     async fn update_folder(&self, folder_id: u64, req: UpdateFolderRequest) -> Result<Node, DracoonClientError> {
-        let url_part = format!("/{}/{}/{}/{}", DRACOON_API_PREFIX, NODES_BASE, FOLDERS_BASE, folder_id);
+        let url_part = format!("/{DRACOON_API_PREFIX}/{NODES_BASE}/{FOLDERS_BASE}/{folder_id}");
+
 
         let api_url = self.build_api_url(&url_part);
 

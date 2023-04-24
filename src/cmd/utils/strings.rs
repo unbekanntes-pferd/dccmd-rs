@@ -1,5 +1,5 @@
 use crate::{
-    api::nodes::models::{Node, NodeList, NodeType},
+    api::nodes::models::{Node, NodeType},
     cmd::models::DcCmdError,
 };
 
@@ -15,22 +15,13 @@ const NODE_LIST_HEADER: &str =
 pub fn format_error_message(message: &str) -> String {
     let err_prefix_red = format!("{}", style(ERROR_PREFIX).red().bold());
 
-    format!("{} {}", err_prefix_red, message)
+    format!("{err_prefix_red} {message}")
 }
 
 pub fn format_success_message(message: &str) -> String {
     let succ_prefix_green = format!("{}", style(SUCCESS_PREFIX).green().bold());
 
-    format!("{} {}", succ_prefix_green, message)
-}
-
-pub fn format_node_list(
-    term: Term,
-    node_list: NodeList,
-    long: Option<bool>,
-    human_readable: Option<bool>,
-) -> String {
-    todo!()
+    format!("{succ_prefix_green} {message}")
 }
 
 pub fn print_node(
@@ -38,7 +29,7 @@ pub fn print_node(
     node: &Node,
     long: Option<bool>,
     human_readable: Option<bool>,
-) -> () {
+) {
     let mut node_str = String::new();
 
     let long = long.unwrap_or(false);
@@ -215,31 +206,31 @@ mod tests {
 
     #[test]
     fn test_to_readable_kb() {
-        let size = 12500u64;
+        let size = 12500_u64;
         assert_eq!("12 KB", to_readable_size(size));
     }
 
     #[test]
     fn test_to_readable_mb() {
-        let size = 12500000u64;
+        let size = 12_500_00_u64;
         assert_eq!("12 MB", to_readable_size(size));
     }
 
     #[test]
     fn test_to_readable_gb() {
-        let size = 12500000000u64;
+        let size = 12_500_000_000_u64;
         assert_eq!("12 GB", to_readable_size(size));
     }
 
     #[test]
     fn test_to_readable_tb() {
-        let size = 12500000000000u64;
+        let size = 12_500_000_000_000_u64;
         assert_eq!("11 TB", to_readable_size(size));
     }
 
     #[test]
     fn test_to_readable_pb() {
-        let size = 12500000000000000u64;
+        let size = 12_500_000_000_000_000_u64;
         assert_eq!("11 PB", to_readable_size(size));
     }
 

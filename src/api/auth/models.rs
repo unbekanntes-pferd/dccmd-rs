@@ -76,11 +76,23 @@ impl OAuth2RefreshTokenFlow {
 
 /// represents form data payload for OAuth2 token revoke
 #[derive(Debug, Serialize, Deserialize)]
-struct OAuth2TokenRevoke {
+pub struct OAuth2TokenRevoke {
     client_id: String,
     client_secret: String,
     token_type_hint: String,
     token: String,
+}
+
+impl OAuth2TokenRevoke {
+    /// creates a new token revoke payload
+    pub fn new(client_id: &str, client_secret: &str, token_type_hint: &str, token: &str) -> Self {
+        Self {
+            client_id: client_id.to_string(),
+            client_secret: client_secret.to_string(),
+            token_type_hint: token_type_hint.to_string(),
+            token: token.to_string(),
+        }
+    }
 }
 
 /// DRACOON OAuth2 token response
@@ -106,7 +118,7 @@ pub struct DracoonErrorResponse {
 
 impl Display for DracoonErrorResponse {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let dbg_info = self.debug_info.as_deref().unwrap_or("No details".into());
+        let dbg_info = self.debug_info.as_deref().unwrap_or("No details");
         write!(f, "{} - {} ({})", self.message, dbg_info, self.code)
     }
 }
@@ -158,10 +170,7 @@ impl From<StatusCode> for StatusCodeState {
     /// transforms a status code into a status code state
     fn from(value: StatusCode) -> Self {
         match value {
-            StatusCode::OK => StatusCodeState::Ok(value),
-            StatusCode::CREATED => StatusCodeState::Ok(value),
-            StatusCode::ACCEPTED => StatusCodeState::Ok(value),
-            StatusCode::NO_CONTENT => StatusCodeState::Ok(value),
+            StatusCode::OK | StatusCode::CREATED | StatusCode::ACCEPTED | StatusCode::NO_CONTENT => StatusCodeState::Ok(value),
             _ => StatusCodeState::Error(value),
         }
     }
@@ -198,6 +207,6 @@ impl From<ParseError> for DracoonClientError {
     /// transforms a URL parse error into a DRACOON client error
     fn from(value: ParseError) -> Self {
 
-        Self::InvalidUrl("parsing url failed (invalid)".into())
+        Self::InvalidUrl("parsing url failed (invalid)".to_string())
     }
 }

@@ -30,7 +30,7 @@ pub async fn build_s3_error(response: Response) -> DracoonClientError {
     let status = &response.status();
     let text = response.text().await.expect("Valid S3 XML error");
     let error: S3XmlError = from_str(&text).expect("Valid S3 XML error");
-    let err_response = S3ErrorResponse::from_xml_error(status.clone(), error);
+    let err_response = S3ErrorResponse::from_xml_error(*status, error);
     return DracoonClientError::S3Error(err_response);
 }
 

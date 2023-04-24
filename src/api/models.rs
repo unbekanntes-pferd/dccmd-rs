@@ -25,16 +25,16 @@ impl From<ListAllParams> for String {
 
         let params = value
             .filter
-            .map(|filter| format!("{}&filter={}", params, filter))
+            .map(|filter| format!("{params}&filter={filter}"))
             .unwrap_or(params);
         let params = value
             .sort
-            .map(|sort| format!("{}&sort={}", params, sort))
+            .map(|sort| format!("{params}&sort={sort}"))
             .unwrap_or(params);
 
         value
             .limit
-            .map(|limit| format!("{}&limit={}", params, limit))
+            .map(|limit| format!("{params}&limit={limit}"))
             .unwrap_or(params)
     }
 }
@@ -46,20 +46,12 @@ pub struct Range {
     pub total: u64,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct ObjectExpiration {
     pub enable_expiration: bool,
     pub expire_at: Option<String>,
 }
 
-impl Default for ObjectExpiration {
-    fn default() -> Self {
-        Self {
-            enable_expiration: false,
-            expire_at: None,
-        }
-    }
-}
 
 impl AsRef<ObjectExpiration> for ObjectExpiration {
     fn as_ref(&self) -> &Self {

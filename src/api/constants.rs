@@ -1,4 +1,4 @@
-/// constants for grant_type
+/// constants for `grant_type` parameter
 pub const GRANT_TYPE_PASSWORD: &str = "password";
 pub const GRANT_TYPE_AUTH_CODE: &str = "authorization_code";
 pub const GRANT_TYPE_REFRESH_TOKEN: &str = "refresh_token";
@@ -9,6 +9,8 @@ pub const TOKEN_TYPE_HINT_ACCESS: &str = "access_token";
 pub const DRACOON_TOKEN_URL: &str = "oauth/token";
 pub const DRACOON_REDIRECT_URL: &str = "oauth/callback";
 pub const DRACOON_TOKEN_REVOKE_URL: &str = "oauth/revoke";
+pub const TOKEN_TYPE_HINT_ACCESS_TOKEN: &str = "access_token";
+pub const TOKEN_TYPE_HINT_REFRESH_TOKEN: &str = "refresh_token";
 
 /// API
 pub const DRACOON_API_PREFIX: &str = "api/v4";

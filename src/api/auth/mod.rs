@@ -4,19 +4,20 @@ use std::marker::PhantomData;
 
 use base64::{
     self, alphabet,
-    engine::{self, general_purpose}, Engine,
+    engine::{self, general_purpose},
+    Engine,
 };
 
 pub mod errors;
 pub mod models;
 
 use crate::api::{
-    auth::models::{OAuth2AuthCodeFlow, OAuth2TokenResponse},
-    constants::DRACOON_TOKEN_URL,
+    auth::models::{OAuth2AuthCodeFlow, OAuth2TokenResponse, OAuth2TokenRevoke, OAuth2PasswordFlow},
+    constants::{DRACOON_TOKEN_URL, DRACOON_TOKEN_REVOKE_URL, TOKEN_TYPE_HINT_ACCESS_TOKEN},
 };
 
 use self::{errors::DracoonClientError, models::OAuth2RefreshTokenFlow};
-use super::constants::APP_USER_AGENT;
+use super::constants::{APP_USER_AGENT, TOKEN_TYPE_HINT_REFRESH_TOKEN};
 
 /// represents the possible OAuth2 flows
 pub enum OAuth2Flow {
@@ -25,7 +26,7 @@ pub enum OAuth2Flow {
     RefreshToken(String),
 }
 
-/// represents possible states for the DracoonClient
+/// represents possible states for the `DracoonClient`
 pub struct Connected;
 pub struct Disconnected;
 
@@ -121,7 +122,7 @@ impl DracoonClientBuilder {
     }
 }
 
-/// DracoonClient implementation for Disconnected state
+/// `DracoonClient` implementation for Disconnected state
 impl DracoonClient<Disconnected> {
     pub async fn connect(
         self,
@@ -163,7 +164,7 @@ impl DracoonClient<Disconnected> {
             .redirect_uri
             .as_ref()
             .unwrap_or(&default_redirect)
-            .to_owned();
+            .clone();
 
         self.redirect_uri = Some(redirect_uri.clone());
 
@@ -175,7 +176,7 @@ impl DracoonClient<Disconnected> {
             .query_pairs_mut()
             .append_pair("response_type", "code")
             .append_pair("client_id", &self.client_id)
-            .append_pair("redirect_uri", &redirect_uri.to_string())
+            .append_pair("redirect_uri", redirect_uri.as_ref())
             .append_pair("scope", "all")
             .finish();
 
@@ -193,6 +194,9 @@ impl DracoonClient<Disconnected> {
         username: &str,
         password: &str,
     ) -> Result<Connection, DracoonClientError> {
+
+        let token_url = self.get_token_url();
+
         todo!()
     }
 
@@ -202,8 +206,8 @@ impl DracoonClient<Disconnected> {
         let auth = OAuth2AuthCodeFlow::new(
             &self.client_id,
             &self.client_secret,
-            &code,
-            &self
+            code,
+            self
                 .redirect_uri
                 .as_ref()
                 .expect("redirect uri is set")
@@ -221,17 +225,38 @@ impl DracoonClient<Disconnected> {
         let token_url = self.get_token_url();
 
         let auth =
-            OAuth2RefreshTokenFlow::new(&self.client_id, &self.client_secret, &refresh_token);
+            OAuth2RefreshTokenFlow::new(&self.client_id, &self.client_secret, refresh_token);
 
         let res = self.http.post(token_url).form(&auth).send().await?;
         Ok(OAuth2TokenResponse::from_response(res).await?.into())
     }
 }
 
-/// DracoonClient implementation for Connected state
+/// `DracoonClient` implementation for Connected state
 impl DracoonClient<Connected> {
-    pub async fn disconnect(self) -> Result<DracoonClient<Disconnected>, DracoonClientError> {
-        todo!()
+    pub async fn disconnect(self, revoke_access_token: Option<bool>, revoke_refresh_token: Option<bool>) -> Result<DracoonClient<Disconnected>, DracoonClientError> {
+
+        let revoke_access_token = revoke_access_token.unwrap_or(true);
+        let revoke_refresh_token = revoke_refresh_token.unwrap_or(false);
+
+        if revoke_access_token {
+            self.revoke_acess_token().await?;
+        }
+
+        if revoke_refresh_token {
+            self.revoke_refresh_token().await?;
+        }
+
+        Ok(DracoonClient {
+            client_id: self.client_id,
+            client_secret: self.client_secret,
+            connection: None,
+            base_url: self.base_url,
+            redirect_uri: self.redirect_uri,
+            connected: PhantomData,
+            http: self.http,
+        })
+
     }
 
     pub fn get_base_url(&self) -> &Url {
@@ -242,6 +267,56 @@ impl DracoonClient<Connected> {
         self.base_url
             .join(DRACOON_TOKEN_URL)
             .expect("Correct base url")
+    }
+
+    async fn revoke_acess_token(&self) -> Result<(), DracoonClientError> {
+
+        let access_token = self
+            .connection
+            .as_ref()
+            .expect("Connected client has a connection")
+            .access_token.clone();
+
+        let api_url = self
+            .base_url
+            .join(DRACOON_TOKEN_REVOKE_URL)
+            .expect("Correct base url");
+
+        let auth = OAuth2TokenRevoke::new(
+            &self.client_id,
+            &self.client_secret,
+            TOKEN_TYPE_HINT_ACCESS_TOKEN,
+            &access_token
+        );
+
+        let res = self.http.post(api_url).form(&auth).send().await?;
+        
+        Ok(())
+    }
+
+    async fn revoke_refresh_token(&self) -> Result<(), DracoonClientError> {
+
+        let refresh_token = self
+            .connection
+            .as_ref()
+            .expect("Connected client has a connection")
+            .refresh_token.clone();
+
+        let api_url = self
+            .base_url
+            .join(DRACOON_TOKEN_REVOKE_URL)
+            .expect("Correct base url");
+
+        let auth = OAuth2TokenRevoke::new(
+            &self.client_id,
+            &self.client_secret,
+            TOKEN_TYPE_HINT_REFRESH_TOKEN,
+            &refresh_token
+        );
+
+        let res = self.http.post(api_url).form(&auth).send().await?;
+        
+        Ok(())
     }
 
     async fn connect_refresh_token(&self) -> Result<Connection, DracoonClientError> {
@@ -367,20 +442,31 @@ mod tests {
 
         assert!(res.as_ref().unwrap().connection.is_some());
 
-        let access_token  = res.as_ref().unwrap().connection.as_ref().unwrap().access_token.clone();
-        let refresh_token = res.as_ref().unwrap().connection.as_ref().unwrap().refresh_token.clone();
-        let expires_in  = res.unwrap().connection.unwrap().expires_in.clone();
+        let access_token = res
+            .as_ref()
+            .unwrap()
+            .connection
+            .as_ref()
+            .unwrap()
+            .access_token
+            .clone();
+        let refresh_token = res
+            .as_ref()
+            .unwrap()
+            .connection
+            .as_ref()
+            .unwrap()
+            .refresh_token
+            .clone();
+        let expires_in = res.unwrap().connection.unwrap().expires_in;
 
         assert_eq!(access_token, "access_token");
         assert_eq!(refresh_token, "refresh_token");
         assert_eq!(expires_in, 3600);
-
     }
-
 
     #[test]
     fn test_auth_error_handling() {
-
         let mut mock_server = mockito::Server::new();
         let base_url = mock_server.url();
 
@@ -402,7 +488,6 @@ mod tests {
         auth_mock.assert();
 
         assert!(res.is_err());
-        
     }
 
     #[test]
@@ -429,6 +514,62 @@ mod tests {
 
         auth_mock.assert();
         assert_eq!(access_token, "Bearer access_token");
-        
     }
+
+    #[test]
+    fn test_get_token_url() {
+        let base_url = "https://dracoon.team";
+
+        let dracoon = get_test_client(base_url);
+
+        let token_url = dracoon.get_token_url();
+
+        assert_eq!(token_url.as_str(), "https://dracoon.team/oauth/token");
+    }
+
+    #[test]
+fn test_get_base_url() {
+    let mut mock_server = mockito::Server::new();
+    let base_url = mock_server.url();
+
+    let auth_res = include_str!("./tests/auth_ok.json");
+
+    let auth_mock = mock_server
+        .mock("POST", "/oauth/token")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(auth_res)
+        .create();
+
+    let dracoon = get_test_client(&base_url);
+    let dracoon = tokio_test::block_on(dracoon.connect(OAuth2Flow::AuthCodeFlow("hello world".to_string()))).unwrap();
+
+    let base_url = dracoon.get_base_url();
+
+    auth_mock.assert();
+    assert_eq!(base_url.as_str(), format!("{}/",mock_server.url()));
+}
+
+#[test]
+fn test_get_refresh_token() {
+    let mut mock_server = mockito::Server::new();
+    let base_url = mock_server.url();
+
+    let auth_res = include_str!("./tests/auth_ok.json");
+
+    let auth_mock = mock_server
+        .mock("POST", "/oauth/token")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(auth_res)
+        .create();
+
+    let dracoon = get_test_client(&base_url);
+    let dracoon = tokio_test::block_on(dracoon.connect(OAuth2Flow::AuthCodeFlow("hello world".to_string()))).unwrap();
+
+    let refresh_token = dracoon.get_refresh_token();
+
+    auth_mock.assert();
+    assert_eq!(refresh_token, "refresh_token");
+}
 }

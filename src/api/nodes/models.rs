@@ -29,14 +29,9 @@ pub struct FileMeta(
 );
 
 /// upload options (expiration, classification)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct UploadOptions(pub Option<ObjectExpiration>, pub Option<u64>);
 
-impl Default for UploadOptions {
-    fn default() -> Self {
-        Self(None, None)
-    }
-}
 
 /// A list of nodes in DRACOON - GET /nodes
 #[derive(Debug, Serialize, Deserialize)]
@@ -110,6 +105,7 @@ pub enum NodeType {
 /// DRACOOON node permissions
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(clippy::struct_excessive_bools)]
 pub struct NodePermissions {
     manage: bool,
     read: bool,
@@ -121,61 +117,34 @@ pub struct NodePermissions {
     read_recycle_bin: bool,
     restore_recycle_bin: bool,
     delete_recycle_bin: bool,
+
 }
 
 impl ToString for NodePermissions {
     fn to_string(&self) -> String {
-        let mut perms = String::new();
+        let mapping = [
+            (self.manage, 'm'),
+            (self.read, 'r'),
+            (self.create, 'w'),
+            (self.change, 'c'),
+            (self.delete, 'd'),
+            (self.manage_download_share, 'm'),
+            (self.manage_upload_share, 'm'),
+            (self.read_recycle_bin, 'r'),
+            (self.restore_recycle_bin, 'r'),
+            (self.delete_recycle_bin, 'd'),
+        ];
 
-        match self.manage {
-            true => perms.push_str("m"),
-            false => perms.push_str("-"),
-        };
+        let mut perms = String::with_capacity(mapping.len());
 
-        match self.read {
-            true => perms.push_str("r"),
-            false => perms.push_str("-"),
-        };
+        for (i, &(flag, ch)) in mapping.iter().enumerate() {
+            perms.push(if flag { ch } else { '-' });
 
-        match self.create {
-            true => perms.push_str("w"),
-            false => perms.push_str("-"),
-        };
-
-        match self.change {
-            true => perms.push_str("c"),
-            false => perms.push_str("-"),
-        };
-
-        match self.delete {
-            true => perms.push_str("d-"),
-            false => perms.push_str("--"),
-        };
-
-        match self.manage_download_share {
-            true => perms.push_str("m"),
-            false => perms.push_str("-"),
-        };
-
-        match self.manage_upload_share {
-            true => perms.push_str("m-"),
-            false => perms.push_str("--"),
-        };
-
-        match self.read_recycle_bin {
-            true => perms.push_str("r"),
-            false => perms.push_str("-"),
-        };
-
-        match self.restore_recycle_bin {
-            true => perms.push_str("r"),
-            false => perms.push_str("-"),
-        };
-
-        match self.delete_recycle_bin {
-            true => perms.push_str("d"),
-            false => perms.push_str("-"),
-        };
+            // Add a dash after the "delete" permission
+            if i == 4 {
+                perms.push('-');
+            }
+        }
 
         perms
     }
@@ -349,7 +318,7 @@ pub struct CreateFileUploadRequest {
 }
 
 impl CreateFileUploadRequest {
-    pub fn new(parent_id: u64, name: String) -> CreateFileUploadRequestBuilder {
+    pub fn builder(parent_id: u64, name: String) -> CreateFileUploadRequestBuilder {
         CreateFileUploadRequestBuilder {
             parent_id,
             name,
@@ -448,7 +417,7 @@ pub struct CompleteS3FileUploadRequestBuilder {
 }
 
 impl CompleteS3FileUploadRequest {
-    pub fn new(parts: Vec<S3FileUploadPart>) -> CompleteS3FileUploadRequestBuilder {
+    pub fn builder(parts: Vec<S3FileUploadPart>) -> CompleteS3FileUploadRequestBuilder {
         CompleteS3FileUploadRequestBuilder {
             parts,
             resolution_strategy: None,
@@ -556,7 +525,7 @@ impl From<u64> for TransferNode {
 impl From<Vec<u64>> for TransferNodesRequest {
     fn from(node_ids: Vec<u64>) -> Self {
         Self {
-            items: node_ids.into_iter().map(|id| id.into()).collect(),
+            items: node_ids.into_iter().map(std::convert::Into::into).collect(),
             resolution_strategy: None,
             keep_share_links: None,
         }
@@ -570,7 +539,7 @@ pub struct TransferNodesRequestBuilder {
 }
 
 impl TransferNodesRequest {
-    pub fn new(items: Vec<TransferNode>) -> TransferNodesRequestBuilder {
+    pub fn builder(items: Vec<TransferNode>) -> TransferNodesRequestBuilder {
         TransferNodesRequestBuilder {
             items,
             resolution_strategy: None,
@@ -613,7 +582,7 @@ pub struct TransferNodeBuilder {
 }
 
 impl TransferNode {
-    pub fn new(id: u64) -> TransferNodeBuilder {
+    pub fn builder(id: u64) -> TransferNodeBuilder {
         TransferNodeBuilder {
             id,
             name: None,
@@ -670,7 +639,7 @@ pub struct CreateFolderRequestBuilder {
 }
 
 impl CreateFolderRequest {
-    pub fn new(name: String, parent_id: u64) -> CreateFolderRequestBuilder {
+    pub fn builder(name: String, parent_id: u64) -> CreateFolderRequestBuilder {
         CreateFolderRequestBuilder {
             name,
             parent_id,
@@ -735,7 +704,7 @@ pub struct UpdateFolderRequestBuilder {
 }
 
 impl UpdateFolderRequest {
-    pub fn new() -> UpdateFolderRequestBuilder {
+    pub fn builder() -> UpdateFolderRequestBuilder {
         UpdateFolderRequestBuilder {
             name: None,
             notes: None,

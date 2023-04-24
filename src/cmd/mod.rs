@@ -1,8 +1,6 @@
-use std::pin::Pin;
-
 use console::Term;
 use dialoguer::Confirm;
-use futures_util::{future::join_all, stream::FuturesUnordered, Future, StreamExt};
+use futures_util::{future::join_all};
 use indicatif::{ProgressBar, ProgressStyle};
 use tracing::debug;
 
@@ -82,7 +80,7 @@ async fn download_file(
         )
         .await?;
 
-    progress_bar.finish_with_message(format!("Download of {} complete", node_name));
+    progress_bar.finish_with_message(format!("Download of {node_name} complete"));
 
     Ok(())
 }
@@ -366,7 +364,7 @@ fn parse_base_url(url_str: String) -> Result<String, DcCmdError> {
     }
 }
 
-pub fn handle_error(term: Term, err: DcCmdError) -> () {
+pub fn handle_error(term: Term, err: DcCmdError) {
     let err_msg = get_error_message(&err);
     let err_msg = format_error_message(&err_msg);
 
@@ -376,17 +374,17 @@ pub fn handle_error(term: Term, err: DcCmdError) -> () {
 
 fn get_error_message(err: &DcCmdError) -> String {
     match err {
-        DcCmdError::InvalidUrl(url) => format!("Invalid URL: {}", url),
-        DcCmdError::InvalidPath(path) => format!("Invalid path: {}", path),
+        DcCmdError::InvalidUrl(url) => format!("Invalid URL: {url}"),
+        DcCmdError::InvalidPath(path) => format!("Invalid path: {path}"),
         DcCmdError::IoError => "Error reading / writing content.".into(),
-        DcCmdError::DracoonError(e) => format!("{}", e),
+        DcCmdError::DracoonError(e) => format!("{e}"),
         DcCmdError::ConnectionFailed => "Connection failed.".into(),
         DcCmdError::CredentialDeletionFailed => "Credential deletion failed.".into(),
         DcCmdError::CredentialStorageFailed => "Credential store failed.".into(),
         DcCmdError::InvalidAccount => "Invalid account.".into(),
         DcCmdError::Unknown => "Unknown error.".into(),
-        DcCmdError::DracoonS3Error(e) => format!("{}", e),
-        DcCmdError::DracoonAuthError(e) => format!("{}", e),
+        DcCmdError::DracoonS3Error(e) => format!("{e}"),
+        DcCmdError::DracoonAuthError(e) => format!("{e}"),
     }
 }
 
@@ -418,7 +416,7 @@ pub async fn delete_node(
     // define async block to delete node
     let delete_node = async {
         dracoon.delete_node(node.id).await?;
-        let msg = format!("Node {} deleted.", node_name);
+        let msg = format!("Node {node_name} deleted.");
         let msg = format_success_message(&msg);
         term.write_line(&msg)
             .expect("Error writing message to terminal.");
@@ -430,7 +428,7 @@ pub async fn delete_node(
         NodeType::Room => {
             // ask for confirmation if node is a room
             let confirmed = Confirm::new()
-                .with_prompt(format!("Do you really want to delete room {}?", node_name))
+                .with_prompt(format!("Do you really want to delete room {node_name}?"))
                 .interact()
                 .expect("Error reading user input.");
 
@@ -462,7 +460,7 @@ pub async fn create_folder(
         .await?
         .ok_or(DcCmdError::InvalidPath(source.clone()))?;
 
-    let req = CreateFolderRequest::new(node_name.clone(), parent_node.id);
+    let req = CreateFolderRequest::builder(node_name.clone(), parent_node.id);
 
     let req = match classification {
         Some(classification) => req.with_classification(classification),
@@ -478,7 +476,7 @@ pub async fn create_folder(
 
     let folder = dracoon.create_folder(req).await?;
 
-    let msg = format!("Folder {} created.", node_name);
+    let msg = format!("Folder {node_name} created.");
     let msg = format_success_message(&msg);
     term.write_line(&msg)
         .expect("Error writing message to terminal.");

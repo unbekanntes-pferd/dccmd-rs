@@ -12,7 +12,7 @@ mod api;
 mod cmd;
 
 #[tokio::main]
-async fn main() -> () {
+async fn main() {
     tracing_subscriber::fmt::init();
     let opt = DcCmd::parse();
 
@@ -22,7 +22,7 @@ async fn main() -> () {
     let res = match opt.cmd {
         DcCmdCommand::Download { source, target } => download(source, target).await,
         DcCmdCommand::Upload { source, target } => {
-            Ok(println!("Uploading {} to {}", source, target))
+            Ok(println!("Uploading {source} to {target}"))
         }
         DcCmdCommand::Ls {
             source,
@@ -46,7 +46,7 @@ async fn main() -> () {
             classification,
             notes,
         } => create_folder(term, source, classification, notes).await,
-        DcCmdCommand::Mkroom { source } => Ok(println!("Creating room {}", source)),
+        DcCmdCommand::Mkroom { source } => Ok(println!("Creating room {source}")),
         DcCmdCommand::Rm { source, recursive } => delete_node(term, source, Some(recursive)).await,
     };
 

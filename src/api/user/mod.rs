@@ -16,6 +16,7 @@ pub trait User {
 }
 
 #[async_trait]
+#[allow(clippy::module_name_repetitions)]
 pub trait UserAccountKeypairs {
     async fn get_user_keypair(&self, secret: &str) -> Result<PlainUserKeyPairContainer, DracoonClientError>;
     async fn set_user_keypair(&self, secret: &str) -> Result<(), DracoonClientError>;

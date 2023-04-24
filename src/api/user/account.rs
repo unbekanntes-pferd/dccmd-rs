@@ -16,7 +16,7 @@ use super::{
 #[async_trait]
 impl User for Dracoon<Connected> {
     async fn get_user_account(&self) -> Result<UserAccount, DracoonClientError> {
-        let url_part = format!("{}/{}/{}", DRACOON_API_PREFIX, USER_BASE, USER_ACCOUNT);
+        let url_part = format!("{DRACOON_API_PREFIX}/{USER_BASE}/{USER_ACCOUNT}");
 
         let url = self.build_api_url(&url_part);
 
@@ -35,7 +35,7 @@ impl User for Dracoon<Connected> {
         &self,
         update: UpdateUserAccountRequest,
     ) -> Result<UserAccount, DracoonClientError> {
-        let url_part = format!("{}/{}/{}", DRACOON_API_PREFIX, USER_BASE, USER_ACCOUNT);
+        let url_part = format!("{DRACOON_API_PREFIX}/{USER_BASE}/{USER_ACCOUNT}");
 
         let url = self.build_api_url(&url_part);
 

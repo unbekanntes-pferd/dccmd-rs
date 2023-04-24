@@ -33,7 +33,7 @@ impl<C: UploadInternal<R> + Sync, R: AsyncRead + Sync + Send + 'static> Upload<R
         file_meta: FileMeta,
         parent_node: &Node,
         upload_options: UploadOptions,
-        mut stream: ReaderStream<R>,
+        stream: ReaderStream<R>,
         callback: Option<ProgressCallback>,
     ) -> Result<Node, DracoonClientError> {
         match parent_node.is_encrypted {
@@ -76,13 +76,13 @@ impl<C: UploadInternal<R> + Sync, R: AsyncRead + Sync + Send + 'static> Upload<R
 trait UploadInternal<R: AsyncRead> {
     async fn create_upload_channel(
         &self,
-        req: CreateFileUploadRequest,
+        create_file_upload_req: CreateFileUploadRequest,
     ) -> Result<CreateFileUploadResponse, DracoonClientError>;
 
     async fn create_s3_upload_urls(
         &self,
         upload_id: String,
-        req: GeneratePresignedUrlsRequest,
+        generate_urls_req: GeneratePresignedUrlsRequest,
     ) -> Result<PresignedUrlList, DracoonClientError>;
 
     async fn upload_to_s3_unencrypted(
@@ -105,7 +105,7 @@ trait UploadInternal<R: AsyncRead> {
     async fn finalize_upload(
         &self,
         upload_id: String,
-        req: CompleteS3FileUploadRequest,
+        complete_file_upload_req: CompleteS3FileUploadRequest,
     ) -> Result<(), DracoonClientError>;
 
     async fn get_upload_status(
@@ -118,15 +118,14 @@ trait UploadInternal<R: AsyncRead> {
 impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon<Connected> {
     async fn create_upload_channel(
         &self,
-        req: CreateFileUploadRequest,
+        create_file_upload_req: CreateFileUploadRequest,
     ) -> Result<CreateFileUploadResponse, DracoonClientError> {
         let url_part = format!(
-            "{}/{}/{}/{}",
-            DRACOON_API_PREFIX, NODES_BASE, FILES_BASE, FILES_UPLOAD
+            "{DRACOON_API_PREFIX}/{NODES_BASE}/{FILES_BASE}/{FILES_UPLOAD}"
         );
 
         let api_url = self.build_api_url(&url_part);
-        let res = self.client.http.post(api_url).json(&req).send().await?;
+        let res = self.client.http.post(api_url).json(&create_file_upload_req).send().await?;
 
         CreateFileUploadResponse::from_response(res).await
     }
@@ -134,14 +133,13 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
     async fn create_s3_upload_urls(
         &self,
         upload_id: String,
-        req: GeneratePresignedUrlsRequest,
+        generate_urls_req: GeneratePresignedUrlsRequest,
     ) -> Result<PresignedUrlList, DracoonClientError> {
         let url_part = format!(
-            "{}/{}/{}/{}/{}/{}",
-            DRACOON_API_PREFIX, NODES_BASE, FILES_BASE, FILES_UPLOAD, upload_id, FILES_S3_URLS
+            "{DRACOON_API_PREFIX}/{NODES_BASE}/{FILES_BASE}/{FILES_UPLOAD}/{upload_id}/{FILES_S3_URLS}"
         );
         let api_url = self.build_api_url(&url_part);
-        let res = self.client.http.post(api_url).json(&req).send().await?;
+        let res = self.client.http.post(api_url).json(&generate_urls_req).send().await?;
 
         PresignedUrlList::from_response(res).await
     }
@@ -149,15 +147,19 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
     async fn finalize_upload(
         &self,
         upload_id: String,
-        req: CompleteS3FileUploadRequest,
+        complete_file_upload_req: CompleteS3FileUploadRequest,
     ) -> Result<(), DracoonClientError> {
         let url_part = format!(
-            "{}/{}/{}/{}/{}/{}",
-            DRACOON_API_PREFIX, NODES_BASE, FILES_BASE, FILES_UPLOAD, upload_id, FILES_S3_COMPLETE
+            "{DRACOON_API_PREFIX}/{NODES_BASE}/{FILES_BASE}/{FILES_UPLOAD}/{upload_id}/{FILES_S3_COMPLETE}"
         );
         let api_url = self.build_api_url(&url_part);
-        let res = self.client.http.put(api_url).json(&req).send().await?;
-        todo!()
+        let res = self.client.http.put(api_url).json(&complete_file_upload_req).send().await?;
+
+        if res.status().is_success() {
+            Ok(())
+        } else {
+            Err(DracoonClientError::from_response(res).await?)
+        }
     }
 
     /// requests S3 upload status from DRACOON
@@ -166,22 +168,22 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
         upload_id: String,
     ) -> Result<S3FileUploadStatus, DracoonClientError> {
         let url_part = format!(
-            "{}/{}/{}/{}/{}",
-            DRACOON_API_PREFIX, NODES_BASE, FILES_BASE, FILES_UPLOAD, upload_id
+            "{DRACOON_API_PREFIX}/{NODES_BASE}/{FILES_BASE}/{FILES_UPLOAD}/{upload_id}"
         );
         let api_url = self.build_api_url(&url_part);
         let res = self.client.http.get(api_url).send().await?;
 
         S3FileUploadStatus::from_response(res).await
     }
-
+    
+    #[allow(clippy::single_match_else)]
     async fn upload_to_s3_unencrypted(
         &self,
         file_meta: FileMeta,
         parent_node: &Node,
         upload_options: UploadOptions,
-        mut stream: ReaderStream<R>,
-        mut callback: Option<ProgressCallback>,
+        stream: ReaderStream<R>,
+        callback: Option<ProgressCallback>,
     ) -> Result<Node, DracoonClientError> {
         // parse upload options
         let (classification, timestamp_creation, timestamp_modification, expiration) =
@@ -190,7 +192,7 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
         let fm = file_meta.clone();
 
         // create upload channel
-        let req = CreateFileUploadRequest::new(parent_node.id, fm.0)
+        let file_upload_req = CreateFileUploadRequest::builder(parent_node.id, fm.0)
             .with_classification(classification)
             .with_size(fm.1)
             .with_timestamp_modification(timestamp_modification)
@@ -199,7 +201,7 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
             .build();
 
         let upload_channel =
-            <Dracoon<Connected> as UploadInternal<R>>::create_upload_channel::<'_, '_>(self, req)
+            <Dracoon<Connected> as UploadInternal<R>>::create_upload_channel::<'_, '_>(self, file_upload_req)
                 .await?;
 
         // Initialize a variable to keep track of the number of bytes read
@@ -211,12 +213,12 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
         let s3_parts = match count_urls {
             1 => {
                 // only one request for small files
-                let req = GeneratePresignedUrlsRequest::new(fm.1, 1, 1);
+                let url_req = GeneratePresignedUrlsRequest::new(fm.1, 1, 1);
                 let url =
                     <Dracoon<Connected> as UploadInternal<R>>::create_s3_upload_urls::<'_, '_>(
                         self,
                         upload_channel.upload_id.clone(),
-                        req,
+                        url_req,
                     )
                     .await?;
                 let url = url.urls.iter().next().expect("Creating S3 url failed");
@@ -226,7 +228,7 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
             }
             _ => {
                 // first request for all urls except the last one
-                let req = GeneratePresignedUrlsRequest::new(CHUNK_SIZE as u64, 1, count_urls - 1);
+                let url_req = GeneratePresignedUrlsRequest::new(CHUNK_SIZE as u64, 1, count_urls - 1);
 
                 // last request for the last url
                 let last_chunk_req =
@@ -237,7 +239,7 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
                     <Dracoon<Connected> as UploadInternal<R>>::create_s3_upload_urls::<'_, '_>(
                         self,
                         upload_channel.upload_id.clone(),
-                        req,
+                        url_req,
                     )
                     .await?;
                 let mut last_chunk_url =
@@ -271,7 +273,7 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
         };
 
         // finalize upload
-        let req = CompleteS3FileUploadRequest::new(s3_parts)
+        let complete_upload_req = CompleteS3FileUploadRequest::builder(s3_parts)
             .with_resolution_strategy(ResolutionStrategy::Overwrite)
             .with_keep_share_links(true)
             .build();
@@ -279,7 +281,7 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
         <Dracoon<Connected> as UploadInternal<R>>::finalize_upload::<'_, '_>(
             self,
             upload_channel.upload_id.clone(),
-            req,
+            complete_upload_req,
         )
         .await?;
 
@@ -306,7 +308,7 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
                 }
                 _ => {
                     tokio::time::sleep(Duration::from_millis(sleep_duration)).await;
-                    sleep_duration = sleep_duration * 2;
+                    sleep_duration *= 2;
                 }
             }
         }
@@ -317,8 +319,8 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
         file_meta: FileMeta,
         parent_node: &Node,
         upload_options: UploadOptions,
-        mut stream: ReaderStream<R>,
-        mut callback: Option<ProgressCallback>,
+        stream: ReaderStream<R>,
+        callback: Option<ProgressCallback>,
     ) -> Result<Node, DracoonClientError> {
         todo!()
     }
