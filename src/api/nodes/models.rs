@@ -28,6 +28,59 @@ pub struct FileMeta(
     pub Option<DateTime<Utc>>,
 );
 
+pub struct FileMetaBuilder {
+    name: Option<String>,
+    size: Option<u64>,
+    timestamp_creation: Option<DateTime<Utc>>,
+    timestamp_modification: Option<DateTime<Utc>>,
+}
+
+impl FileMeta {
+    pub fn builder() -> FileMetaBuilder {
+        FileMetaBuilder::new()
+    }
+}
+
+impl FileMetaBuilder {
+    pub fn new() -> Self {
+        Self {
+            name: None,
+            size: None,
+            timestamp_creation: None,
+            timestamp_modification: None,
+        }
+    }
+
+    pub fn with_name(mut self, name: String) -> Self {
+        self.name = Some(name);
+        self
+    }
+
+    pub fn with_size(mut self, size: u64) -> Self {
+        self.size = Some(size);
+        self
+    }
+
+    pub fn with_timestamp_creation(mut self, timestamp_creation: DateTime<Utc>) -> Self {
+        self.timestamp_creation = Some(timestamp_creation);
+        self
+    }
+
+    pub fn with_timestamp_modification(mut self, timestamp_modification: DateTime<Utc>) -> Self {
+        self.timestamp_modification = Some(timestamp_modification);
+        self
+    }
+
+    pub fn build(self) -> FileMeta {
+        FileMeta(
+            self.name.unwrap(),
+            self.size.unwrap(),
+            self.timestamp_creation,
+            self.timestamp_modification,
+        )
+    }
+}
+
 /// upload options (expiration, classification)
 #[derive(Debug, Clone, Default)]
 pub struct UploadOptions(pub Option<ObjectExpiration>, pub Option<u64>);
@@ -471,14 +524,15 @@ pub enum ResolutionStrategy {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct S3FileUploadPart {
     part_number: u32,
-    etag: String,
+    part_etag: String,
 }
 
 impl S3FileUploadPart {
-    pub fn new(part_number: u32, etag: String) -> Self {
-        Self { part_number, etag }
+    pub fn new(part_number: u32, part_etag: String) -> Self {
+        Self { part_number, part_etag }
     }
 }
 
