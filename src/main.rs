@@ -49,6 +49,6 @@ async fn main() {
     };
 
     if let Err(e) = res {
-        handle_error(err_term, e);
+        handle_error(&err_term, &e);
     }
 }

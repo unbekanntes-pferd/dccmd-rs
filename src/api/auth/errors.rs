@@ -26,7 +26,7 @@ pub enum DracoonClientError {
     #[error("HTTP error")]
     Http(DracoonErrorResponse),
     #[error("S3 error")]
-    S3Error(S3ErrorResponse),
+    S3Error(Box<S3ErrorResponse>),
     #[error("Authentication error")]
     Auth(DracoonAuthErrorResponse),
     #[error("IO error")]

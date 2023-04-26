@@ -216,6 +216,8 @@ impl DownloadInternal for Dracoon<Connected> {
         // if size is given, use it
         let content_length = size.unwrap_or(content_length);
 
+        // this is safe, because the maximum size of a file (encrypted) is 60 GB
+        #[allow(clippy::cast_possible_truncation)]
         let mut buffer = vec![0u8; content_length as usize];
 
         let mut crypter = DracoonCrypto::decrypter(plain_key, &mut buffer)?;

@@ -19,7 +19,7 @@ use crate::api::{
 use self::{errors::DracoonClientError, models::OAuth2RefreshTokenFlow};
 use super::constants::{APP_USER_AGENT, TOKEN_TYPE_HINT_REFRESH_TOKEN};
 
-/// represents the possible OAuth2 flows
+/// represents the possible `OAuth2` flows
 pub enum OAuth2Flow {
     PasswordFlow(String, String),
     AuthCodeFlow(String),
@@ -30,7 +30,7 @@ pub enum OAuth2Flow {
 pub struct Connected;
 pub struct Disconnected;
 
-/// represents a connection to DRACOON (OAuth2 tokens)
+/// represents a connection to DRACOON (`OAuth2` tokens)
 pub struct Connection {
     pub access_token: String,
     pub refresh_token: String,
@@ -197,7 +197,18 @@ impl DracoonClient<Disconnected> {
 
         let token_url = self.get_token_url();
 
-        todo!()
+        let auth = OAuth2PasswordFlow::new(username, password);
+        let auth_header = format!("Basic {}", self.client_credentials());
+
+        let res = self
+            .http
+            .post(token_url)
+            .header("Authorization", auth_header)
+            .form(&auth)
+            .send()
+            .await?;
+
+            Ok(OAuth2TokenResponse::from_response(res).await?.into())
     }
 
     async fn connect_authcode_flow(&self, code: &str) -> Result<Connection, DracoonClientError> {

@@ -212,7 +212,7 @@ pub struct EncryptionInfo {
     data_space_key_state: String,
 }
 
-/// DRACOON user info on nodes (created_by, updated_by)
+/// DRACOON user info on nodes (`created_by`, `updated_by`)
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserInfo {
@@ -277,7 +277,7 @@ impl Display for S3ErrorResponse {
 }
 
 impl S3ErrorResponse {
-    /// transforms a S3XmlError into a S3ErrorResponse
+    /// transforms a `S3XmlError` into a `S3ErrorResponse`
     pub fn from_xml_error(status: StatusCode, error: S3XmlError) -> Self {
         Self { status, error }
     }
@@ -285,7 +285,7 @@ impl S3ErrorResponse {
 
 #[async_trait]
 impl FromResponse for FileKey {
-    /// transforms a response into a FileKey
+    /// transforms a response into a `FileKey`
     async fn from_response(res: Response) -> Result<Self, DracoonClientError> {
         parse_body::<Self, DracoonErrorResponse>(res).await
     }
@@ -301,7 +301,7 @@ pub struct CreateFileUploadResponse {
 
 #[async_trait]
 impl FromResponse for CreateFileUploadResponse {
-    /// transforms a response into a CreateFileUploadResponse
+    /// transforms a response into a `CreateFileUploadResponse`
     async fn from_response(res: Response) -> Result<Self, DracoonClientError> {
         parse_body::<Self, DracoonErrorResponse>(res).await
     }
@@ -322,7 +322,7 @@ pub struct PresignedUrlList {
 
 #[async_trait]
 impl FromResponse for PresignedUrlList {
-    /// transforms a response into a PresignedUrlList
+    /// transforms a response into a `PresignedUrlList`
     async fn from_response(res: Response) -> Result<Self, DracoonClientError> {
         parse_body::<Self, DracoonErrorResponse>(res).await
     }
@@ -350,7 +350,7 @@ pub enum S3UploadStatus {
 
 #[async_trait]
 impl FromResponse for S3FileUploadStatus {
-    /// transforms a response into a S3FileUploadStatus
+    /// transforms a response into a `S3FileUploadStatus`
     async fn from_response(res: Response) -> Result<Self, DracoonClientError> {
         parse_body::<Self, DracoonErrorResponse>(res).await
     }
@@ -603,7 +603,7 @@ impl TransferNodesRequest {
 
     pub fn new_from_ids(node_ids: Vec<u64>) -> TransferNodesRequestBuilder {
         TransferNodesRequestBuilder {
-            items: node_ids.into_iter().map(|id| id.into()).collect(),
+            items: node_ids.into_iter().map(std::convert::Into::into).collect(),
             resolution_strategy: None,
             keep_share_links: None,
         }

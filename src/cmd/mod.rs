@@ -76,7 +76,7 @@ async fn download_file(
 
     dracoon
         .download(
-            &node,
+            node,
             &mut out_file,
             Some(Box::new(move |progress, total| {
                 progress_bar_mv.set_message("Downloading");
@@ -97,8 +97,9 @@ async fn download_container(
     target: &str,
 ) -> Result<(), DcCmdError> {
     // first get a list of all files recursively via search
-    let mut params = ListAllParams::default();
-    params.filter = Some("type:eq:file".into());
+    let params = ListAllParams::builder()
+        .with_filter("type:eq:file".into())
+        .build();
 
     let mut files = dracoon
         .search_nodes("*", Some(node.id), Some(-1), Some(params))
@@ -110,10 +111,11 @@ async fn download_container(
         let mut futures = vec![];
 
         while offset < files.range.total {
-            let mut params = ListAllParams::default();
-            params.filter = Some("type:eq:file".into());
-            params.offset = Some(offset);
-            params.limit = Some(limit);
+            let params = ListAllParams::builder()
+                .with_filter("type:eq:file".into())
+                .with_offset(offset)
+                .with_limit(limit)
+                .build();
             let next_files_req = dracoon.search_nodes("*", Some(node.id), Some(-1), Some(params));
             futures.push(next_files_req);
             offset += limit;
@@ -134,8 +136,9 @@ async fn download_container(
     }
 
     // then get a list of all containers recursively via search
-    let mut params = ListAllParams::default();
-    params.filter = Some("type:eq:folder:room".into());
+    let params = ListAllParams::builder()
+    .with_filter("type:eq:folder:room".into())
+    .build();
 
     let mut containers = dracoon
         .search_nodes("*", Some(node.id), Some(-1), Some(params))
@@ -147,10 +150,12 @@ async fn download_container(
         let mut futures = vec![];
 
         while offset < containers.range.total {
-            let mut params = ListAllParams::default();
-            params.filter = Some("type:eq:file".into());
-            params.offset = Some(offset);
-            params.limit = Some(limit);
+            let params = ListAllParams::builder()
+                .with_filter("type:eq:folder:room".into())
+                .with_offset(offset)
+                .with_limit(limit)
+                .build();
+
             let next_containers_req =
                 dracoon.search_nodes("*", Some(node.id), Some(-1), Some(params));
             futures.push(next_containers_req);
@@ -258,24 +263,25 @@ pub async fn upload(source: PathBuf, target: String) -> Result<(), DcCmdError> {
     Ok(())
 }
 
+/// initializes a dracoon client with encryption enabled (plain keypair ready to use)
 async fn init_encryption(
     mut dracoon: Dracoon<Connected>,
 ) -> Result<Dracoon<Connected>, DcCmdError> {
-    let (secret, store) = match get_dracoon_crypto_env(&dracoon.get_base_url().to_string()) {
-        Ok(secret) => (secret, false),
-        Err(_) => {
+    let (secret, store) =
+        if let Ok(secret) = get_dracoon_crypto_env(dracoon.get_base_url().as_ref()) {
+            (secret, false)
+        } else {
             let secret = dialoguer::Password::new()
                 .with_prompt("Please enter your encryption secret")
                 .interact()
                 .or(Err(DcCmdError::IoError))?;
             (secret, true)
-        }
-    };
+        };
 
     let keypair = dracoon.get_keypair(Some(&secret)).await?;
 
     if store {
-        set_dracoon_crypto_env(&dracoon.get_base_url().to_string(), &secret)?;
+        set_dracoon_crypto_env(dracoon.get_base_url().as_ref(), &secret)?;
     }
 
     Ok(dracoon)
@@ -293,7 +299,7 @@ pub async fn get_nodes(
     let dracoon = init_dracoon(&source).await?;
 
     let (parent_path, node_name, depth) =
-        parse_node_path(&source, &dracoon.get_base_url().to_string())?;
+        parse_node_path(&source, dracoon.get_base_url().as_ref())?;
     let node_path = build_node_path((parent_path.clone(), node_name.clone(), depth));
 
     debug!("Parent path: {}", parent_path);
@@ -302,79 +308,81 @@ pub async fn get_nodes(
 
     let all = all.unwrap_or(false);
 
-    let node_list = match parent_path.as_str() {
-        "/" => {
-            // this is the root node
-            debug!("Fetching root node list");
-            let mut node_list = dracoon.get_nodes(None, managed, None).await?;
+    let node_list = if parent_path.as_str() == "/" {
+        // this is the root node
+        debug!("Fetching root node list");
+        let mut node_list = dracoon.get_nodes(None, managed, None).await?;
 
-            if all && node_list.range.total > 500 {
-                let mut offset = 500;
-                let limit = 500;
+        if all && node_list.range.total > 500 {
+            let mut offset = 500;
+            let limit = 500;
+            let mut futures = vec![];
+
+            while offset < node_list.range.total {
+                let params = ListAllParams::builder()
+                    .with_offset(offset)
+                    .with_limit(limit)
+                    .build();
+
+                let next_node_list_req = dracoon.get_nodes(None, managed, Some(params));
+                futures.push(next_node_list_req);
+                offset += limit;
+            }
+
+            let mut next_node_list_items = vec![];
+            let results = join_all(futures).await;
+            for result in results {
+                debug!("Result: {:?}", result);
+                let next_node_list = result?.items;
+                next_node_list_items.extend(next_node_list);
+            }
+            node_list.items.append(&mut next_node_list_items);
+        }
+
+        node_list
+    } else {
+        // this is a sub node
+        debug!("Fetching node list from path {}", node_path);
+        let node = dracoon.get_node_from_path(&node_path).await?;
+
+        let Some(node) = node else {
+                return Err(DcCmdError::InvalidPath(source.clone()))
+            };
+
+        let mut node_list = dracoon.get_nodes(Some(node.id), managed, None).await?;
+
+        if all && node_list.range.total > 500 {
+            let mut offset = 500;
+            let limit = 500;
+
+            while offset < node_list.range.total {
                 let mut futures = vec![];
 
                 while offset < node_list.range.total {
-                    let mut params = ListAllParams::default();
-                    params.offset = Some(offset);
-                    params.limit = Some(limit);
-                    let next_node_list_req = dracoon.get_nodes(None, managed, Some(params));
+
+                    let params = ListAllParams::builder()
+                        .with_offset(offset)
+                        .with_limit(limit)
+                        .build();
+
+                    let next_node_list_req =
+                        dracoon.get_nodes(Some(node.id), managed, Some(params));
                     futures.push(next_node_list_req);
                     offset += limit;
                 }
 
                 let mut next_node_list_items = vec![];
+
                 let results = join_all(futures).await;
                 for result in results {
-                    debug!("Result: {:?}", result);
                     let next_node_list = result?.items;
                     next_node_list_items.extend(next_node_list);
                 }
                 node_list.items.append(&mut next_node_list_items);
             }
-
-            node_list
         }
-        _ => {
-            // this is a sub node
-            debug!("Fetching node list from path {}", node_path);
-            let node = dracoon.get_node_from_path(&node_path).await?;
 
-            let Some(node) = node else {
-                return Err(DcCmdError::InvalidPath(source.clone()))
-            };
-
-            let mut node_list = dracoon.get_nodes(Some(node.id), managed, None).await?;
-
-            if all && node_list.range.total > 500 {
-                let mut offset = 500;
-                let limit = 500;
-
-                while offset < node_list.range.total {
-                    let mut futures = vec![];
-
-                    while offset < node_list.range.total {
-                        let mut params = ListAllParams::default();
-                        params.offset = Some(offset);
-                        params.limit = Some(limit);
-                        let next_node_list_req =
-                            dracoon.get_nodes(Some(node.id), managed, Some(params));
-                        futures.push(next_node_list_req);
-                        offset += limit;
-                    }
-
-                    let mut next_node_list_items = vec![];
-
-                    let results = join_all(futures).await;
-                    for result in results {
-                        let next_node_list = result?.items;
-                        next_node_list_items.extend(next_node_list);
-                    }
-                    node_list.items.append(&mut next_node_list_items);
-                }
-            }
-
-            node_list
-        }
+        node_list
     };
 
     node_list
@@ -395,13 +403,12 @@ async fn init_dracoon(url_path: &str) -> Result<Dracoon<Connected>, DcCmdError> 
         .with_client_secret(client_secret)
         .build()?;
 
-    let dracoon = match get_dracoon_env(&base_url) {
-        Ok(refresh_token) => {
+    let dracoon = if let Ok(refresh_token) = get_dracoon_env(&base_url) {
+         
             dracoon
                 .connect(OAuth2Flow::RefreshToken(refresh_token))
                 .await?
-        }
-        Err(_) => {
+        } else {
             debug!("No refresh token stored for {}", base_url);
             println!("Please log in via browser (open url): ");
             println!("{}", dracoon.get_authorize_url());
@@ -418,8 +425,7 @@ async fn init_dracoon(url_path: &str) -> Result<Dracoon<Connected>, DcCmdError> 
             set_dracoon_env(&base_url, dracoon.get_refresh_token())?;
 
             dracoon
-        }
-    };
+        };
 
     debug!("Successfully authenticated to {}", base_url);
 
@@ -431,9 +437,10 @@ fn parse_base_url(url_str: String) -> Result<String, DcCmdError> {
         return Err(DcCmdError::InvalidUrl(url_str));
     };
 
-    let url_str = match url_str.starts_with("https://") {
-        true => url_str,
-        false => format!("https://{url_str}"),
+    let url_str = if url_str.starts_with("https://") {
+        url_str
+    } else {
+        format!("https://{url_str}")
     };
 
     let uri_fragments: Vec<&str> = url_str[8..].split('/').collect();
@@ -444,8 +451,8 @@ fn parse_base_url(url_str: String) -> Result<String, DcCmdError> {
     }
 }
 
-pub fn handle_error(term: Term, err: DcCmdError) {
-    let err_msg = get_error_message(&err);
+pub fn handle_error(term: &Term, err: &DcCmdError) {
+    let err_msg = get_error_message(err);
     let err_msg = format_error_message(&err_msg);
 
     term.write_line(&err_msg)
@@ -475,7 +482,7 @@ pub async fn delete_node(
 ) -> Result<(), DcCmdError> {
     let dracoon = init_dracoon(&source).await?;
     let (parent_path, node_name, depth) =
-        parse_node_path(&source, &dracoon.get_base_url().to_string())?;
+        parse_node_path(&source, dracoon.get_base_url().as_ref())?;
     let node_path = build_node_path((parent_path.clone(), node_name.clone(), depth));
     let node = dracoon
         .get_node_from_path(&node_path)
@@ -533,7 +540,7 @@ pub async fn create_folder(
 ) -> Result<(), DcCmdError> {
     let dracoon = init_dracoon(&source).await?;
     let (parent_path, node_name, _) =
-        parse_node_path(&source, &dracoon.get_base_url().to_string())?;
+        parse_node_path(&source, dracoon.get_base_url().as_ref())?;
 
     let parent_node = dracoon
         .get_node_from_path(&parent_path)

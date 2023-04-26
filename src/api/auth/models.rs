@@ -11,7 +11,7 @@ use crate::{api::{constants::{GRANT_TYPE_REFRESH_TOKEN, GRANT_TYPE_AUTH_CODE, GR
 use super::{errors::DracoonClientError, Connection};
 
 
-/// represents form data payload for OAuth2 password flow
+/// represents form data payload for `OAuth2` password flow
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OAuth2PasswordFlow {
     pub username: String,
@@ -30,7 +30,7 @@ impl OAuth2PasswordFlow {
     }
 }
 
-/// represents form data payload for OAuth2 authorization code flow
+/// represents form data payload for `OAuth2` authorization code flow
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OAuth2AuthCodeFlow {
     pub client_id: String,
@@ -53,7 +53,7 @@ impl OAuth2AuthCodeFlow {
     }
 }
 
-/// represents form data payload for OAuth2 refresh token flow
+/// represents form data payload for `OAuth2` refresh token flow
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OAuth2RefreshTokenFlow {
     client_id: String,
@@ -74,7 +74,7 @@ impl OAuth2RefreshTokenFlow {
     }
 }
 
-/// represents form data payload for OAuth2 token revoke
+/// represents form data payload for `OAuth2` token revoke
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OAuth2TokenRevoke {
     client_id: String,
@@ -95,7 +95,7 @@ impl OAuth2TokenRevoke {
     }
 }
 
-/// DRACOON OAuth2 token response
+/// DRACOON `OAuth2` token response
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OAuth2TokenResponse {
     access_token: String,
@@ -135,7 +135,7 @@ impl DracoonErrorResponse {
     }
 }
 
-/// DRACOON OAuth2 error response
+/// DRACOON `OAuth2` error response
 #[derive(Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct DracoonAuthErrorResponse {
@@ -151,7 +151,7 @@ impl Display for DracoonAuthErrorResponse {
 }
 
 impl OAuth2TokenResponse {
-    /// transforms a response into a DRACOON OAuth2 token response
+    /// transforms a response into a DRACOON `OAuth2` token response
     /// on error will return a DRACOON auth error response
     pub async fn from_response(res: Response) -> Result<Self, DracoonClientError> {
         parse_body::<Self, DracoonAuthErrorResponse>(res).await
@@ -177,7 +177,7 @@ impl From<StatusCode> for StatusCodeState {
 }
 
 impl From<OAuth2TokenResponse> for Connection {
-    /// transforms a OAuth2 token response into a connection for the client
+    /// transforms a `OAuth2` token response into a connection for the client
     fn from(value: OAuth2TokenResponse) -> Self {
         Self {
             connected_at: Utc::now(),

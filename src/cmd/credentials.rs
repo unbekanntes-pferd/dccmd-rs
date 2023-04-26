@@ -2,7 +2,7 @@ use keytar::{delete_password, get_password, set_password};
 
 use crate::cmd::models::DcCmdError;
 
-// service name to store 
+// service name to store
 const SERVICE_NAME: &str = env!("CARGO_PKG_NAME");
 
 pub fn set_dracoon_env(dracoon_url: &str, refresh_token: &str) -> Result<(), DcCmdError> {
@@ -14,21 +14,24 @@ pub fn set_dracoon_env(dracoon_url: &str, refresh_token: &str) -> Result<(), DcC
 
 pub fn get_dracoon_env(dracoon_url: &str) -> Result<String, DcCmdError> {
     match get_password(SERVICE_NAME, dracoon_url) {
-        Ok(pwd) => match pwd.success {
-            true => Ok(pwd.password),
-            false => Err(DcCmdError::InvalidAccount),
+        Ok(pwd) => 
+        if pwd.success {
+            Ok(pwd.password)
+        } else {
+            Err(DcCmdError::InvalidAccount)
         },
         Err(_) => Err(DcCmdError::InvalidAccount),
     }
 }
 
 pub fn delete_dracoon_env(dracoon_url: &str) -> Result<(), DcCmdError> {
-    match get_dracoon_env(dracoon_url) {
-        Ok(_) => match delete_password(SERVICE_NAME, dracoon_url) {
-            Ok(_) => Ok(()),
-            Err(_) => Err(DcCmdError::CredentialDeletionFailed),
-        },
-        Err(_) => Err(DcCmdError::InvalidAccount)
+    if get_dracoon_env(dracoon_url).is_err() {
+        return Err(DcCmdError::InvalidAccount);
+    }
+
+    match delete_password(SERVICE_NAME, dracoon_url) {
+        Ok(_) => Ok(()),
+        Err(_) => Err(DcCmdError::CredentialDeletionFailed),
     }
 }
 
@@ -41,20 +44,24 @@ pub fn set_dracoon_crypto_env(dracoon_url: &str, crypto_env: &str) -> Result<(),
 
 pub fn get_dracoon_crypto_env(dracoon_url: &str) -> Result<String, DcCmdError> {
     match get_password(SERVICE_NAME, &format!("{dracoon_url}-crypto")) {
-        Ok(pwd) => match pwd.success {
-            true => Ok(pwd.password),
-            false => Err(DcCmdError::InvalidAccount),
-        },
+        Ok(pwd) => {
+            if pwd.success {
+                Ok(pwd.password)
+            } else {
+                Err(DcCmdError::InvalidAccount)
+            }
+        }
         Err(_) => Err(DcCmdError::InvalidAccount),
     }
 }
 
 pub fn delete_dracoon_crypto_env(dracoon_url: &str) -> Result<(), DcCmdError> {
-    match get_dracoon_crypto_env(dracoon_url) {
-        Ok(_) => match delete_password(SERVICE_NAME, &format!("{dracoon_url}-crypto")) {
-            Ok(_) => Ok(()),
-            Err(_) => Err(DcCmdError::CredentialDeletionFailed),
-        },
-        Err(_) => Err(DcCmdError::InvalidAccount)
+    if get_dracoon_crypto_env(dracoon_url).is_err() {
+        return Err(DcCmdError::InvalidAccount);
+    }
+
+    match delete_password(SERVICE_NAME, &format!("{dracoon_url}-crypto")) {
+        Ok(_) => Ok(()),
+        Err(_) => Err(DcCmdError::CredentialDeletionFailed),
     }
 }

@@ -19,6 +19,53 @@ impl Default for ListAllParams {
     }
 }
 
+impl ListAllParams {
+    pub fn builder() -> ListAllParamsBuilder {
+        ListAllParamsBuilder::new()
+    }
+}
+
+pub struct ListAllParamsBuilder {
+    params: ListAllParams,
+}
+
+impl ListAllParamsBuilder {
+    pub fn new() -> Self {
+        Self {
+            params: ListAllParams::default(),
+        }
+    }
+    pub fn with_offset(mut self, offset: u64) -> Self {
+        self.params.offset = Some(offset);
+        self
+    }
+
+    pub fn with_limit(mut self, limit: u64) -> Self {
+        self.params.limit = Some(limit);
+        self
+    }
+
+    pub fn with_filter(mut self, filter: String) -> Self {
+        self.params.filter = Some(filter);
+        self
+    }
+
+    pub fn with_sort(mut self, sort: String) -> Self {
+        self.params.sort = Some(sort);
+        self
+    }
+
+    pub fn build(self) -> ListAllParams {
+        self.params
+    }
+}
+
+impl Default for ListAllParamsBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl From<ListAllParams> for String {
     fn from(value: ListAllParams) -> Self {
         let params = format!("?offset={}", value.offset.unwrap_or(0));

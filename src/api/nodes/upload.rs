@@ -274,12 +274,8 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
         // polling with exponential backoff
         let mut sleep_duration = POLLING_START_DELAY;
         loop {
-            let status_response = <Dracoon<Connected> as UploadInternal<R>>::get_upload_status(
-                &self,
-                upload_channel.upload_id.clone(),
-            )
-            .await?;
-
+            let status_response = <Dracoon<Connected> as UploadInternal<R>>::get_upload_status(self, upload_channel.upload_id.clone()).await?;
+            
             match status_response.status {
                 S3UploadStatus::Done => {
                     return Ok(status_response

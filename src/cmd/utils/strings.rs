@@ -42,7 +42,7 @@ pub fn print_node(
 
         // add node permissions
 
-        node_str.push_str(&format!("{} ", to_printable_permissions(&node)));
+        node_str.push_str(&format!("{} ", to_printable_permissions(node)));
 
         // add node updated by
         match &node.updated_by {
@@ -51,22 +51,24 @@ pub fn print_node(
                 user_info.first_name.clone().unwrap_or("n/a".to_string()),
                 user_info.last_name.clone().unwrap_or("n/a".to_string())
             )),
-            None => node_str.push_str(&"n/a n/a"),
+            None => node_str.push_str("n/a n/a"),
         }
+
         // add node size
-        match human_readable {
-            true => node_str.push_str(&format!("{:<8} ", to_readable_size(node.size.unwrap_or(0)))),
-            false => node_str.push_str(&format!("{:<16} ", node.size.unwrap_or(0))),
+        if human_readable {
+            node_str.push_str(&format!("{:<8} ", to_readable_size(node.size.unwrap_or(0))));
+        } else {
+            node_str.push_str(&format!("{:<16} ", node.size.unwrap_or(0)));
         }
 
         match &node.timestamp_modification {
             Some(timestamp) => {
-                let dt: DateTime<Utc> = DateTime::parse_from_rfc3339(&timestamp)
+                let dt: DateTime<Utc> = DateTime::parse_from_rfc3339(timestamp)
                     .expect("Malformed date")
                     .into();
-                node_str.push_str(&format!("{:<16} ", dt.format("%Y %b %e %H:%M")))
+                node_str.push_str(&format!("{:<16} ", dt.format("%Y %b %e %H:%M")));
             }
-            None => node_str.push_str(&"n/a"),
+            None => node_str.push_str("n/a"),
         }
     }
 
@@ -109,17 +111,25 @@ fn to_printable_permissions(node: &Node) -> String {
     out_str
 }
 
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)]
 fn to_readable_size(size: u64) -> String {
     let units = ["B", "KB", "MB", "GB", "TB", "PB"];
 
     if size == 0 {
+        // size is 0, so this is safe
         return format!("{} {}", size, units[size as usize]);
     }
 
+    // size is always positive, so this is safe
     let exp = (size as f64).log(1024.0).floor() as u64;
-    let pot = 1024f64.powf(exp as f64);
-    let res = size as f64 / pot as f64;
 
+    // precision loss is ok here because we are only interested in the integer part
+    let pot = 1024f64.powf(exp as f64);
+
+    // precision loss is ok here because we are only interested in the integer part
+    let res = size as f64 / pot;
+    
+    // exp is always positive, so this is safe 
     format!("{:.0} {}", res, units[exp as usize])
 }
 
@@ -128,34 +138,34 @@ pub fn parse_node_path(path: &str, base_url: &str) -> Result<ParsedPath, DcCmdEr
     let path = path.trim_start_matches(base_url);
 
     if path == "/" {
-        return Ok((String::from("/"), String::from(""), 0));
+        return Ok((String::from("/"), String::new(), 0));
     }
 
-    let (parent_path, name, depth) = match path.ends_with('/') {
+    let (parent_path, name, depth) = if path.ends_with('/') {
         // this is a container (folder or room)
-        true => {
+         
             let path = path.trim_end_matches('/');
             let path = path.split('/').collect::<Vec<&str>>();
-            let name = path.last().ok_or(DcCmdError::InvalidPath(path.clone().join("/")))?.to_string();
+            let name = (*path.last().ok_or(DcCmdError::InvalidPath(path.clone().join("/")))?).to_string();
             let parent_path = path[..path.len() - 1].join("/");
-            let parent_path = format!("{}/", parent_path);
+            let parent_path = format!("{parent_path}/");
             let parent_path = parent_path.trim_start_matches(base_url).to_string();
             let depth = path.len() as u64 - 1;
 
             (parent_path, name, depth)
         }
         // this is a file
-        false => {
+        else {
             let path = path.split('/').collect::<Vec<&str>>();
-            let name = path.last().ok_or(DcCmdError::InvalidPath(path.clone().join("/")))?.to_string();
+            let name = (*path.last().ok_or(DcCmdError::InvalidPath(path.clone().join("/")))?).to_string();
             let parent_path = path[..path.len() - 1].join("/");
-            let parent_path = format!("{}/", parent_path);
+            let parent_path = format!("{parent_path}/");
             let parent_path = parent_path.trim_start_matches(base_url).to_string();
             let depth = path.len() as u64 - 2;
 
             (parent_path, name, depth)
         }
-    };
+    ;
 
     Ok((parent_path, name, depth))
 }
@@ -164,10 +174,10 @@ pub fn build_node_path(path: ParsedPath) -> String {
     let (parent_path, name, depth) = path;
 
     if depth == 0 {
-        return format!("/{}/", name);
+        return format!("/{name}/");
     }
 
-    format!("{}{}/", parent_path, name)
+    format!("{parent_path}{name}/")
 }
 
 #[cfg(test)]
@@ -212,7 +222,7 @@ mod tests {
 
     #[test]
     fn test_to_readable_mb() {
-        let size = 12_500_00_u64;
+        let size = 1_250_000_u64;
         assert_eq!("12 MB", to_readable_size(size));
     }
 
