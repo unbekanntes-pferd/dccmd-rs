@@ -4,7 +4,7 @@
 use clap::Parser;
 use cmd::{
     create_folder, delete_node, download, get_nodes, handle_error,
-    models::{DcCmd, DcCmdCommand},
+    models::{DcCmd, DcCmdCommand}, upload,
 };
 use console::Term;
 
@@ -21,9 +21,7 @@ async fn main() {
 
     let res = match opt.cmd {
         DcCmdCommand::Download { source, target } => download(source, target).await,
-        DcCmdCommand::Upload { source, target } => {
-            Ok(println!("Uploading {source} to {target}"))
-        }
+        DcCmdCommand::Upload { source, target } => upload(source.try_into().expect("Invalid path"), target).await,
         DcCmdCommand::Ls {
             source,
             long,

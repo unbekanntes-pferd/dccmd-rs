@@ -1,22 +1,28 @@
+use std::{path::PathBuf, time::SystemTime};
+
 use console::Term;
 use dialoguer::Confirm;
-use futures_util::{future::join_all};
+use futures_util::future::join_all;
 use indicatif::{ProgressBar, ProgressStyle};
+use tokio_util::io::ReaderStream;
 use tracing::debug;
 
 use self::{
     credentials::{get_dracoon_crypto_env, get_dracoon_env, set_dracoon_crypto_env},
     models::DcCmdError,
-    utils::strings::{format_error_message, format_success_message},
+    utils::{
+        dates::to_datetime_utc,
+        strings::{format_error_message, format_success_message},
+    },
 };
 use crate::{
     api::{
-        auth::{ Connected, OAuth2Flow},
-        constants::{get_client_credentials},
+        auth::{Connected, OAuth2Flow},
+        constants::get_client_credentials,
         models::ListAllParams,
         nodes::{
-            models::{CreateFolderRequest, Node, NodeType},
-            Download, Folders, Nodes,
+            models::{CreateFolderRequest, FileMeta, Node, NodeType, UploadOptions},
+            Download, Folders, Nodes, Upload,
         },
         Dracoon, DracoonBuilder,
     },
@@ -112,14 +118,10 @@ async fn download_container(
             futures.push(next_files_req);
             offset += limit;
         }
-        
+
         let mut next_files_items = vec![];
 
         // parallelize the requests in batches of 20
-
-        
-
-    
 
         //TODO: refactor this to process only a given batch size in parallel instead of all at once
         let results = join_all(futures).await;
@@ -166,7 +168,7 @@ async fn download_container(
     }
 
     // then recreate the structure in the target directory, beginning with creating the top container
-    // TODO 
+    // TODO
 
     // then download all files into the target directories
     // TODO
@@ -174,8 +176,86 @@ async fn download_container(
     Ok(())
 }
 
-pub fn upload(source: String, target: String) {
-    todo!()
+pub async fn upload(source: PathBuf, target: String) -> Result<(), DcCmdError> {
+    let mut dracoon = init_dracoon(&target).await?;
+
+    let parent_node = dracoon.get_node_from_path(&target).await?;
+
+    let Some(parent_node) = parent_node else {
+        return Err(DcCmdError::InvalidPath(target.clone()))
+    };
+
+    if parent_node.is_encrypted == Some(true) {
+        dracoon = init_encryption(dracoon).await?;
+    }
+
+    let file = tokio::fs::File::open(&source)
+        .await
+        .or(Err(DcCmdError::IoError))?;
+
+    let file_meta = file.metadata().await.or(Err(DcCmdError::IoError))?;
+
+    if !file_meta.is_file() {
+        // TODO: FIX correct path output
+        return Err(DcCmdError::InvalidPath("some string".to_string()));
+    }
+
+    let file_name = source
+    .file_name()
+    .expect("This is a file (handled above)")
+    .to_owned()
+    .to_string_lossy()
+    .as_ref()
+    .to_string();
+
+    let timestamp_modification = file_meta
+        .modified()
+        .or(Err(DcCmdError::IoError))
+        .unwrap_or(SystemTime::now());
+
+    let timestamp_modification = to_datetime_utc(timestamp_modification);
+
+    let timestamp_creation = file_meta
+        .created()
+        .or(Err(DcCmdError::IoError))
+        .unwrap_or(SystemTime::now());
+
+    let timestamp_creation = to_datetime_utc(timestamp_creation);
+
+    let file_meta = FileMeta::builder()
+        .with_name(file_name)
+        .with_size(file_meta.len())
+        .with_timestamp_modification(timestamp_modification)
+        .with_timestamp_creation(timestamp_creation)
+        .build();
+
+    let progress_bar = ProgressBar::new(parent_node.size.unwrap_or(0));
+    progress_bar.set_style(
+        ProgressStyle::default_bar()
+        .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}) {msg}").unwrap()
+        .progress_chars("=>-"),
+    );
+
+    let progress_bar_mv = progress_bar.clone();
+
+    let upload_options = UploadOptions::default();
+
+    let stream = tokio::io::BufReader::new(file);
+    let stream = ReaderStream::new(stream);
+
+    dracoon.upload(
+        file_meta,
+        &parent_node,
+        upload_options,
+        stream,
+        Some(Box::new(move |progress, total| {
+            progress_bar_mv.set_message("Uploading");
+            progress_bar_mv.set_length(total);
+            progress_bar_mv.set_position(progress);
+        })),
+    ).await?;
+
+    Ok(())
 }
 
 async fn init_encryption(

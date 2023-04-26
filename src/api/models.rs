@@ -47,6 +47,7 @@ pub struct Range {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct ObjectExpiration {
     pub enable_expiration: bool,
     pub expire_at: Option<String>,
