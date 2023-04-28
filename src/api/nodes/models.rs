@@ -3,6 +3,8 @@
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Formatter;
+use std::sync::Arc;
+use std::sync::Mutex;
 
 use crate::api::{
     auth::{errors::DracoonClientError, models::DracoonErrorResponse},
@@ -18,6 +20,29 @@ use serde::{Deserialize, Serialize};
 
 /// A callback function that is called after each chunk is processed (upload and download)
 pub type ProgressCallback = Box<dyn FnMut(u64, u64) + Send + Sync>;
+
+pub struct CloneableProgressCallback(Arc<Mutex<Box<dyn FnMut(u64, u64) + Send + Sync>>>);
+
+impl Clone for CloneableProgressCallback {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl CloneableProgressCallback {
+    pub fn new<F>(callback: F) -> Self
+    where
+        F: 'static + FnMut(u64, u64) + Send + Sync,
+    {
+        Self(Arc::new(Mutex::new(Box::new(callback))))
+    }
+
+    pub fn call(&self, done: u64, total: u64) {
+        let mut callback = self.0.lock().unwrap();
+        callback(done, total);
+    }
+}
+
 
 /// file meta information (name, size, timestamp creation, timestamp modification)
 #[derive(Debug, Clone)]
@@ -81,9 +106,59 @@ impl FileMetaBuilder {
     }
 }
 
-/// upload options (expiration, classification)
+/// upload options (expiration, classification, keep share links, resolution strategy)
 #[derive(Debug, Clone, Default)]
-pub struct UploadOptions(pub Option<ObjectExpiration>, pub Option<u64>);
+pub struct UploadOptions(pub Option<ObjectExpiration>, pub Option<u8>, pub Option<bool>, pub Option<ResolutionStrategy>);
+
+impl UploadOptions {
+    pub fn builder() -> UploadOptionsBuilder {
+        UploadOptionsBuilder::new()
+    }
+
+}
+
+pub struct UploadOptionsBuilder {
+    expiration: Option<ObjectExpiration>,
+    classification: Option<u8>,
+    keep_share_links: Option<bool>,
+    resolution_strategy: Option<ResolutionStrategy>,
+}
+
+impl UploadOptionsBuilder {
+    pub fn new() -> Self {
+        Self {
+            expiration: None,
+            classification: None,
+            keep_share_links: None,
+            resolution_strategy: None,
+        }
+    }
+
+    pub fn with_expiration(mut self, expiration: ObjectExpiration) -> Self {
+        self.expiration = Some(expiration);
+        self
+    }
+
+    pub fn with_classification(mut self, classification: u8) -> Self {
+        self.classification = Some(classification);
+        self
+    }
+
+    pub fn with_keep_share_links(mut self, keep_share_links: bool) -> Self {
+        self.keep_share_links = Some(keep_share_links);
+        self
+    }
+
+    pub fn with_resolution_strategy(mut self, resolution_strategy: ResolutionStrategy) -> Self {
+        self.resolution_strategy = Some(resolution_strategy);
+        self
+    }
+
+    pub fn build(self) -> UploadOptions {
+        UploadOptions(self.expiration, self.classification, self.keep_share_links, self.resolution_strategy)
+    }
+
+}
 
 
 /// A list of nodes in DRACOON - GET /nodes
@@ -363,7 +438,7 @@ pub struct CreateFileUploadRequest {
     parent_id: u64,
     name: String,
     size: Option<u64>,
-    classification: Option<u64>,
+    classification: Option<u8>,
     expiration: Option<ObjectExpiration>,
     direct_S3_upload: Option<bool>,
     timestamp_creation: Option<String>,
@@ -389,7 +464,7 @@ pub struct CreateFileUploadRequestBuilder {
     parent_id: u64,
     name: String,
     size: Option<u64>,
-    classification: Option<u64>,
+    classification: Option<u8>,
     expiration: Option<ObjectExpiration>,
     direct_s3_upload: Option<bool>,
     timestamp_creation: Option<String>,
@@ -402,7 +477,7 @@ impl CreateFileUploadRequestBuilder {
         self
     }
 
-    pub fn with_classification(mut self, classification: u64) -> Self {
+    pub fn with_classification(mut self, classification: u8) -> Self {
         self.classification = Some(classification);
         self
     }
@@ -513,7 +588,7 @@ impl CompleteS3FileUploadRequestBuilder {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub enum ResolutionStrategy {
     #[serde(rename = "autorename")]
     AutoRename,

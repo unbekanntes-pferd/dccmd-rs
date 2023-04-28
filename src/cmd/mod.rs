@@ -4,7 +4,6 @@ use console::Term;
 use dialoguer::Confirm;
 use futures_util::future::join_all;
 use indicatif::{ProgressBar, ProgressStyle};
-use tokio_util::io::ReaderStream;
 use tracing::debug;
 
 use self::{
@@ -21,7 +20,7 @@ use crate::{
         constants::get_client_credentials,
         models::ListAllParams,
         nodes::{
-            models::{CreateFolderRequest, FileMeta, Node, NodeType, UploadOptions},
+            models::{CreateFolderRequest, FileMeta, Node, NodeType, UploadOptions, ResolutionStrategy},
             Download, Folders, Nodes, Upload,
         },
         Dracoon, DracoonBuilder,
@@ -181,7 +180,7 @@ async fn download_container(
     Ok(())
 }
 
-pub async fn upload(source: PathBuf, target: String) -> Result<(), DcCmdError> {
+pub async fn upload(source: PathBuf, target: String, overwrite: bool, classification: Option<u8>) -> Result<(), DcCmdError> {
     let mut dracoon = init_dracoon(&target).await?;
 
     let parent_node = dracoon.get_node_from_path(&target).await?;
@@ -228,7 +227,7 @@ pub async fn upload(source: PathBuf, target: String) -> Result<(), DcCmdError> {
     let timestamp_creation = to_datetime_utc(timestamp_creation);
 
     let file_meta = FileMeta::builder()
-        .with_name(file_name)
+        .with_name(file_name.clone())
         .with_size(file_meta.len())
         .with_timestamp_modification(timestamp_modification)
         .with_timestamp_creation(timestamp_creation)
@@ -243,22 +242,35 @@ pub async fn upload(source: PathBuf, target: String) -> Result<(), DcCmdError> {
 
     let progress_bar_mv = progress_bar.clone();
 
-    let upload_options = UploadOptions::default();
+    let classification = classification.unwrap_or(2);
+    let resolution_strategy = if overwrite {
+        ResolutionStrategy::Overwrite
+    } else {
+        ResolutionStrategy::AutoRename
+    };
+    let keep_share_links = matches!(resolution_strategy, ResolutionStrategy::Overwrite);
 
-    let stream = tokio::io::BufReader::new(file);
-    let stream = ReaderStream::new(stream);
+    let upload_options = UploadOptions::builder()
+    .with_classification(classification)
+    .with_resolution_strategy(resolution_strategy)
+    .with_keep_share_links(keep_share_links)
+    .build();
+
+    let reader = tokio::io::BufReader::new(file);
 
     dracoon.upload(
         file_meta,
         &parent_node,
         upload_options,
-        stream,
+        reader,
         Some(Box::new(move |progress, total| {
             progress_bar_mv.set_message("Uploading");
             progress_bar_mv.set_length(total);
             progress_bar_mv.set_position(progress);
         })),
     ).await?;
+
+    progress_bar.finish_with_message(format!("Upload of {file_name} complete"));
 
     Ok(())
 }
@@ -591,7 +603,7 @@ mod tests {
         let base_url = parse_base_url("bla.dracoon.com".into());
         assert_eq!(
             base_url,
-            Err(DcCmdError::InvalidUrl("bla.dracoon.com".into()))
+            Err(DcCmdError::InvalidUrl("https://bla.dracoon.com".into()))
         );
     }
 }

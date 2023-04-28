@@ -222,7 +222,7 @@ mod tests {
 
     #[test]
     fn test_to_readable_mb() {
-        let size = 1_250_000_u64;
+        let size = 12_500_000_u64;
         assert_eq!("12 MB", to_readable_size(size));
     }
 

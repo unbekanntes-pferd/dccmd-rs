@@ -21,7 +21,7 @@ async fn main() {
 
     let res = match opt.cmd {
         DcCmdCommand::Download { source, target } => download(source, target).await,
-        DcCmdCommand::Upload { source, target } => upload(source.try_into().expect("Invalid path"), target).await,
+        DcCmdCommand::Upload { source, target, overwrite, classification } => upload(source.try_into().expect("Invalid path"), target, overwrite, classification).await,
         DcCmdCommand::Ls {
             source,
             long,

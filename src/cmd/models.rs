@@ -64,6 +64,13 @@ pub enum DcCmdCommand {
     Upload {
         source: String,
         target: String,
+
+        #[clap(long)]
+        overwrite: bool,
+
+        #[clap(long)]
+        classification: Option<u8>,
+
     },
     Download {
         source: String,
