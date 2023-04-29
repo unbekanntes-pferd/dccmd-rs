@@ -1,6 +1,6 @@
 use self::models::{
-    CreateFolderRequest, FileMeta, Node, NodeList, ProgressCallback, TransferNodesRequest,
-    UpdateFolderRequest, UploadOptions,
+    CreateFolderRequest, FileMeta, Node, NodeList, DownloadProgressCallback, TransferNodesRequest,
+    UpdateFolderRequest, UploadOptions, UploadProgressCallback,
 };
 use super::{auth::errors::DracoonClientError, models::ListAllParams};
 use async_trait::async_trait;
@@ -114,7 +114,7 @@ pub trait Download {
         &'w mut self,
         node: &Node,
         writer: &'w mut (dyn Write + Send),
-        mut callback: Option<ProgressCallback>,
+        mut callback: Option<DownloadProgressCallback>,
     ) -> Result<(), DracoonClientError>;
 }
 
@@ -127,6 +127,7 @@ pub trait Upload<R: AsyncRead> {
         parent_node: &Node,
         upload_options: UploadOptions,
         mut reader: BufReader<R>,
-        mut callback: Option<ProgressCallback>,
+        mut callback: Option<UploadProgressCallback>,
+        chunk_size: Option<usize>
     ) -> Result<Node, DracoonClientError>;
 }

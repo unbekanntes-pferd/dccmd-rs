@@ -1,5 +1,5 @@
 use super::{
-    models::{DownloadUrlResponse, Node, ProgressCallback},
+    models::{DownloadUrlResponse, Node, DownloadProgressCallback},
     Download,
 };
 use crate::api::{
@@ -23,7 +23,7 @@ impl<T: DownloadInternal + Sync + Send> Download for T {
         &'w mut self,
         node: &Node,
         writer: &'w mut (dyn Write + Send),
-        callback: Option<ProgressCallback>,
+        callback: Option<DownloadProgressCallback>,
     ) -> Result<(), DracoonClientError> {
         let download_url_response = self.get_download_url(node.id).await?;
 
@@ -75,7 +75,7 @@ trait DownloadInternal {
         url: &str,
         writer: &mut (dyn Write + Send),
         size: Option<u64>,
-        mut callback: Option<ProgressCallback>,
+        mut callback: Option<DownloadProgressCallback>,
     ) -> Result<(), DracoonClientError>;
 
     async fn download_encrypted(
@@ -84,7 +84,7 @@ trait DownloadInternal {
         node_id: u64,
         writer: &mut (dyn Write + Send),
         size: Option<u64>,
-        mut callback: Option<ProgressCallback>,
+        mut callback: Option<DownloadProgressCallback>,
     ) -> Result<(), DracoonClientError>;
 }
 
@@ -118,7 +118,7 @@ impl DownloadInternal for Dracoon<Connected> {
         url: &str,
         writer: &mut (dyn Write + Send),
         size: Option<u64>,
-        mut callback: Option<ProgressCallback>,
+        mut callback: Option<DownloadProgressCallback>,
     ) -> Result<(), DracoonClientError> {
         // get content length from header
         let content_length = self
@@ -190,7 +190,7 @@ impl DownloadInternal for Dracoon<Connected> {
         node_id: u64,
         writer: &mut (dyn Write + Send),
         size: Option<u64>,
-        mut callback: Option<ProgressCallback>,
+        mut callback: Option<DownloadProgressCallback>,
     ) -> Result<(), DracoonClientError> {
         // get file key
         let file_key = self.get_file_key(node_id).await?;
