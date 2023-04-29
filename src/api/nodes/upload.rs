@@ -21,7 +21,7 @@ use crate::api::{
 };
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use futures_util::StreamExt;
+use futures_util::{StreamExt, Stream};
 use reqwest::{header, Body};
 use tokio::io::{AsyncRead, BufReader, AsyncReadExt};
 use tokio_util::io::ReaderStream;
@@ -249,6 +249,23 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
             let mut buffer = vec![0; CHUNK_SIZE];
             let n = reader.read(&mut buffer[..]).await.or(Err(DracoonClientError::IoError))?;
 
+            let stream = async_stream::stream!{
+                loop {
+                    let mut buffer = vec![0; CHUNK_SIZE];
+                    match reader.read(&mut buffer).await {
+                        Ok(0) => break,
+                        Ok(n) => {
+                            buffer.truncate(n);
+                            yield Ok(bytes::Bytes::from(buffer));
+                        }
+                        Err(err) => {
+                            yield Err(err);
+                            break;
+                        }
+                    }
+                }
+            };
+
             if n == 0 {
                 break;
             }
@@ -266,10 +283,8 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
             .await?;
             let url = url.urls.first().expect("Creating S3 url failed");
 
-            let cursor = Cursor::new(buffer);
 
-            let stream = tokio_util::io::ReaderStream::new(cursor);
-            let e_tag = upload_stream_to_s3(stream, url, file_meta.clone(), cloneable_callback.clone()).await?;
+            let e_tag = upload_stream_to_s3(Box::pin(stream), url, file_meta.clone(), cloneable_callback.clone()).await?;
 
             s3_parts.push(S3FileUploadPart::new(url_part, e_tag));
             url_part += 1;
@@ -369,14 +384,13 @@ fn calculate_s3_url_count(total_size: u64, chunk_size: u64) -> (u32, u64) {
     )
 }
 
-async fn upload_stream_to_s3<'a, R>(
-    mut stream: ReaderStream<R>,
+async fn upload_stream_to_s3<'a>(
+    mut stream: impl Stream<Item = Result<bytes::Bytes, impl std::error::Error + Send + Sync + 'static>> + Sync + Send + Unpin + 'static,
     url: &PresignedUrl,
     file_meta: FileMeta,
     callback: Option<CloneableProgressCallback>,
 ) -> Result<String, DracoonClientError>
-where
-    R: AsyncRead + Unpin + Send + Sync + 'static,
+
 {
     // Initialize a variable to keep track of the number of bytes read
     let mut bytes_read = 0u64;
