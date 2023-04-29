@@ -235,6 +235,8 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
 
         let fm = file_meta.clone();
 
+        let chunk_size = chunk_size.unwrap_or(CHUNK_SIZE);
+
         // create upload channel
         let file_upload_req = CreateFileUploadRequest::builder(parent_node.id, fm.0)
             .with_classification(classification)
@@ -253,14 +255,14 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
         let fm = &file_meta.clone();
         let mut s3_parts = Vec::new();
 
-        let (count_urls, last_chunk_size) = calculate_s3_url_count(fm.1, CHUNK_SIZE as u64);
+        let (count_urls, last_chunk_size) = calculate_s3_url_count(fm.1, chunk_size as u64);
         let mut url_part: u32 = 1;
 
         let cloneable_callback = callback.map(CloneableUploadProgressCallback::new);
 
         if count_urls > 1 {
             while url_part < count_urls {
-                let mut buffer = vec![0; CHUNK_SIZE];
+                let mut buffer = vec![0; chunk_size];
 
                 match reader.read_exact(&mut buffer).await {
                     Ok(0) => break,
@@ -290,7 +292,7 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
                             .await?;
                         let url = url.urls.first().expect("Creating S3 url failed");
 
-                        let curr_pos: u64 = ((url_part - 1) * (CHUNK_SIZE as u32)) as u64;
+                        let curr_pos: u64 = ((url_part - 1) * (chunk_size as u32)) as u64;
 
                         let e_tag = upload_stream_to_s3(
                             Box::pin(stream),
