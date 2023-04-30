@@ -431,13 +431,15 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
         let mut read_buff = vec![0u8; file_meta.1.try_into().expect("size not larger than 32 MB")];
         let mut crypter = DracoonCrypto::encrypter(&mut crypto_buff)?;
     
-        while let Some(chunk) = reader.read(&mut read_buff).await.ok() {
+        while let Ok(chunk) = reader.read(&mut read_buff).await {
             if chunk == 0 {
                 break;
             }
             crypter.update(&read_buff[..chunk])?;
         }
         crypter.finalize()?;
+        // drop the read buffer after completing the encryption
+        drop(read_buff);
     
         //TODO: rewrite without buffer clone
         let enc_bytes = crypter.get_message().to_owned();
@@ -447,7 +449,9 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
         let mut crypto_reader = BufReader::new(enc_bytes.as_slice());
         let plain_file_key = crypter.get_plain_file_key();
         let file_key = DracoonCrypto::encrypt_file_key(plain_file_key, keypair)?;
-
+        // drop the crypto buffer (enc bytes are still in the reader)
+        drop(crypto_buff);
+   
         let (
             classification,
             timestamp_creation,
@@ -530,18 +534,12 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
                         s3_parts.push(S3FileUploadPart::new(url_part, e_tag));
                         url_part += 1;
                     }
-                    Err(err) => {
-                        println!("Error reading buffer: {}", err);
-                        return Err(DracoonClientError::IoError);
-                    }
+                    Err(err) => 
+                        return Err(DracoonClientError::IoError)
                     
                 }
             }
         }
-
-        assert_eq!(url_part, count_urls);
-        println!("Last chunk size: {}", last_chunk_size);
-        println!("File size: {}", file_meta.1);
 
         // upload last chunk
         let mut buffer = vec![
@@ -593,11 +591,8 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
                 s3_parts.push(S3FileUploadPart::new(url_part, e_tag));
             }
             
-                Err(err) => {
-                    println!("Error reading buffer: {}", err);
-                    return Err(DracoonClientError::IoError);
-                }
-    
+                Err(err) => 
+                    return Err(DracoonClientError::IoError)
         }
 
         // finalize upload
