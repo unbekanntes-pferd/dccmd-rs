@@ -235,6 +235,7 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
     }
 
     #[allow(clippy::single_match_else)]
+    #[allow(clippy::too_many_lines)]
     async fn upload_to_s3_unencrypted(
         &self,
         file_meta: FileMeta,
@@ -313,6 +314,8 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
                             .await?;
                         let url = url.urls.first().expect("Creating S3 url failed");
 
+                        // truncation is safe because chunk_size is 32 MB
+                        #[allow(clippy::cast_possible_truncation, clippy::cast_lossless)]
                         let curr_pos: u64 = ((url_part - 1) * (chunk_size as u32)) as u64;
 
                         let e_tag = <Dracoon<Connected> as UploadInternal<R>>::upload_stream_to_s3(
@@ -369,6 +372,8 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
                     .await?;
                 let url = url.urls.first().expect("Creating S3 url failed");
 
+                // truncation is safe because chunk_size is 32 MB
+                #[allow(clippy::cast_possible_truncation, clippy::cast_lossless)]
                 let curr_pos: u64 = ((url_part - 1) * (CHUNK_SIZE as u32)) as u64;
 
                 let e_tag = <Dracoon<Connected> as UploadInternal<R>>::upload_stream_to_s3(
@@ -433,6 +438,7 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn upload_to_s3_encrypted(
         &mut self,
         file_meta: FileMeta,
@@ -462,7 +468,7 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
         drop(read_buff);
 
         //TODO: rewrite without buffer clone
-        let enc_bytes = crypter.get_message().to_owned();
+        let enc_bytes = crypter.get_message().clone();
 
         assert_eq!(enc_bytes.len() as u64, file_meta.1);
 
@@ -538,7 +544,9 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
                             )
                             .await?;
                         let url = url.urls.first().expect("Creating S3 url failed");
-
+                        
+                        // truncation is safe because chunk_size is 32 MB
+                        #[allow(clippy::cast_possible_truncation, clippy::cast_lossless)]
                         let curr_pos: u64 = ((url_part - 1) * (chunk_size as u32)) as u64;
 
                         let e_tag = <Dracoon<Connected> as UploadInternal<R>>::upload_stream_to_s3(
@@ -595,6 +603,8 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
                     .await?;
                 let url = url.urls.first().expect("Creating S3 url failed");
 
+                // truncation is safe because chunk_size is 32 MB
+                #[allow(clippy::cast_possible_truncation, clippy::cast_lossless)]
                 let curr_pos: u64 = ((url_part - 1) * (CHUNK_SIZE as u32)) as u64;
 
                 let e_tag = <Dracoon<Connected> as UploadInternal<R>>::upload_stream_to_s3(
@@ -653,24 +663,30 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
                                 .id,
                         )
                         .await?;
-                    
+
                     // encrypt plain file key for each user
-                    let key_reqs: Vec<Result<UserFileKeySetRequest, DracoonClientError>> = missing_keys.users.into_iter().map(|user| {
-                        let user_id = user.id;
-                        let file_id = status_response.node.as_ref().expect("Node must be set if status is done").id;
-                        let public_key = user.public_key_container;
-                        let file_key = DracoonCrypto::encrypt_file_key(plain_file_key.clone(), public_key)?;
-                        let set_key_req = UserFileKeySetRequest::new(file_id, user_id, file_key);
-                        Ok(set_key_req)
-                    }).collect::<Vec<_>>();
-                    
-                    // set file keys
-                    let key_reqs = key_reqs.into_iter().flat_map(|res| res).collect::<Vec<_>>();
-                    <Dracoon<Connected> as UploadInternal<R>>::set_file_keys(
-                        self,
-                        key_reqs.into(),
-                    )
-                    .await?;
+                    let key_reqs = missing_keys
+                        .users
+                        .into_iter()
+                        .flat_map::<Result<UserFileKeySetRequest, DracoonClientError>, _>(|user| {
+                            let user_id = user.id;
+                            let file_id = status_response
+                                .node
+                                .as_ref()
+                                .expect("Node must be set if status is done")
+                                .id;
+                            let public_key = user.public_key_container;
+                            let file_key = DracoonCrypto::encrypt_file_key(
+                                plain_file_key.clone(),
+                                public_key,
+                            )?;
+                            let set_key_req =
+                                UserFileKeySetRequest::new(file_id, user_id, file_key);
+                            Ok(set_key_req)
+                        })
+                        .collect::<Vec<_>>();
+
+                    drop(plain_file_key);
 
                     return Ok(status_response
                         .node
