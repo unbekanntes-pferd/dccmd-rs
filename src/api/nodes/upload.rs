@@ -3,31 +3,28 @@ use std::{cmp::min, time::Duration};
 use super::{
     models::{
         CloneableUploadProgressCallback, CompleteS3FileUploadRequest, CreateFileUploadRequest,
-        CreateFileUploadResponse, FileMeta, GeneratePresignedUrlsRequest, Node, PresignedUrl,
-        PresignedUrlList, ResolutionStrategy, S3FileUploadStatus, S3UploadStatus, UploadOptions,
-        UploadProgressCallback,
+        CreateFileUploadResponse, FileMeta, GeneratePresignedUrlsRequest, MissingKeysResponse,
+        Node, PresignedUrl, PresignedUrlList, ResolutionStrategy, S3FileUploadStatus,
+        S3UploadStatus, UploadOptions, UploadProgressCallback, UserFileKeySetBatchRequest,
     },
     Upload,
 };
 use crate::api::{
     auth::{errors::DracoonClientError, Connected},
     constants::{
-        CHUNK_SIZE, DRACOON_API_PREFIX, FILES_BASE, FILES_S3_COMPLETE, FILES_S3_URLS, FILES_UPLOAD,
-        NODES_BASE, POLLING_START_DELAY,
+        CHUNK_SIZE, DRACOON_API_PREFIX, FILES_BASE, FILES_KEYS, FILES_S3_COMPLETE, FILES_S3_URLS,
+        FILES_UPLOAD, MISSING_FILE_KEYS, MISSING_KEYS_BATCH, NODES_BASE, POLLING_START_DELAY,
     },
     models::ObjectExpiration,
-    nodes::models::S3FileUploadPart,
+    nodes::models::{S3FileUploadPart, UserFileKeySetRequest},
     utils::{build_s3_error, FromResponse},
     Dracoon,
 };
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use dco3_crypto::{DracoonCrypto, Encrypter, ChunkedEncryption, DracoonRSACrypto};
+use dco3_crypto::{ChunkedEncryption, DracoonCrypto, DracoonRSACrypto, Encrypter};
 use futures_util::{Stream, StreamExt};
-use reqwest::{
-    header::{self, CONTENT_LENGTH},
-    Body,
-};
+use reqwest::{header, Body};
 use tokio::io::{AsyncRead, AsyncReadExt, BufReader};
 
 #[async_trait]
@@ -41,7 +38,7 @@ impl<C: UploadInternal<R> + Sync + Send, R: AsyncRead + Sync + Send + 'static> U
         callback: Option<UploadProgressCallback>,
         chunk_size: Option<usize>,
     ) -> Result<Node, DracoonClientError> {
-         match parent_node.is_encrypted {
+        match parent_node.is_encrypted {
             Some(encrypted) => {
                 if encrypted {
                     self.upload_to_s3_encrypted(
@@ -100,7 +97,7 @@ trait UploadInternal<R: AsyncRead> {
         upload_options: UploadOptions,
         reader: BufReader<R>,
         mut callback: Option<UploadProgressCallback>,
-        chunk_size: Option<usize>
+        chunk_size: Option<usize>,
     ) -> Result<Node, DracoonClientError>;
     async fn upload_to_s3_encrypted(
         &mut self,
@@ -122,6 +119,29 @@ trait UploadInternal<R: AsyncRead> {
         &self,
         upload_id: String,
     ) -> Result<S3FileUploadStatus, DracoonClientError>;
+    async fn upload_stream_to_s3<'a>(
+        &self,
+        mut stream: impl Stream<Item = Result<bytes::Bytes, impl std::error::Error + Send + Sync + 'static>>
+            + Sync
+            + Send
+            + Unpin
+            + 'static,
+        url: &PresignedUrl,
+        file_meta: FileMeta,
+        chunk_size: usize,
+        curr_pos: Option<u64>,
+        callback: Option<CloneableUploadProgressCallback>,
+    ) -> Result<String, DracoonClientError>;
+
+    async fn get_missing_file_keys(
+        &self,
+        file_id: u64,
+    ) -> Result<MissingKeysResponse, DracoonClientError>;
+
+    async fn set_file_keys(
+        &self,
+        keys_batch_req: UserFileKeySetBatchRequest,
+    ) -> Result<(), DracoonClientError>;
 }
 
 #[async_trait]
@@ -295,7 +315,8 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
 
                         let curr_pos: u64 = ((url_part - 1) * (chunk_size as u32)) as u64;
 
-                        let e_tag = upload_stream_to_s3(
+                        let e_tag = <Dracoon<Connected> as UploadInternal<R>>::upload_stream_to_s3(
+                            self,
                             Box::pin(stream),
                             url,
                             file_meta.clone(),
@@ -303,8 +324,7 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
                             Some(curr_pos),
                             cloneable_callback.clone(),
                         )
-                        .await
-                        .expect("working");
+                        .await?;
 
                         s3_parts.push(S3FileUploadPart::new(url_part, e_tag));
                         url_part += 1;
@@ -332,7 +352,7 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
                 > = async_stream::stream! {
                     // TODO: chunk stream for better progress
                     yield Ok(chunk);
-                 
+
                 };
 
                 let url_req = GeneratePresignedUrlsRequest::new(
@@ -351,7 +371,8 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
 
                 let curr_pos: u64 = ((url_part - 1) * (CHUNK_SIZE as u32)) as u64;
 
-                let e_tag = upload_stream_to_s3(
+                let e_tag = <Dracoon<Connected> as UploadInternal<R>>::upload_stream_to_s3(
+                    self,
                     Box::pin(stream),
                     url,
                     file_meta.clone(),
@@ -359,8 +380,7 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
                     Some(curr_pos),
                     cloneable_callback.clone(),
                 )
-                .await
-                .expect("working");
+                .await?;
 
                 s3_parts.push(S3FileUploadPart::new(url_part, e_tag));
             }
@@ -420,17 +440,17 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
         upload_options: UploadOptions,
         mut reader: BufReader<R>,
         callback: Option<UploadProgressCallback>,
-        chunk_size: Option<usize>
+        chunk_size: Option<usize>,
     ) -> Result<Node, DracoonClientError> {
-
         let keypair = self.get_keypair(None).await?.clone();
 
         let chunk_size = chunk_size.unwrap_or(CHUNK_SIZE);
 
-        let mut crypto_buff = vec![0u8; file_meta.1.try_into().expect("size not larger than 32 MB")];
+        let mut crypto_buff =
+            vec![0u8; file_meta.1.try_into().expect("size not larger than 32 MB")];
         let mut read_buff = vec![0u8; file_meta.1.try_into().expect("size not larger than 32 MB")];
         let mut crypter = DracoonCrypto::encrypter(&mut crypto_buff)?;
-    
+
         while let Ok(chunk) = reader.read(&mut read_buff).await {
             if chunk == 0 {
                 break;
@@ -440,7 +460,7 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
         crypter.finalize()?;
         // drop the read buffer after completing the encryption
         drop(read_buff);
-    
+
         //TODO: rewrite without buffer clone
         let enc_bytes = crypter.get_message().to_owned();
 
@@ -448,10 +468,10 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
 
         let mut crypto_reader = BufReader::new(enc_bytes.as_slice());
         let plain_file_key = crypter.get_plain_file_key();
-        let file_key = DracoonCrypto::encrypt_file_key(plain_file_key, keypair)?;
+        let file_key = DracoonCrypto::encrypt_file_key(plain_file_key.clone(), keypair)?;
         // drop the crypto buffer (enc bytes are still in the reader)
         drop(crypto_buff);
-   
+
         let (
             classification,
             timestamp_creation,
@@ -521,7 +541,8 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
 
                         let curr_pos: u64 = ((url_part - 1) * (chunk_size as u32)) as u64;
 
-                        let e_tag = upload_stream_to_s3(
+                        let e_tag = <Dracoon<Connected> as UploadInternal<R>>::upload_stream_to_s3(
+                            self,
                             Box::pin(stream),
                             url,
                             file_meta.clone(),
@@ -534,9 +555,7 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
                         s3_parts.push(S3FileUploadPart::new(url_part, e_tag));
                         url_part += 1;
                     }
-                    Err(err) => 
-                        return Err(DracoonClientError::IoError)
-                    
+                    Err(err) => return Err(DracoonClientError::IoError),
                 }
             }
         }
@@ -559,7 +578,7 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
                 > = async_stream::stream! {
                     // TODO: chunk stream for better progress
                     yield Ok(chunk);
-                 
+
                 };
 
                 let url_req = GeneratePresignedUrlsRequest::new(
@@ -578,7 +597,8 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
 
                 let curr_pos: u64 = ((url_part - 1) * (CHUNK_SIZE as u32)) as u64;
 
-                let e_tag = upload_stream_to_s3(
+                let e_tag = <Dracoon<Connected> as UploadInternal<R>>::upload_stream_to_s3(
+                    self,
                     Box::pin(stream),
                     url,
                     file_meta.clone(),
@@ -590,9 +610,8 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
 
                 s3_parts.push(S3FileUploadPart::new(url_part, e_tag));
             }
-            
-                Err(err) => 
-                    return Err(DracoonClientError::IoError)
+
+            Err(err) => return Err(DracoonClientError::IoError),
         }
 
         // finalize upload
@@ -623,6 +642,36 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
 
             match status_response.status {
                 S3UploadStatus::Done => {
+                    // fetch missing keys (limit 50)
+                    let missing_keys =
+                        <Dracoon<Connected> as UploadInternal<R>>::get_missing_file_keys(
+                            self,
+                            status_response
+                                .node
+                                .as_ref()
+                                .expect("Node must be set if status is done")
+                                .id,
+                        )
+                        .await?;
+                    
+                    // encrypt plain file key for each user
+                    let key_reqs: Vec<Result<UserFileKeySetRequest, DracoonClientError>> = missing_keys.users.into_iter().map(|user| {
+                        let user_id = user.id;
+                        let file_id = status_response.node.as_ref().expect("Node must be set if status is done").id;
+                        let public_key = user.public_key_container;
+                        let file_key = DracoonCrypto::encrypt_file_key(plain_file_key.clone(), public_key)?;
+                        let set_key_req = UserFileKeySetRequest::new(file_id, user_id, file_key);
+                        Ok(set_key_req)
+                    }).collect::<Vec<_>>();
+                    
+                    // set file keys
+                    let key_reqs = key_reqs.into_iter().flat_map(|res| res).collect::<Vec<_>>();
+                    <Dracoon<Connected> as UploadInternal<R>>::set_file_keys(
+                        self,
+                        key_reqs.into(),
+                    )
+                    .await?;
+
                     return Ok(status_response
                         .node
                         .expect("Node must be set if status is done"));
@@ -640,6 +689,117 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
                 }
             }
         }
+    }
+
+    async fn upload_stream_to_s3<'a>(
+        &self,
+        mut stream: impl Stream<Item = Result<bytes::Bytes, impl std::error::Error + Send + Sync + 'static>>
+            + Sync
+            + Send
+            + Unpin
+            + 'static,
+        url: &PresignedUrl,
+        file_meta: FileMeta,
+        chunk_size: usize,
+        curr_pos: Option<u64>,
+        callback: Option<CloneableUploadProgressCallback>,
+    ) -> Result<String, DracoonClientError> {
+        // Initialize a variable to keep track of the number of bytes read
+        let mut bytes_read = curr_pos.unwrap_or(0);
+        let file_size = file_meta.1;
+        // Create an async stream from the reader
+        let async_stream = async_stream::stream! {
+
+            while let Some(chunk) = stream.next().await {
+                if let Ok(chunk) = &chunk {
+                    let processed = min(bytes_read + (chunk.len() as u64), file_meta.1);
+                    bytes_read = processed;
+
+                    if let Some(cb) = callback.clone() {
+                        cb.call(bytes_read, file_meta.1);
+                    }
+                }
+                yield chunk
+            }
+        };
+
+        let body = Body::wrap_stream(async_stream);
+
+        let res = self
+            .client
+            .http
+            .put(&url.url)
+            .body(body)
+            .header(header::CONTENT_LENGTH, chunk_size)
+            .send()
+            .await?;
+
+        // handle error
+        if res.error_for_status_ref().is_err() {
+            let error = build_s3_error(res).await;
+            return Err(error);
+        }
+
+        let e_tag_header = res
+            .headers()
+            .get("etag")
+            .expect("ETag header missing")
+            .to_str()
+            .expect("ETag header invalid");
+        let e_tag = e_tag_header.trim_start_matches('"').trim_end_matches('"');
+
+        Ok(e_tag.to_string())
+    }
+
+    async fn get_missing_file_keys(
+        &self,
+        file_id: u64,
+    ) -> Result<MissingKeysResponse, DracoonClientError> {
+        let url_part = format!("{DRACOON_API_PREFIX}/{NODES_BASE}/{MISSING_FILE_KEYS}");
+
+        let mut api_url = self.build_api_url(&url_part);
+
+        api_url
+            .query_pairs_mut()
+            .append_pair("file_id", file_id.to_string().as_str())
+            .append_pair("limit", MISSING_KEYS_BATCH.to_string().as_str())
+            .finish();
+
+        let response = self
+            .client
+            .http
+            .get(api_url)
+            .header(header::AUTHORIZATION, self.get_auth_header().await?)
+            .send()
+            .await?;
+
+        MissingKeysResponse::from_response(response).await
+    }
+
+    async fn set_file_keys(
+        &self,
+        keys_batch_req: UserFileKeySetBatchRequest,
+    ) -> Result<(), DracoonClientError> {
+        let url_part = format!("{DRACOON_API_PREFIX}/{NODES_BASE}/{FILES_BASE}/{FILES_KEYS}");
+
+        let api_url = self.build_api_url(&url_part);
+
+        let response = self
+            .client
+            .http
+            .post(api_url)
+            .header(header::AUTHORIZATION, self.get_auth_header().await?)
+            .json(&keys_batch_req)
+            .send()
+            .await?;
+
+        if response.status().is_server_error() || response.status().is_client_error() {
+            return Err(DracoonClientError::from_response(response)
+                .await
+                .expect("Could not parse error response"));
+        }
+
+        Ok(())
     }
 }
 /// helper to parse upload options (file meta and upload options)
@@ -686,62 +846,4 @@ fn calculate_s3_url_count(total_size: u64, chunk_size: u64) -> (u32, u64) {
         urls.try_into().expect("overflow size to chunk"),
         total_size % chunk_size,
     )
-}
-
-async fn upload_stream_to_s3<'a>(
-    mut stream: impl Stream<Item = Result<bytes::Bytes, impl std::error::Error + Send + Sync + 'static>>
-        + Sync
-        + Send
-        + Unpin
-        + 'static,
-    url: &PresignedUrl,
-    file_meta: FileMeta,
-    chunk_size: usize,
-    curr_pos: Option<u64>,
-    callback: Option<CloneableUploadProgressCallback>,
-) -> Result<String, DracoonClientError> {
-    // Initialize a variable to keep track of the number of bytes read
-    let mut bytes_read = curr_pos.unwrap_or(0);
-    let file_size = file_meta.1;
-    // Create an async stream from the reader
-    let async_stream = async_stream::stream! {
-
-        while let Some(chunk) = stream.next().await {
-            if let Ok(chunk) = &chunk {
-                let processed = min(bytes_read + (chunk.len() as u64), file_meta.1);
-                bytes_read = processed;
-
-                if let Some(cb) = callback.clone() {
-                    cb.call(bytes_read, file_meta.1);
-                }
-            }
-            yield chunk
-        }
-    };
-
-    let body = Body::wrap_stream(async_stream);
-
-    let res = reqwest::Client::new()
-        .put(&url.url)
-        .body(body)
-        .header(CONTENT_LENGTH, chunk_size)
-        .send()
-        .await
-        .unwrap();
-
-    // handle error
-    if res.error_for_status_ref().is_err() {
-        let error = build_s3_error(res).await;
-        return Err(error);
-    }
-
-    let e_tag_header = res
-        .headers()
-        .get("etag")
-        .expect("ETag header missing")
-        .to_str()
-        .expect("ETag header invalid");
-    let e_tag = e_tag_header.trim_start_matches('"').trim_end_matches('"');
-
-    Ok(e_tag.to_string())
 }

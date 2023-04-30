@@ -15,6 +15,7 @@ use crate::api::{
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use dco3_crypto::FileKey;
+use dco3_crypto::PublicKeyContainer;
 use reqwest::{Response, StatusCode};
 use serde::{Deserialize, Serialize};
 
@@ -884,3 +885,84 @@ impl UpdateFolderRequestBuilder {
     }
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UserIdFileItem {
+    pub user_id: u64,
+    pub file_id: u64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UserUserPublicKey {
+    pub id: u64,
+    pub public_key_container: PublicKeyContainer,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileFileKeys {
+    pub id: u64,
+    pub file_key_container: FileKey,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MissingKeysResponse {
+
+    pub range: Range,
+    pub items: Vec<UserIdFileItem>,
+    pub users: Vec<UserUserPublicKey>,
+    pub files: Vec<FileFileKeys>
+}
+
+#[async_trait]
+impl FromResponse for MissingKeysResponse {
+    async fn from_response(res: Response) -> Result<Self, DracoonClientError> {
+        parse_body::<Self, DracoonErrorResponse>(res).await
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UserFileKeySetBatchRequest {
+    items: Vec<UserFileKeySetRequest>
+}
+
+impl UserFileKeySetBatchRequest {
+    pub fn new() -> Self {
+        UserFileKeySetBatchRequest {
+            items: Vec::new()
+        }
+    }
+
+    pub fn add(&mut self, user_id: u64, file_id: u64, file_key: FileKey) {
+        self.items.push(UserFileKeySetRequest::new(user_id, file_id, file_key));
+    }
+}
+
+impl From<Vec<UserFileKeySetRequest>> for UserFileKeySetBatchRequest {
+    fn from(items: Vec<UserFileKeySetRequest>) -> Self {
+        UserFileKeySetBatchRequest {
+            items
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UserFileKeySetRequest {
+    user_id: u64,
+    file_id: u64,
+    file_key: FileKey,
+}
+
+impl UserFileKeySetRequest {
+    pub fn new(user_id: u64, file_id: u64, file_key: FileKey) -> Self {
+        UserFileKeySetRequest {
+            user_id,
+            file_id,
+            file_key,
+        }
+    }
+}

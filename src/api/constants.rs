@@ -27,6 +27,8 @@ pub const FILES_S3_COMPLETE: &str = "s3";
 pub const FOLDERS_BASE: &str = "folders";
 pub const NODES_DOWNLOAD_URL: &str = "downloads";
 pub const NODES_SEARCH: &str = "search";
+pub const MISSING_FILE_KEYS: &str = "missingFileKeys";
+pub const FILES_KEYS: &str = "keys";
 
 
 /// DEFAULTS
@@ -34,6 +36,8 @@ pub const CHUNK_SIZE: usize = 1024 * 1024 * 32; // 32 MB
 /// concurrent requests
 pub const BATCH_SIZE: usize = 20;
 pub const POLLING_START_DELAY: u64 = 300;
+// defines how many keys (users) distributed per file on upload
+pub const MISSING_KEYS_BATCH: usize = 50;
 
 /// USER
 pub const USER_BASE: &str = "user";
