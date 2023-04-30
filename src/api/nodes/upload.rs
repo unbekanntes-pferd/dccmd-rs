@@ -22,6 +22,7 @@ use crate::api::{
 };
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use dco3_crypto::{DracoonCrypto, Encrypter, ChunkedEncryption, DracoonRSACrypto};
 use futures_util::{Stream, StreamExt};
 use reqwest::{
     header::{self, CONTENT_LENGTH},
@@ -30,9 +31,9 @@ use reqwest::{
 use tokio::io::{AsyncRead, AsyncReadExt, BufReader};
 
 #[async_trait]
-impl<C: UploadInternal<R> + Sync, R: AsyncRead + Sync + Send + 'static> Upload<R> for C {
+impl<C: UploadInternal<R> + Sync + Send, R: AsyncRead + Sync + Send + 'static> Upload<R> for C {
     async fn upload<'r>(
-        &'r self,
+        &'r mut self,
         file_meta: FileMeta,
         parent_node: &Node,
         upload_options: UploadOptions,
@@ -40,7 +41,7 @@ impl<C: UploadInternal<R> + Sync, R: AsyncRead + Sync + Send + 'static> Upload<R
         callback: Option<UploadProgressCallback>,
         chunk_size: Option<usize>,
     ) -> Result<Node, DracoonClientError> {
-        match parent_node.is_encrypted {
+         match parent_node.is_encrypted {
             Some(encrypted) => {
                 if encrypted {
                     self.upload_to_s3_encrypted(
@@ -102,7 +103,7 @@ trait UploadInternal<R: AsyncRead> {
         chunk_size: Option<usize>
     ) -> Result<Node, DracoonClientError>;
     async fn upload_to_s3_encrypted(
-        &self,
+        &mut self,
         file_meta: FileMeta,
         parent_node: &Node,
         upload_options: UploadOptions,
@@ -413,15 +414,237 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
     }
 
     async fn upload_to_s3_encrypted(
-        &self,
+        &mut self,
         file_meta: FileMeta,
         parent_node: &Node,
         upload_options: UploadOptions,
-        reader: BufReader<R>,
+        mut reader: BufReader<R>,
         callback: Option<UploadProgressCallback>,
         chunk_size: Option<usize>
     ) -> Result<Node, DracoonClientError> {
-        todo!()
+
+        let keypair = self.get_keypair(None).await?.clone();
+
+        let chunk_size = chunk_size.unwrap_or(CHUNK_SIZE);
+
+        let mut crypto_buff = vec![0u8; file_meta.1.try_into().expect("size not larger than 32 MB")];
+        let mut read_buff = vec![0u8; file_meta.1.try_into().expect("size not larger than 32 MB")];
+        let mut crypter = DracoonCrypto::encrypter(&mut crypto_buff)?;
+    
+        while let Some(chunk) = reader.read(&mut read_buff).await.ok() {
+            if chunk == 0 {
+                break;
+            }
+            crypter.update(&read_buff[..chunk])?;
+        }
+        crypter.finalize()?;
+    
+        //TODO: rewrite without buffer clone
+        let enc_bytes = crypter.get_message().to_owned();
+
+        assert_eq!(enc_bytes.len() as u64, file_meta.1);
+
+        let mut crypto_reader = BufReader::new(enc_bytes.as_slice());
+        let plain_file_key = crypter.get_plain_file_key();
+        let file_key = DracoonCrypto::encrypt_file_key(plain_file_key, keypair)?;
+
+        let (
+            classification,
+            timestamp_creation,
+            timestamp_modification,
+            expiration,
+            resolution_strategy,
+            keep_share_links,
+        ) = parse_upload_options(&file_meta, &upload_options);
+
+        let fm = file_meta.clone();
+
+        // create upload channel
+        let file_upload_req = CreateFileUploadRequest::builder(parent_node.id, fm.0)
+            .with_classification(classification)
+            .with_size(fm.1)
+            .with_timestamp_modification(timestamp_modification)
+            .with_timestamp_creation(timestamp_creation)
+            .with_expiration(expiration)
+            .build();
+
+        let upload_channel = <Dracoon<Connected> as UploadInternal<R>>::create_upload_channel::<
+            '_,
+            '_,
+        >(self, file_upload_req)
+        .await?;
+
+        let fm = &file_meta.clone();
+        let mut s3_parts = Vec::new();
+
+        let (count_urls, last_chunk_size) = calculate_s3_url_count(fm.1, chunk_size as u64);
+        let mut url_part: u32 = 1;
+
+        let cloneable_callback = callback.map(CloneableUploadProgressCallback::new);
+
+        if count_urls > 1 {
+            while url_part < count_urls {
+                let mut buffer = vec![0; chunk_size];
+
+                match crypto_reader.read_exact(&mut buffer).await {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        let chunk_len = n;
+                        buffer.truncate(chunk_len);
+                        let chunk = bytes::Bytes::from(buffer);
+
+                        let stream: async_stream::__private::AsyncStream<
+                            Result<bytes::Bytes, std::io::Error>,
+                            _,
+                        > = async_stream::stream! {
+                            yield Ok(chunk);
+                        };
+
+                        let url_req = GeneratePresignedUrlsRequest::new(
+                            chunk_len.try_into().expect("size not larger than 32 MB"),
+                            url_part,
+                            url_part,
+                        );
+                        let url =
+                            <Dracoon<Connected> as UploadInternal<R>>::create_s3_upload_urls::<
+                                '_,
+                                '_,
+                            >(
+                                self, upload_channel.upload_id.clone(), url_req
+                            )
+                            .await?;
+                        let url = url.urls.first().expect("Creating S3 url failed");
+
+                        let curr_pos: u64 = ((url_part - 1) * (chunk_size as u32)) as u64;
+
+                        let e_tag = upload_stream_to_s3(
+                            Box::pin(stream),
+                            url,
+                            file_meta.clone(),
+                            chunk_len,
+                            Some(curr_pos),
+                            cloneable_callback.clone(),
+                        )
+                        .await?;
+
+                        s3_parts.push(S3FileUploadPart::new(url_part, e_tag));
+                        url_part += 1;
+                    }
+                    Err(err) => {
+                        println!("Error reading buffer: {}", err);
+                        return Err(DracoonClientError::IoError);
+                    }
+                    
+                }
+            }
+        }
+
+        assert_eq!(url_part, count_urls);
+        println!("Last chunk size: {}", last_chunk_size);
+        println!("File size: {}", file_meta.1);
+
+        // upload last chunk
+        let mut buffer = vec![
+            0;
+            last_chunk_size
+                .try_into()
+                .expect("size not larger than 32 MB")
+        ];
+        match crypto_reader.read_exact(&mut buffer).await {
+            Ok(0) => unreachable!("last chunk is empty"),
+            Ok(n) => {
+                buffer.truncate(n);
+                let chunk = bytes::Bytes::from(buffer);
+                let stream: async_stream::__private::AsyncStream<
+                    Result<bytes::Bytes, std::io::Error>,
+                    _,
+                > = async_stream::stream! {
+                    // TODO: chunk stream for better progress
+                    yield Ok(chunk);
+                 
+                };
+
+                let url_req = GeneratePresignedUrlsRequest::new(
+                    n.try_into().expect("size not larger than 32 MB"),
+                    url_part,
+                    url_part,
+                );
+                let url =
+                    <Dracoon<Connected> as UploadInternal<R>>::create_s3_upload_urls::<'_, '_>(
+                        self,
+                        upload_channel.upload_id.clone(),
+                        url_req,
+                    )
+                    .await?;
+                let url = url.urls.first().expect("Creating S3 url failed");
+
+                let curr_pos: u64 = ((url_part - 1) * (CHUNK_SIZE as u32)) as u64;
+
+                let e_tag = upload_stream_to_s3(
+                    Box::pin(stream),
+                    url,
+                    file_meta.clone(),
+                    n,
+                    Some(curr_pos),
+                    cloneable_callback.clone(),
+                )
+                .await?;
+
+                s3_parts.push(S3FileUploadPart::new(url_part, e_tag));
+            }
+            
+                Err(err) => {
+                    println!("Error reading buffer: {}", err);
+                    return Err(DracoonClientError::IoError);
+                }
+    
+        }
+
+        // finalize upload
+        let complete_upload_req = CompleteS3FileUploadRequest::builder(s3_parts)
+            .with_resolution_strategy(resolution_strategy)
+            .with_keep_share_links(keep_share_links)
+            .with_file_key(file_key)
+            .build();
+
+        <Dracoon<Connected> as UploadInternal<R>>::finalize_upload::<'_, '_>(
+            self,
+            upload_channel.upload_id.clone(),
+            complete_upload_req,
+        )
+        .await?;
+
+        // get upload status
+        // return node if upload is done
+        // return error if upload failed
+        // polling with exponential backoff
+        let mut sleep_duration = POLLING_START_DELAY;
+        loop {
+            let status_response = <Dracoon<Connected> as UploadInternal<R>>::get_upload_status(
+                self,
+                upload_channel.upload_id.clone(),
+            )
+            .await?;
+
+            match status_response.status {
+                S3UploadStatus::Done => {
+                    return Ok(status_response
+                        .node
+                        .expect("Node must be set if status is done"));
+                }
+                S3UploadStatus::Error => {
+                    return Err(DracoonClientError::Http(
+                        status_response
+                            .error_details
+                            .expect("Error message must be set if status is error"),
+                    ));
+                }
+                _ => {
+                    tokio::time::sleep(Duration::from_millis(sleep_duration)).await;
+                    sleep_duration *= 2;
+                }
+            }
+        }
     }
 }
 /// helper to parse upload options (file meta and upload options)

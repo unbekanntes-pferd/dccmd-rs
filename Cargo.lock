@@ -367,7 +367,7 @@ dependencies = [
 [[package]]
 name = "dco3_crypto"
 version = "0.5.0"
-source = "git+https://github.com/unbekanntes-pferd/dco3-crypto?branch=features/0.5.0#5322f57965b1c6cf12ad8cba2f43c96389e981cb"
+source = "git+https://github.com/unbekanntes-pferd/dco3-crypto?branch=features/0.5.0#1d5995d851e19ea74642e9f90252366d02ce021b"
 dependencies = [
  "log",
  "openssl",

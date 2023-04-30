@@ -184,6 +184,7 @@ async fn download_container(
 
 pub async fn upload(source: PathBuf, target: String, overwrite: bool, classification: Option<u8>) -> Result<(), DcCmdError> {
     let mut dracoon = init_dracoon(&target).await?;
+    
 
     let parent_node = dracoon.get_node_from_path(&target).await?;
 
