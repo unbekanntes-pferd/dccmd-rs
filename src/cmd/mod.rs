@@ -35,6 +35,8 @@ pub mod credentials;
 pub mod models;
 pub mod utils;
 
+const DEFAULT_CHUNK_SIZE: usize = 1024 * 1024 * 5; // 5 MB
+
 pub async fn download(source: String, target: String) -> Result<(), DcCmdError> {
     debug!("Downloading {} to {}", source, target);
     let mut dracoon = init_dracoon(&source).await?;
@@ -182,6 +184,7 @@ async fn download_container(
 
 pub async fn upload(source: PathBuf, target: String, overwrite: bool, classification: Option<u8>) -> Result<(), DcCmdError> {
     let mut dracoon = init_dracoon(&target).await?;
+    
 
     let parent_node = dracoon.get_node_from_path(&target).await?;
 
@@ -200,8 +203,7 @@ pub async fn upload(source: PathBuf, target: String, overwrite: bool, classifica
     let file_meta = file.metadata().await.or(Err(DcCmdError::IoError))?;
 
     if !file_meta.is_file() {
-        // TODO: FIX correct path output
-        return Err(DcCmdError::InvalidPath("some string".to_string()));
+        return Err(DcCmdError::InvalidPath(source.to_string_lossy().to_string()));
     }
 
     let file_name = source
@@ -268,6 +270,7 @@ pub async fn upload(source: PathBuf, target: String, overwrite: bool, classifica
             progress_bar_mv.set_length(total);
             progress_bar_mv.set_position(progress);
         })),
+        Some(DEFAULT_CHUNK_SIZE)
     ).await?;
 
     progress_bar.finish_with_message(format!("Upload of {file_name} complete"));

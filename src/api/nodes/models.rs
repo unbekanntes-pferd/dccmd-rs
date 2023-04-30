@@ -18,18 +18,22 @@ use dco3_crypto::FileKey;
 use reqwest::{Response, StatusCode};
 use serde::{Deserialize, Serialize};
 
-/// A callback function that is called after each chunk is processed (upload and download)
-pub type ProgressCallback = Box<dyn FnMut(u64, u64) + Send + Sync>;
+/// A callback function that is called after each chunk is processed (download)
+pub type DownloadProgressCallback = Box<dyn FnMut(u64, u64) + Send + Sync>;
 
-pub struct CloneableProgressCallback(Arc<Mutex<Box<dyn FnMut(u64, u64) + Send + Sync>>>);
+/// A callback function that is called after each chunk is processed (upload)
+pub type UploadProgressCallback = Box<dyn FnMut(u64, u64) + Send + Sync>;
 
-impl Clone for CloneableProgressCallback {
+/// A callback function (thread-safe) that can be cloned and called from multiple threads (upload)
+pub struct CloneableUploadProgressCallback(Arc<Mutex<UploadProgressCallback>>);
+
+impl Clone for CloneableUploadProgressCallback {
     fn clone(&self) -> Self {
         Self(self.0.clone())
     }
 }
 
-impl CloneableProgressCallback {
+impl CloneableUploadProgressCallback {
     pub fn new<F>(callback: F) -> Self
     where
         F: 'static + FnMut(u64, u64) + Send + Sync,
@@ -37,9 +41,8 @@ impl CloneableProgressCallback {
         Self(Arc::new(Mutex::new(Box::new(callback))))
     }
 
-    pub fn call(&self, done: u64, total: u64) {
-        let mut callback = self.0.lock().unwrap();
-        callback(done, total);
+    pub fn call(&self, bytes_read: u64, total_size: u64) {
+        (self.0.lock().unwrap())(bytes_read, total_size);
     }
 }
 
