@@ -39,6 +39,7 @@ Currently, the following commands are working:
 - `upload` - uploads a file to a parent in DRACOON (encrypted, unencrypted)
 - `ls` - lists all nodes for a given path in DRACOON
 - `mkdir` - creates a folder in given path in DRACOON
+- `mkroom` - creates a room (inherits permissions) in given path in DRACOON
 - `rm` - removes a node by given path in DRACOON
 
 ## What is not working?
@@ -103,3 +104,12 @@ To create folders, use the `mkdir` command:
 dccmd mkdir your.dracoon.domain/some/path/newfolder
 
 ```
+
+
+To create rooms, use the `mkroom` command:
+
+```
+dccmd mkroom your.dracoon.domain/some/path/newfolder
+
+```
+*Note*: Rooms can currently only be created as inheriting permissions from parent.
