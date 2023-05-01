@@ -185,6 +185,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[ignore = "does not work without a terminal"]
     fn test_format_success_message() {
         let message = "All good here.";
         assert_eq!(
@@ -194,6 +195,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "does not work without a terminal"]
     fn test_format_error_message() {
         let message = "We have a problem.";
         assert_eq!(
