@@ -4,17 +4,31 @@
 use clap::Parser;
 use cmd::{
     create_folder, delete_node, download, get_nodes, handle_error,
-    models::{DcCmd, DcCmdCommand}, upload,
+    models::{DcCmd, DcCmdCommand}, upload, create_room,
 };
 use console::Term;
+use tracing::metadata::LevelFilter;
+use tracing_subscriber::{filter::EnvFilter, prelude::*, fmt};
 
 mod api;
 mod cmd;
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt::init();
+
     let opt = DcCmd::parse();
+
+    let env_filter = if opt.debug {
+        EnvFilter::from_default_env().add_directive(LevelFilter::DEBUG.into())
+    } else {
+        EnvFilter::from_default_env()
+    };
+
+    tracing_subscriber::registry()
+    .with(fmt::layer())
+    .with(env_filter)
+    .init();
+
 
     let term = Term::stdout();
     let err_term = Term::stderr();
@@ -28,6 +42,8 @@ async fn main() {
             human_readable,
             managed,
             all,
+            offset,
+            limit
         } => {
             get_nodes(
                 term,
@@ -36,6 +52,8 @@ async fn main() {
                 Some(human_readable),
                 Some(managed),
                 Some(all),
+                offset,
+                limit,
             )
             .await
         }
@@ -44,7 +62,7 @@ async fn main() {
             classification,
             notes,
         } => create_folder(term, source, classification, notes).await,
-        DcCmdCommand::Mkroom { source } => Ok(println!("Creating room {source}")),
+        DcCmdCommand::Mkroom { source, classification } => create_room(term, source, classification).await,
         DcCmdCommand::Rm { source, recursive } => delete_node(term, source, Some(recursive)).await,
     };
 

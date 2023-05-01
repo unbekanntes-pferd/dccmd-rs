@@ -29,6 +29,11 @@ pub const NODES_DOWNLOAD_URL: &str = "downloads";
 pub const NODES_SEARCH: &str = "search";
 pub const MISSING_FILE_KEYS: &str = "missingFileKeys";
 pub const FILES_KEYS: &str = "keys";
+pub const ROOMS_BASE: &str = "rooms";
+pub const ROOMS_CONFIG: &str = "config";
+pub const ROOMS_ENCRYPT: &str = "encrypt";
+pub const ROOMS_USERS: &str = "users";
+pub const ROOMS_GROUPS: &str = "groups";
 
 
 /// DEFAULTS

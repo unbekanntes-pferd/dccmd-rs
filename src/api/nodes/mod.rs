@@ -1,6 +1,13 @@
-use self::models::{
-    CreateFolderRequest, FileMeta, Node, NodeList, DownloadProgressCallback, TransferNodesRequest,
-    UpdateFolderRequest, UploadOptions, UploadProgressCallback,
+use self::{
+    models::{
+        CreateFolderRequest, DownloadProgressCallback, FileMeta, Node, NodeList,
+        TransferNodesRequest, UpdateFolderRequest, UploadOptions, UploadProgressCallback,
+    },
+    rooms::models::{
+        ConfigRoomRequest, CreateRoomRequest, EncryptRoomRequest, RoomGroupList,
+        RoomGroupsAddBatchRequest, RoomGroupsDeleteBatchRequest, RoomUserList,
+        RoomUsersAddBatchRequest, RoomUsersDeleteBatchRequest, UpdateRoomRequest,
+    },
 };
 use super::{auth::errors::DracoonClientError, models::ListAllParams};
 use async_trait::async_trait;
@@ -76,35 +83,64 @@ pub trait Folders {
 
 #[async_trait]
 pub trait Rooms {
-    async fn create_room(&self, parent_id: u64, name: &str) -> Result<Node, DracoonClientError>;
+    async fn create_room(
+        &self,
+        create_room_req: CreateRoomRequest,
+    ) -> Result<Node, DracoonClientError>;
 
-    async fn update_room(&self, node_id: u64, name: &str) -> Result<Node, DracoonClientError>;
+    async fn update_room(
+        &self,
+        room_id: u64,
+        update_room_req: UpdateRoomRequest,
+    ) -> Result<Node, DracoonClientError>;
 
-    async fn config_room(&self, node_id: u64, name: &str) -> Result<Node, DracoonClientError>;
+    async fn config_room(
+        &self,
+        room_id: u64,
+        config_room_req: ConfigRoomRequest,
+    ) -> Result<Node, DracoonClientError>;
 
-    async fn encrypt_room(&self, node_id: u64, name: &str) -> Result<Node, DracoonClientError>;
+    async fn encrypt_room(
+        &self,
+        room_id: u64,
+        encrypt_room_req: EncryptRoomRequest,
+    ) -> Result<Node, DracoonClientError>;
 
-    async fn get_room_groups(&self, node_id: u64) -> Result<Node, DracoonClientError>;
+    async fn get_room_groups(
+        &self,
+        room_id: u64,
+        params: Option<ListAllParams>,
+    ) -> Result<RoomGroupList, DracoonClientError>;
 
     async fn update_room_groups(
         &self,
-        node_id: u64,
-        name: &str,
-    ) -> Result<Node, DracoonClientError>;
+        room_id: u64,
+        room_groups_update_req: RoomGroupsAddBatchRequest,
+    ) -> Result<(), DracoonClientError>;
 
     async fn delete_room_groups(
         &self,
-        node_id: u64,
-        name: &str,
-    ) -> Result<Node, DracoonClientError>;
+        room_id: u64,
+        room_groups_del_req: RoomGroupsDeleteBatchRequest,
+    ) -> Result<(), DracoonClientError>;
 
-    async fn get_room_users(&self, node_id: u64) -> Result<Node, DracoonClientError>;
+    async fn get_room_users(
+        &self,
+        room_id: u64,
+        params: Option<ListAllParams>,
+    ) -> Result<RoomUserList, DracoonClientError>;
 
-    async fn update_room_users(&self, node_id: u64, name: &str)
-        -> Result<Node, DracoonClientError>;
+    async fn update_room_users(
+        &self,
+        room_id: u64,
+        room_users_update_req: RoomUsersAddBatchRequest,
+    ) -> Result<(), DracoonClientError>;
 
-    async fn delete_room_users(&self, node_id: u64, name: &str)
-        -> Result<Node, DracoonClientError>;
+    async fn delete_room_users(
+        &self,
+        room_id: u64,
+        room_users_del_req: RoomUsersDeleteBatchRequest,
+    ) -> Result<(), DracoonClientError>;
 }
 
 #[async_trait]
@@ -128,6 +164,6 @@ pub trait Upload<R: AsyncRead> {
         upload_options: UploadOptions,
         mut reader: BufReader<R>,
         mut callback: Option<UploadProgressCallback>,
-        chunk_size: Option<usize>
+        chunk_size: Option<usize>,
     ) -> Result<Node, DracoonClientError>;
 }

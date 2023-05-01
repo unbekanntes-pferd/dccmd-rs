@@ -37,7 +37,7 @@ impl Nodes for Dracoon<Connected> {
             .query_pairs_mut()
             .extend_pairs(params.limit.map(|v| ("limit", v.to_string())))
             .extend_pairs(params.offset.map(|v| ("offset", v.to_string())))
-            .extend_pairs(params.sort.map(|v| ("sort_by", v)))
+            .extend_pairs(params.sort.map(|v| ("sort", v)))
             .extend_pairs(params.filter.map(|v| ("filter", v)))
             .extend_pairs(room_manager.map(|v| ("room_manager", v.to_string())))
             .extend_pairs(parent_id.map(|v| ("parent_id", v.to_string())))

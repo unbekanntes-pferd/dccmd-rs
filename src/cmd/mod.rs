@@ -4,15 +4,13 @@ use console::Term;
 use dialoguer::Confirm;
 use futures_util::future::join_all;
 use indicatif::{ProgressBar, ProgressStyle};
+use keyring::Entry;
 use tracing::debug;
 
 use self::{
-    credentials::{get_dracoon_crypto_env, get_dracoon_env, set_dracoon_crypto_env},
-    models::DcCmdError,
-    utils::{
-        dates::to_datetime_utc,
-        strings::{format_error_message, format_success_message},
-    },
+    credentials::{get_dracoon_env, set_dracoon_env},
+    models::DcCmdError, utils::{dates::to_datetime_utc, strings::{format_error_message, format_success_message}},
+   
 };
 use crate::{
     api::{
@@ -21,12 +19,11 @@ use crate::{
         models::ListAllParams,
         nodes::{
             models::{CreateFolderRequest, FileMeta, Node, NodeType, UploadOptions, ResolutionStrategy},
-            Download, Folders, Nodes, Upload,
+            Download, Folders, Nodes, Upload, rooms::models::CreateRoomRequest, Rooms,
         },
         Dracoon, DracoonBuilder,
     },
     cmd::{
-        credentials::set_dracoon_env,
         utils::strings::{build_node_path, parse_node_path, print_node},
     },
 };
@@ -36,6 +33,8 @@ pub mod models;
 pub mod utils;
 
 const DEFAULT_CHUNK_SIZE: usize = 1024 * 1024 * 5; // 5 MB
+// service name to store
+const SERVICE_NAME: &str = env!("CARGO_PKG_NAME");
 
 pub async fn download(source: String, target: String) -> Result<(), DcCmdError> {
     debug!("Downloading {} to {}", source, target);
@@ -282,8 +281,15 @@ pub async fn upload(source: PathBuf, target: String, overwrite: bool, classifica
 async fn init_encryption(
     mut dracoon: Dracoon<Connected>,
 ) -> Result<Dracoon<Connected>, DcCmdError> {
+
+    let account = format!("{}-crypto", dracoon.get_base_url());
+
+    let entry = Entry::new(SERVICE_NAME, &account).map_err(|_|
+    DcCmdError::CredentialStorageFailed)?;
+
+
     let (secret, store) =
-        if let Ok(secret) = get_dracoon_crypto_env(dracoon.get_base_url().as_ref()) {
+        if let Ok(secret) = get_dracoon_env(&entry) {
             (secret, false)
         } else {
             let secret = dialoguer::Password::new()
@@ -296,12 +302,13 @@ async fn init_encryption(
     let keypair = dracoon.get_keypair(Some(&secret)).await?;
 
     if store {
-        set_dracoon_crypto_env(dracoon.get_base_url().as_ref(), &secret)?;
+        set_dracoon_env(&entry, &secret)?;
     }
 
     Ok(dracoon)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn get_nodes(
     term: Term,
     source: String,
@@ -309,7 +316,13 @@ pub async fn get_nodes(
     human_readable: Option<bool>,
     managed: Option<bool>,
     all: Option<bool>,
+    offset: Option<u32>,
+    limit: Option<u32>,
 ) -> Result<(), DcCmdError> {
+
+    let offset = offset.unwrap_or(0);
+    let limit = limit.unwrap_or(500);
+
     debug!("Fetching node list from {}", source);
     let dracoon = init_dracoon(&source).await?;
 
@@ -326,7 +339,13 @@ pub async fn get_nodes(
     let node_list = if parent_path.as_str() == "/" {
         // this is the root node
         debug!("Fetching root node list");
-        let mut node_list = dracoon.get_nodes(None, managed, None).await?;
+
+        let params = ListAllParams::builder()
+            .with_offset(offset.into())
+            .with_limit(limit.into())
+            .build();
+
+        let mut node_list = dracoon.get_nodes(None, managed, Some(params)).await?;
 
         if all && node_list.range.total > 500 {
             let mut offset = 500;
@@ -364,7 +383,13 @@ pub async fn get_nodes(
                 return Err(DcCmdError::InvalidPath(source.clone()))
             };
 
-        let mut node_list = dracoon.get_nodes(Some(node.id), managed, None).await?;
+        let params = ListAllParams::builder()
+            .with_offset(offset.into())
+            .with_limit(limit.into())
+            .build();
+
+
+        let mut node_list = dracoon.get_nodes(Some(node.id), managed, Some(params)).await?;
 
         if all && node_list.range.total > 500 {
             let mut offset = 500;
@@ -418,7 +443,11 @@ async fn init_dracoon(url_path: &str) -> Result<Dracoon<Connected>, DcCmdError> 
         .with_client_secret(client_secret)
         .build()?;
 
-    let dracoon = if let Ok(refresh_token) = get_dracoon_env(&base_url) {
+    let entry = Entry::new(SERVICE_NAME, base_url.as_str()).map_err(|_| {
+        DcCmdError::CredentialStorageFailed
+    })?;
+
+    let dracoon = if let Ok(refresh_token) = get_dracoon_env(&entry) {
          
             dracoon
                 .connect(OAuth2Flow::RefreshToken(refresh_token))
@@ -437,7 +466,7 @@ async fn init_dracoon(url_path: &str) -> Result<Dracoon<Connected>, DcCmdError> 
                 .connect(OAuth2Flow::AuthCodeFlow(auth_code.trim_end().into()))
                 .await?;
 
-            set_dracoon_env(&base_url, dracoon.get_refresh_token())?;
+            set_dracoon_env(&entry, dracoon.get_refresh_token())?;
 
             dracoon
         };
@@ -584,6 +613,40 @@ pub async fn create_folder(
         .expect("Error writing message to terminal.");
 
     Ok(())
+}
+
+pub async fn create_room(term: Term, source: String, classification: Option<u8>) -> Result<(), DcCmdError> {
+    let dracoon = init_dracoon(&source).await?;
+    let (parent_path, node_name, _) =
+        parse_node_path(&source, dracoon.get_base_url().as_ref())?;
+
+    let parent_node = dracoon
+        .get_node_from_path(&parent_path)
+        .await?
+        .ok_or(DcCmdError::InvalidPath(source.clone()))?;
+
+    if parent_node.node_type != NodeType::Room {
+
+        return Err(DcCmdError::InvalidPath(source.clone()));
+    }
+
+    let classification = classification.unwrap_or(2);
+
+    let req = CreateRoomRequest::builder(&node_name.clone())
+    .with_parent_id(parent_node.id)
+    .with_classification(classification)
+    .with_inherit_permissions(true)
+    .build();
+
+    let room = dracoon.create_room(req).await?;
+
+    let msg = format!("Room {node_name} created.");
+    let msg = format_success_message(&msg);
+    term.write_line(&msg)
+        .expect("Error writing message to terminal.");
+
+    Ok(())
+
 }
 #[cfg(test)]
 mod tests {

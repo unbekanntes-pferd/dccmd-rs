@@ -72,11 +72,10 @@ pub enum DcCmdCommand {
         /// Overwrite existing file in DRACOON
         #[clap(long)]
         overwrite: bool,
-        
+
         /// classification of the node (1-4)
         #[clap(long)]
         classification: Option<u8>,
-
     },
     /// download a file from DRACOON to target
     Download {
@@ -93,24 +92,32 @@ pub enum DcCmdCommand {
         #[clap(short, long)]
         long: bool,
 
-         /// human readable node size
+        /// human readable node size
         #[clap(short = 'r', long)]
         human_readable: bool,
+
+        /// skip n nodes (default offset: 0)
+        #[clap(short, long)]
+        offset: Option<u32>,
+
+        /// limit n nodes (default limit: 500)
+        #[clap(long)]
+        limit: Option<u32>,
 
         /// Display nodes as room manager / room admin
         #[clap(long)]
         managed: bool,
-        
+
         /// fetch all nodes (default: 500)
         #[clap(long)]
         all: bool,
     },
-    
+
     /// Create a folder in DRACOON
     Mkdir {
         /// Source file path in DRACOON
         source: String,
-        
+
         /// classification of the node (1-4)
         #[clap(long)]
         classification: Option<u8>,
@@ -119,18 +126,22 @@ pub enum DcCmdCommand {
         #[clap(long)]
         notes: Option<String>,
     },
-    
-    /// Create a room in DRACOON
+
+    /// Create a room in DRACOON (inhherits permissions from parent)
     Mkroom {
         /// Source file path in DRACOON
         source: String,
+
+        /// classification of the node (1-4)
+        #[clap(long)]
+        classification: Option<u8>,
     },
 
     /// Delete a node in DRACOON
     Rm {
         /// Source file path in DRACOON
         source: String,
-        
+
         /// recursive delete (mandatory for rooms / folders)
         #[clap(short, long)]
         recursive: bool,

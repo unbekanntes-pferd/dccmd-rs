@@ -19,6 +19,8 @@ use dco3_crypto::PublicKeyContainer;
 use reqwest::{Response, StatusCode};
 use serde::{Deserialize, Serialize};
 
+use super::rooms::models::NodePermissionsBuilder;
+
 /// A callback function that is called after each chunk is processed (download)
 pub type DownloadProgressCallback = Box<dyn FnMut(u64, u64) + Send + Sync>;
 
@@ -239,17 +241,23 @@ pub enum NodeType {
 #[serde(rename_all = "camelCase")]
 #[allow(clippy::struct_excessive_bools)]
 pub struct NodePermissions {
-    manage: bool,
-    read: bool,
-    create: bool,
-    change: bool,
-    delete: bool,
-    manage_download_share: bool,
-    manage_upload_share: bool,
-    read_recycle_bin: bool,
-    restore_recycle_bin: bool,
-    delete_recycle_bin: bool,
+    pub manage: bool,
+    pub read: bool,
+    pub create: bool,
+    pub change: bool,
+    pub delete: bool,
+    pub manage_download_share: bool,
+    pub manage_upload_share: bool,
+    pub read_recycle_bin: bool,
+    pub restore_recycle_bin: bool,
+    pub delete_recycle_bin: bool,
 
+}
+
+impl NodePermissions {
+    pub fn builder() -> NodePermissionsBuilder {
+        NodePermissionsBuilder::new()
+    }
 }
 
 impl ToString for NodePermissions {
