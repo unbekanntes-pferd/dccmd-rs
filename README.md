@@ -35,15 +35,15 @@ cargo build
 
 Currently, the following commands are working:
 
-- `download` - downloads a file to a desired file on disk (encrypted, unencrypted)
-- `ls` - lists all nodes for a given path
-- `mkdir` - creates a folder in given path
-- `rm` - removes a node by given path
+- `download` - downloads a file from DRACOON to a desired file on disk (encrypted, unencrypted)
+- `upload` - uploads a file to a parent in DRACOON (encrypted, unencrypted)
+- `ls` - lists all nodes for a given path in DRACOON
+- `mkdir` - creates a folder in given path in DRACOON
+- `rm` - removes a node by given path in DRACOON
 
 ## What is not working?
 
-- Upload is **not** implemented (APIs not ready)
-- Recursive download is not implemented
+- Recursive download / upload is not implemented
 
 ## Example usage
 
@@ -56,6 +56,16 @@ To download a file, use the download command:
 ```bash
 dccmd download your.dracoon.domain/some/room/some-file.pdf ./your/path/your-name.pdf
 ```
+
+### Uploads
+
+To upload a file, use the download command:
+
+```bash
+dccmd upload ./your/path/your-name.pdf your.dracoon.domain/some/room
+```
+
+**Note:** Currently, providing a custom name is not implemented.
 
 ### Listing nodes
 To list nodes, use the `ls` command:

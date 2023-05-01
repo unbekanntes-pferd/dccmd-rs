@@ -120,7 +120,7 @@ pub trait Download {
 
 #[async_trait]
 pub trait Upload<R: AsyncRead> {
-    /// Uploads a file (buffer reader) with given file meta info to the given parent node
+    /// Uploads a stream (buffered reader) with given file meta info to the given parent node
     async fn upload<'r>(
         &'r mut self,
         file_meta: FileMeta,

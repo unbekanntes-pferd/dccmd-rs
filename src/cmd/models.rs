@@ -61,54 +61,77 @@ pub struct DcCmd {
 
 #[derive(Parser)]
 pub enum DcCmdCommand {
+    /// Upload a file to DRACOON
     Upload {
+        /// Source file path
         source: String,
+
+        /// Target file path in DRACOON
         target: String,
 
+        /// Overwrite existing file in DRACOON
         #[clap(long)]
         overwrite: bool,
-
+        
+        /// classification of the node (1-4)
         #[clap(long)]
         classification: Option<u8>,
 
     },
+    /// download a file from DRACOON to target
     Download {
+        /// Source file path in DRACOON
         source: String,
+        /// Target file path
         target: String,
     },
     Ls {
+        /// Source file path in DRACOON
         source: String,
 
+        /// Print node information (details)
         #[clap(short, long)]
         long: bool,
 
+         /// human readable node size
         #[clap(short = 'r', long)]
         human_readable: bool,
 
+        /// Display nodes as room manager / room admin
         #[clap(long)]
         managed: bool,
-
+        
+        /// fetch all nodes (default: 500)
         #[clap(long)]
         all: bool,
     },
-
+    
+    /// Create a folder in DRACOON
     Mkdir {
+        /// Source file path in DRACOON
         source: String,
-
+        
+        /// classification of the node (1-4)
         #[clap(long)]
         classification: Option<u8>,
 
+        /// Notes
         #[clap(long)]
         notes: Option<String>,
     },
-
+    
+    /// Create a room in DRACOON
     Mkroom {
+        /// Source file path in DRACOON
         source: String,
     },
 
+    /// Delete a node in DRACOON
     Rm {
+        /// Source file path in DRACOON
         source: String,
-
+        
+        /// recursive delete (mandatory for rooms / folders)
         #[clap(short, long)]
         recursive: bool,
     },
