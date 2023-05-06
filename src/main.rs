@@ -3,8 +3,8 @@
 
 use clap::Parser;
 use cmd::{
-    create_folder, delete_node, download, get_nodes, handle_error,
-    models::{DcCmd, DcCmdCommand}, upload, create_room,
+    handle_error,
+    models::{DcCmd, DcCmdCommand}, nodes::{download::download, upload::upload, list_nodes, create_folder, create_room, delete_node},
 };
 use console::Term;
 use tracing::metadata::LevelFilter;
@@ -34,7 +34,7 @@ async fn main() {
     let err_term = Term::stderr();
 
     let res = match opt.cmd {
-        DcCmdCommand::Download { source, target } => download(source, target).await,
+        DcCmdCommand::Download { source, target, velocity } => download(source, target, velocity).await,
         DcCmdCommand::Upload { source, target, overwrite, classification } => upload(source.try_into().expect("Invalid path"), target, overwrite, classification).await,
         DcCmdCommand::Ls {
             source,
@@ -45,7 +45,7 @@ async fn main() {
             offset,
             limit
         } => {
-            get_nodes(
+            list_nodes(
                 term,
                 source,
                 Some(long),

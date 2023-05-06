@@ -2,17 +2,14 @@
 
 use async_trait::async_trait;
 use reqwest::header;
-use tracing::debug;
+use tracing::{debug, error};
 
-use crate::{
-    api::{
-        auth::{errors::DracoonClientError, Connected},
-        constants::{DRACOON_API_PREFIX, NODES_BASE, NODES_COPY, NODES_MOVE, NODES_SEARCH},
-        models::ListAllParams,
-        utils::FromResponse,
-        Dracoon,
-    },
-    cmd::utils::strings::parse_node_path,
+use crate::api::{
+    auth::{errors::DracoonClientError, Connected},
+    constants::{DRACOON_API_PREFIX, NODES_BASE, NODES_COPY, NODES_MOVE, NODES_SEARCH},
+    models::ListAllParams,
+    utils::FromResponse,
+    Dracoon,
 };
 
 use super::{
@@ -60,13 +57,10 @@ impl Nodes for Dracoon<Connected> {
 
         debug!("Looking up node - path: {}", path);
 
-        let base_url = self.client.get_base_url().to_string();
-        let base_url = base_url.trim_start_matches("https://");
-        let base_url = base_url.trim_end_matches('/');
-
-        debug!("Base url: {}", base_url);
-        let (parent_path, name, depth) = parse_node_path(path, base_url)
-            .or(Err(DracoonClientError::InvalidUrl(base_url.to_string())))?;
+        let (parent_path, name, depth) = parse_node_path(path).map_err(|_| {
+            error!("Failed to parse path: {}", path);
+            DracoonClientError::InvalidPath(path.to_string())
+        })?;
 
         debug!("Looking up node - parent_path: {}", parent_path);
         debug!("Parsed name: {}", name);
@@ -245,5 +239,79 @@ impl Nodes for Dracoon<Connected> {
             .await?;
 
         Node::from_response(response).await
+    }
+}
+
+type ParsedPath = (String, String, u64);
+pub fn parse_node_path(path: &str) -> Result<ParsedPath, DracoonClientError> {
+    if path == "/" {
+        return Ok((String::from("/"), String::new(), 0));
+    }
+    
+    let path_parts: Vec<&str> = path.trim_end_matches('/').split('/').collect();
+    let name = String::from(*path_parts.last().ok_or(DracoonClientError::InvalidPath(path.to_string()))?);
+    let parent_path = format!("{}/", path_parts[..path_parts.len() - 1].join("/"));
+    let depth = path_parts.iter().count().checked_sub(2).unwrap_or(0) as u64; 
+    
+    Ok((parent_path, name, depth))
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_folder_path() {
+        let path = "/test/folder/";
+        let (parent_path, name, depth) = parse_node_path(path).unwrap();
+        assert_eq!("/test/", parent_path);
+        assert_eq!("folder", name);
+        assert_eq!(1, depth);
+    }
+
+    #[test]
+    fn test_parse_folder_path_deep() {
+        let path = "/test/folder/sub1/";
+        let (parent_path, name, depth) = parse_node_path(path).unwrap();
+        assert_eq!("/test/folder/", parent_path);
+        assert_eq!("sub1", name);
+        assert_eq!(2, depth);
+    }
+
+    #[test]
+    fn test_parse_folder_path_deeper() {
+        let path = "/test/folder/sub1/sub2/sub3/";
+        let (parent_path, name, depth) = parse_node_path(path).unwrap();
+        assert_eq!("/test/folder/sub1/sub2/", parent_path);
+        assert_eq!("sub3", name);
+        assert_eq!(4, depth);
+    }
+
+    #[test]
+    fn test_parse_folder_path_no_trail_slash() {
+        let path = "/test/folder";
+        let (parent_path, name, depth) = parse_node_path(path).unwrap();
+        assert_eq!("/test/", parent_path);
+        assert_eq!("folder", name);
+        assert_eq!(1, depth);
+    }
+
+    #[test]
+    fn test_file_path() {
+        let path = "/test/folder/file.txt";
+        let (parent_path, name, depth) = parse_node_path(path).unwrap();
+        assert_eq!("/test/folder/", parent_path);
+        assert_eq!("file.txt", name);
+        assert_eq!(2, depth);
+    }
+
+    #[test]
+    fn test_root_path() {
+        let path = "/";
+        let (parent_path, name, depth) = parse_node_path(path).unwrap();
+        assert_eq!("/", parent_path);
+        assert_eq!("", name);
+        assert_eq!(0, depth);
     }
 }

@@ -24,7 +24,7 @@ serde-xml-rs = "0.6.0"
 indicatif = "0.17.3"
 console = "0.15.5"
 dialoguer = "0.10.4"
-dco3_crypto = { git = "https://github.com/unbekanntes-pferd/dco3-crypto", branch = "features/0.5.0" }
+dco3_crypto = "0.5.0"
 tokio-util = { version = "0.7.7", features = ["full"] }
 async-stream = "0.3.5"
 bytes = "1.4.0"

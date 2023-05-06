@@ -17,6 +17,8 @@ pub enum DracoonClientError {
     MissingBaseUrl,
     #[error("Invalid DRACOON url")]
     InvalidUrl(String),
+    #[error("Invalid DRACOON path")]
+    InvalidPath(String),
     #[error("Connection to DRACOON failed")]
     ConnectionFailed,
     #[error("Unknown error")]

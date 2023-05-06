@@ -174,8 +174,31 @@ pub struct NodeList {
     pub items: Vec<Node>,
 }
 
+impl NodeList {
+    pub fn get_files(self) -> Vec<Node> {
+        self.items
+            .into_iter()
+            .filter(|node| node.node_type == NodeType::File)
+            .collect()
+    }
+
+    pub fn get_folders(self) -> Vec<Node> {
+        self.items
+            .into_iter()
+            .filter(|node| node.node_type == NodeType::Folder)
+            .collect()
+    }
+
+    pub fn get_rooms(self) -> Vec<Node> {
+        self.items
+            .into_iter()
+            .filter(|node| node.node_type == NodeType::Room)
+            .collect()
+    }
+}
+
 /// A node in DRACOON - GET /nodes/{nodeId}
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Node {
     pub id: u64,
@@ -186,6 +209,7 @@ pub struct Node {
     pub timestamp_creation: Option<String>,
     pub timestamp_modification: Option<String>,
     pub parent_id: Option<u64>,
+    pub parent_path: Option<String>,
     pub created_at: Option<String>,
     pub created_by: Option<UserInfo>,
     pub updated_at: Option<String>,
@@ -226,7 +250,7 @@ impl FromResponse for Node {
 }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub enum NodeType {
     #[serde(rename = "room")]
     Room,
@@ -237,7 +261,7 @@ pub enum NodeType {
 }
 
 /// DRACOOON node permissions
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 #[allow(clippy::struct_excessive_bools)]
 pub struct NodePermissions {
@@ -291,7 +315,7 @@ impl ToString for NodePermissions {
 }
 
 /// DRACOOON encryption info (rescue keys)
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct EncryptionInfo {
     user_key_state: String,
@@ -300,7 +324,7 @@ pub struct EncryptionInfo {
 }
 
 /// DRACOON user info on nodes (`created_by`, `updated_by`)
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct UserInfo {
     pub id: u64,

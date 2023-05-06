@@ -27,10 +27,13 @@ pub enum OAuth2Flow {
 }
 
 /// represents possible states for the `DracoonClient`
+#[derive(Debug, Clone)]
 pub struct Connected;
+#[derive(Debug, Clone)]
 pub struct Disconnected;
 
 /// represents a connection to DRACOON (`OAuth2` tokens)
+#[derive(Debug, Clone)]
 pub struct Connection {
     pub access_token: String,
     pub refresh_token: String,
@@ -38,6 +41,7 @@ pub struct Connection {
     pub connected_at: DateTime<Utc>,
 }
 
+#[derive(Clone)]
 /// represents the DRACOON client (stateful)
 pub struct DracoonClient<State = Disconnected> {
     base_url: Url,

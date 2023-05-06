@@ -83,6 +83,9 @@ pub enum DcCmdCommand {
         source: String,
         /// Target file path
         target: String,
+
+        #[clap(long, short)]
+        velocity: Option<usize>
     },
     Ls {
         /// Source file path in DRACOON

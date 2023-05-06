@@ -5,6 +5,7 @@ use crate::{
 
 use chrono::{DateTime, Utc};
 use console::{style, Term};
+use tracing::{debug, trace};
 
 const ERROR_PREFIX: &str = "Error: ";
 const SUCCESS_PREFIX: &str = "Success: ";
@@ -134,8 +135,43 @@ fn to_readable_size(size: u64) -> String {
 }
 
 type ParsedPath = (String, String, u64);
-pub fn parse_node_path(path: &str, base_url: &str) -> Result<ParsedPath, DcCmdError> {
-    let path = path.trim_start_matches(base_url);
+pub fn parse_path(path: &str, base_url: &str) -> Result<ParsedPath, DcCmdError> {
+    let base_url = base_url.trim_start_matches("https://");
+    let path = path.trim_start_matches(&base_url);
+    let path = path.trim_start_matches("/");
+
+    debug!("path: {}", path);
+
+    if path == "/" {
+        return Ok((String::from("/"), String::new(), 0));
+    }
+    
+    let path_parts: Vec<&str> = path.trim_end_matches('/').split('/').collect();
+    debug!("path_parts: {:?}", path_parts);
+    let name = String::from(*path_parts.last().ok_or(DcCmdError::InvalidPath(path.to_string()))?);
+    let mut parent_path = format!("/{}/", path_parts[..path_parts.len() - 1].join("/"));
+    let depth = path_parts.iter().count().checked_sub(1).unwrap_or(0) as u64; 
+
+    debug!("parent_path: {}", parent_path);
+    debug!("name: {}", name);
+    debug!("depth: {}", depth);
+
+    if parent_path == "//".to_owned() {
+        if let Some((prefix, _)) = parent_path.rsplit_once('/') {
+        parent_path = prefix.to_owned();
+    }
+}
+
+    Ok((parent_path, name, depth))
+}
+
+
+pub fn parse_niode_path(path: &str, base_url: &str) -> Result<ParsedPath, DcCmdError> {
+    
+    let base_url = base_url.trim_start_matches("https://");
+    let path = path.trim_start_matches(&base_url);
+
+    debug!("path: {}", path);
 
     if path == "/" {
         return Ok((String::from("/"), String::new(), 0));
@@ -144,13 +180,19 @@ pub fn parse_node_path(path: &str, base_url: &str) -> Result<ParsedPath, DcCmdEr
     let (parent_path, name, depth) = if path.ends_with('/') {
         // this is a container (folder or room)
          
-            let path = path.trim_end_matches('/');
+     
+            debug!("path: {}", path);
             let path = path.split('/').collect::<Vec<&str>>();
+            debug!("path: {:?}", path);
             let name = (*path.last().ok_or(DcCmdError::InvalidPath(path.clone().join("/")))?).to_string();
+            debug!("name: {}", name);
             let parent_path = path[..path.len() - 1].join("/");
+            debug!("parent_path: {}", parent_path);
             let parent_path = format!("{parent_path}/");
-            let parent_path = parent_path.trim_start_matches(base_url).to_string();
-            let depth = path.len() as u64 - 1;
+            debug!("parent_path: {}", parent_path);
+            let parent_path = parent_path.trim_start_matches(&base_url).to_string();
+            debug!("parent_path: {}", parent_path);
+            let depth = path.len() as u64 - 2;
 
             (parent_path, name, depth)
         }
@@ -160,12 +202,16 @@ pub fn parse_node_path(path: &str, base_url: &str) -> Result<ParsedPath, DcCmdEr
             let name = (*path.last().ok_or(DcCmdError::InvalidPath(path.clone().join("/")))?).to_string();
             let parent_path = path[..path.len() - 1].join("/");
             let parent_path = format!("{parent_path}/");
-            let parent_path = parent_path.trim_start_matches(base_url).to_string();
+            let parent_path = parent_path.trim_start_matches(&base_url).to_string();
             let depth = path.len() as u64 - 2;
 
             (parent_path, name, depth)
         }
     ;
+
+    debug!("parent_path: {}", parent_path);
+    debug!("name: {}", name);
+    debug!("depth: {}", depth);
 
     Ok((parent_path, name, depth))
 }
@@ -248,17 +294,26 @@ mod tests {
 
     #[test]
     fn test_parse_folder_path() {
-        let path = "https://some.domain.com/test/folder/";
-        let (parent_path, name, depth) = parse_node_path(path, "https://some.domain.com").unwrap();
+        let path = "some.domain.com/test/folder/";
+        let (parent_path, name, depth) = parse_path(path, "https://some.domain.com").unwrap();
         assert_eq!("/test/", parent_path);
         assert_eq!("folder", name);
-        assert_eq!(2, depth);
+        assert_eq!(1, depth);
+    }
+
+    #[test]
+    fn test_parse_folder_path_no_trail_slash() {
+        let path = "some.domain.com/test/folder";
+        let (parent_path, name, depth) = parse_path(path, "https://some.domain.com").unwrap();
+        assert_eq!("/test/", parent_path);
+        assert_eq!("folder", name);
+        assert_eq!(1, depth);
     }
 
     #[test]
     fn test_file_path() {
-        let path = "https://some.domain.com/test/folder/file.txt";
-        let (parent_path, name, depth) = parse_node_path(path, "https://some.domain.com").unwrap();
+        let path = "some.domain.com/test/folder/file.txt";
+        let (parent_path, name, depth) = parse_path(path, "https://some.domain.com").unwrap();
         assert_eq!("/test/folder/", parent_path);
         assert_eq!("file.txt", name);
         assert_eq!(2, depth);
@@ -266,8 +321,8 @@ mod tests {
 
     #[test]
     fn test_root_path() {
-        let path = "https://some.domain.com/";
-        let (parent_path, name, depth) = parse_node_path(path, "https://some.domain.com").unwrap();
+        let path = "some.domain.com/";
+        let (parent_path, name, depth) = parse_path(path, "https://some.domain.com").unwrap();
         assert_eq!("/", parent_path);
         assert_eq!("", name);
         assert_eq!(0, depth);
