@@ -251,7 +251,7 @@ pub fn parse_node_path(path: &str) -> Result<ParsedPath, DracoonClientError> {
     let path_parts: Vec<&str> = path.trim_end_matches('/').split('/').collect();
     let name = String::from(*path_parts.last().ok_or(DracoonClientError::InvalidPath(path.to_string()))?);
     let parent_path = format!("{}/", path_parts[..path_parts.len() - 1].join("/"));
-    let depth = path_parts.iter().count().checked_sub(2).unwrap_or(0) as u64; 
+    let depth = path_parts.len().saturating_sub(2) as u64;
     
     Ok((parent_path, name, depth))
 }

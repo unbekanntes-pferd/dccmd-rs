@@ -80,13 +80,14 @@ async fn init_dracoon(url_path: &str) -> Result<Dracoon<Connected>, DcCmdError> 
                 .await?
         } else {
             debug!("No refresh token stored for {}", base_url);
+
             println!("Please log in via browser (open url): ");
             println!("{}", dracoon.get_authorize_url());
-            println!("Please enter authorization code: ");
-            let mut auth_code = String::new();
-            std::io::stdin()
-                .read_line(&mut auth_code)
-                .expect("Error parsing user input (auth code).");
+
+            let auth_code = dialoguer::Password::new()
+                .with_prompt("Please enter authorization code")
+                .interact()
+                .or(Err(DcCmdError::IoError))?;
 
             let dracoon = dracoon
                 .connect(OAuth2Flow::AuthCodeFlow(auth_code.trim_end().into()))

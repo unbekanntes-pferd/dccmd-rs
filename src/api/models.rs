@@ -86,7 +86,7 @@ impl From<ListAllParams> for String {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Range {
     pub offset: u64,
     pub limit: u64,
@@ -104,5 +104,20 @@ pub struct ObjectExpiration {
 impl AsRef<ObjectExpiration> for ObjectExpiration {
     fn as_ref(&self) -> &Self {
         self
+    }
+}
+
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct RangedItems<T> {
+    pub range: Range,
+    pub items: Vec<T>,
+}
+
+impl <T> Iterator for RangedItems<T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.items.pop()
     }
 }

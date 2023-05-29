@@ -1,10 +1,4 @@
-use std::{
-    collections::HashMap,
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc, Mutex,
-    },
-};
+use std::collections::HashMap;
 
 use futures_util::future::join_all;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -35,12 +29,13 @@ pub async fn download(
     recursive: bool,
 ) -> Result<(), DcCmdError> {
     debug!("Downloading {} to {}", source, target);
-    println!("Velocity: {:?}", velocity);
+    debug!("Velocity: {}", velocity.unwrap_or(1));
+
     let mut dracoon = init_dracoon(&source).await?;
 
     let (parent_path, node_name, _) = parse_path(&source, dracoon.get_base_url().as_ref())
         .or(Err(DcCmdError::InvalidPath(source.clone())))?;
-    let node_path = format!("{}{}/", parent_path, node_name);
+    let node_path = format!("{parent_path}{node_name}/");
 
     let node = if is_search_query(&node_name) {
         debug!("Searching for query {}", node_name);
@@ -107,7 +102,7 @@ async fn download_file(
             node,
             &mut out_file,
             Some(Box::new(move |progress, total| {
-                progress_bar_mv.set_message(format!("{}", node_name_clone.clone()));
+                progress_bar_mv.set_message(node_name_clone.clone());
                 progress_bar_mv.inc(progress);
             })),
         )
@@ -126,7 +121,6 @@ async fn download_files(
     velocity: Option<u8>,
 ) -> Result<(), DcCmdError> {
     let mut velocity = velocity.unwrap_or(1);
-    println!("Velocity: {}", velocity);
 
     if velocity < 1 {
         velocity = 1;
@@ -161,7 +155,7 @@ async fn download_files(
             let progress_bar_inc = progress_bar.clone();
             let download_task = async move {
                 let target = if let Some(targets) = targets {
-                    let target = targets.get(&file.id).expect("Target not found").to_owned();
+                    let target = targets.get(&file.id).expect("Target not found").clone();
                     std::path::PathBuf::from(target)
                 } else {
                     let target = std::path::PathBuf::from(target);
@@ -174,11 +168,11 @@ async fn download_files(
 
                 dracoon_client
                     .download(
-                        &file,
+                        file,
                         &mut out_file,
                         Some(Box::new(move |progress, _| {
                             progress_bar_mv.set_message(node_name.clone());
-                            progress_bar_mv.inc(progress);                    
+                            progress_bar_mv.inc(progress);
                         })),
                     )
                     .await?;
@@ -197,7 +191,7 @@ async fn download_files(
         }
     }
 
-    progress_bar.finish_with_message(format!("Download to {} complete", target));
+    progress_bar.finish_with_message(format!("Download to {target} complete"));
 
     Ok(())
 }
@@ -229,7 +223,7 @@ async fn download_container(
         .clone()
         .parent_path
         .expect("Node has no parent path")
-        .trim_end_matches("/")
+        .trim_end_matches('/')
         .to_string();
 
     // create all other directories
@@ -242,7 +236,7 @@ async fn download_container(
             .expect("Folder has no parent path")
             .trim_start_matches(&base_path)
             .to_string()
-            .trim_start_matches("/")
+            .trim_start_matches('/')
             .to_string();
         let folder_base_path = folder_base_path
             .trim_start_matches(format!("{}/", node.name).as_str())
@@ -263,43 +257,41 @@ async fn download_container(
         .with_sort("parentPath:asc".into())
         .build();
 
-    let mut files = dracoon
+    let files = dracoon
         .search_nodes("*", Some(node.id), Some(-1), Some(params))
         .await?;
 
     //TODO: FIX 500 item limit
-
     // if files.range.total > 500 {
     //     let reqs = (500..files.range.total)
     //         .into_iter()
     //         .step_by(500)
     //         .map(|offset| {
     //             async move {
-    //                let result = dracoon.search_nodes(
-    //                 "*",
-    //                 Some(node.id),
-    //                 Some(-1),
-    //                 Some(
-    //                     ListAllParams::builder()
-    //                         .with_filter("type:eq:file".into())
-    //                         .with_sort("parentPath:asc".into())
-    //                         .with_offset(offset)
-    //                         .build(),
-    //                 ),
-    //             ).await?;
+    //                 let result = dracoon
+    //                     .search_nodes(
+    //                         "*",
+    //                         Some(node.id),
+    //                         Some(-1),
+    //                         Some(
+    //                             ListAllParams::builder()
+    //                                 .with_filter("type:eq:file".into())
+    //                                 .with_sort("parentPath:asc".into())
+    //                                 .with_offset(offset)
+    //                                 .build(),
+    //                         ),
+    //                     )
+    //                     .await?;
 
-    //             files.items.extend(result.items);
+    //                 files.items.extend(result.items);
 
-    //             Ok(())
+    //                 Ok(())
     //             }
-                
     //         })
     //         .collect::<Vec<_>>();
 
-    //     for batch in reqs.chunks(5).into_iter() {
+    //     for batch in reqs.chunks(5) {
     //         let results = join_all(batch).await;
-    //         //TODO: check rayon crate
-            
     //     }
     // }
 
@@ -327,7 +319,7 @@ async fn download_container(
         .filter(|f| {
             !sub_room_paths
                 .iter()
-                .any(|p| f.parent_path.as_ref().unwrap_or(&"".into()).starts_with(p))
+                .any(|p| f.parent_path.as_ref().unwrap_or(&String::new()).starts_with(p))
         })
         .collect::<Vec<_>>();
 
@@ -346,7 +338,7 @@ async fn download_container(
             .to_string();
         let parent = format!("/{}", node.name.clone());
         let file_base_path = file_base_path.trim_start_matches(&parent);
-        let file_base_path = file_base_path.trim_start_matches("/");
+        let file_base_path = file_base_path.trim_start_matches('/');
         let file_target = file_target.join(file_base_path);
         let target = file_target.join(&file.name);
 

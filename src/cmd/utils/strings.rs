@@ -137,8 +137,8 @@ fn to_readable_size(size: u64) -> String {
 type ParsedPath = (String, String, u64);
 pub fn parse_path(path: &str, base_url: &str) -> Result<ParsedPath, DcCmdError> {
     let base_url = base_url.trim_start_matches("https://");
-    let path = path.trim_start_matches(&base_url);
-    let path = path.trim_start_matches("/");
+    let path = path.trim_start_matches(base_url);
+    let path = path.trim_start_matches('/');
 
     debug!("path: {}", path);
 
@@ -150,13 +150,13 @@ pub fn parse_path(path: &str, base_url: &str) -> Result<ParsedPath, DcCmdError> 
     debug!("path_parts: {:?}", path_parts);
     let name = String::from(*path_parts.last().ok_or(DcCmdError::InvalidPath(path.to_string()))?);
     let mut parent_path = format!("/{}/", path_parts[..path_parts.len() - 1].join("/"));
-    let depth = path_parts.iter().count().checked_sub(1).unwrap_or(0) as u64; 
+    let depth = path_parts.len().saturating_sub(1) as u64; 
 
     debug!("parent_path: {}", parent_path);
     debug!("name: {}", name);
     debug!("depth: {}", depth);
 
-    if parent_path == "//".to_owned() {
+    if parent_path == *"//" {
         if let Some((prefix, _)) = parent_path.rsplit_once('/') {
         parent_path = prefix.to_owned();
     }
@@ -169,7 +169,7 @@ pub fn parse_path(path: &str, base_url: &str) -> Result<ParsedPath, DcCmdError> 
 pub fn parse_niode_path(path: &str, base_url: &str) -> Result<ParsedPath, DcCmdError> {
     
     let base_url = base_url.trim_start_matches("https://");
-    let path = path.trim_start_matches(&base_url);
+    let path = path.trim_start_matches(base_url);
 
     debug!("path: {}", path);
 
@@ -190,7 +190,7 @@ pub fn parse_niode_path(path: &str, base_url: &str) -> Result<ParsedPath, DcCmdE
             debug!("parent_path: {}", parent_path);
             let parent_path = format!("{parent_path}/");
             debug!("parent_path: {}", parent_path);
-            let parent_path = parent_path.trim_start_matches(&base_url).to_string();
+            let parent_path = parent_path.trim_start_matches(base_url).to_string();
             debug!("parent_path: {}", parent_path);
             let depth = path.len() as u64 - 2;
 
@@ -202,7 +202,7 @@ pub fn parse_niode_path(path: &str, base_url: &str) -> Result<ParsedPath, DcCmdE
             let name = (*path.last().ok_or(DcCmdError::InvalidPath(path.clone().join("/")))?).to_string();
             let parent_path = path[..path.len() - 1].join("/");
             let parent_path = format!("{parent_path}/");
-            let parent_path = parent_path.trim_start_matches(&base_url).to_string();
+            let parent_path = parent_path.trim_start_matches(base_url).to_string();
             let depth = path.len() as u64 - 2;
 
             (parent_path, name, depth)
