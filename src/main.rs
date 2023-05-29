@@ -34,7 +34,7 @@ async fn main() {
     let err_term = Term::stderr();
 
     let res = match opt.cmd {
-        DcCmdCommand::Download { source, target, velocity } => download(source, target, velocity).await,
+        DcCmdCommand::Download { source, target, velocity, recursive } => download(source, target, velocity, recursive).await,
         DcCmdCommand::Upload { source, target, overwrite, classification } => upload(source.try_into().expect("Invalid path"), target, overwrite, classification).await,
         DcCmdCommand::Ls {
             source,

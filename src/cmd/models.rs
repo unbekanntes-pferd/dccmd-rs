@@ -33,6 +33,8 @@ pub enum DcCmdError {
     DracoonAuthError(DracoonAuthErrorResponse),
     #[error("IO error")]
     IoError,
+    #[error("Invalid argument")]
+    InvalidArgument(String)
 }
 
 impl From<DracoonClientError> for DcCmdError {
@@ -57,6 +59,12 @@ pub struct DcCmd {
 
     #[clap(long)]
     pub debug: bool,
+
+    #[clap(long)]
+    pub log_file_out: bool,
+
+    #[clap(long)]
+    pub log_file_path: Option<String>,
 }
 
 #[derive(Parser)]
@@ -85,7 +93,11 @@ pub enum DcCmdCommand {
         target: String,
 
         #[clap(long, short)]
-        velocity: Option<usize>
+        velocity: Option<u8>,
+
+        /// recursive download
+        #[clap(short, long)]
+        recursive: bool,
     },
     Ls {
         /// Source file path in DRACOON

@@ -143,6 +143,7 @@ fn get_error_message(err: &DcCmdError) -> String {
         DcCmdError::Unknown => "Unknown error.".into(),
         DcCmdError::DracoonS3Error(e) => format!("{e}"),
         DcCmdError::DracoonAuthError(e) => format!("{e}"),
+        DcCmdError::InvalidArgument(msg) => msg.to_string()
     }
 }
 

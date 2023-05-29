@@ -5,7 +5,7 @@ use crate::{
 
 use chrono::{DateTime, Utc};
 use console::{style, Term};
-use tracing::{debug, trace};
+use tracing::{debug};
 
 const ERROR_PREFIX: &str = "Error: ";
 const SUCCESS_PREFIX: &str = "Success: ";

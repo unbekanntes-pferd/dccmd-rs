@@ -35,20 +35,21 @@ pub async fn list_nodes(
     let offset = offset.unwrap_or(0);
     let limit = limit.unwrap_or(500);
 
-    debug!("Fetching node list from {}", source);
+
     let dracoon = init_dracoon(&source).await?;
 
     let (parent_path, node_name, depth) =
         parse_path(&source, dracoon.get_base_url().as_ref())?;
     let node_path = build_node_path((parent_path.clone(), node_name.clone(), depth));
 
-    debug!("Parent path: {}", parent_path);
-    debug!("Node name: {}", node_name);
-    debug!("Depth: {}", depth);
-
     let all = all.unwrap_or(false);
 
-    let node_path = Some(node_path.as_str());
+    // only provide a path if not the root node
+    let node_path = if node_path != "//" {
+         Some(node_path.as_str())
+    } else {
+        None
+    };
 
     let node_list = if is_search_query(&node_name) {
         debug!("Searching for nodes with query {}", node_name);
