@@ -100,13 +100,11 @@ pub struct ObjectExpiration {
     pub expire_at: Option<String>,
 }
 
-
 impl AsRef<ObjectExpiration> for ObjectExpiration {
     fn as_ref(&self) -> &Self {
         self
     }
 }
-
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct RangedItems<T> {
@@ -114,10 +112,20 @@ pub struct RangedItems<T> {
     pub items: Vec<T>,
 }
 
-impl <T> Iterator for RangedItems<T> {
+impl<T> IntoIterator for RangedItems<T> {
     type Item = T;
+    type IntoIter = std::vec::IntoIter<T>;
 
-    fn next(&mut self) -> Option<Self::Item> {
-        self.items.pop()
+    fn into_iter(self) -> Self::IntoIter {
+        self.items.into_iter()
+    }
+}
+
+impl <'a, T> IntoIterator for &'a RangedItems<T> {
+    type Item = &'a T;
+    type IntoIter = std::slice::Iter<'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.items.iter()
     }
 }
