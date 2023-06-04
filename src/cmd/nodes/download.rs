@@ -142,6 +142,9 @@ async fn download_files(
     );
 
     progress_bar.set_length(total_size);
+    let message = format!("Downloading {} files", files.len());
+    progress_bar.set_message(message.clone());
+    let mut remaining_files = files.len();
 
     for batch in files.chunks(concurrent_reqs.into()) {
         let mut download_reqs = vec![];
@@ -171,12 +174,14 @@ async fn download_files(
                         file,
                         &mut out_file,
                         Some(Box::new(move |progress, _| {
-                            progress_bar_mv.set_message(node_name.clone());
                             progress_bar_mv.inc(progress);
                         })),
                     )
                     .await?;
 
+                remaining_files -= 1;
+                let message = format!("Downloading {} files", remaining_files);
+                progress_bar_inc.set_message(message.clone());
                 Ok(())
             };
 
