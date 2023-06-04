@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use futures_util::future::join_all;
+use futures_util::{future::join_all};
 use indicatif::{ProgressBar, ProgressStyle};
 use tracing::{debug, error};
 
@@ -208,9 +208,31 @@ async fn download_container(
         .with_sort("parentPath:asc".into())
         .build();
 
-    let folders = dracoon
+    let mut folders = dracoon
         .search_nodes("*", Some(node.id), Some(-1), Some(params))
         .await?;
+
+    if folders.range.total > 500 {
+        for offset in (500..folders.range.total).into_iter().step_by(500) {
+            let result = dracoon
+                    .search_nodes(
+                        "*",
+                        Some(node.id),
+                        Some(-1),
+                        Some(
+                            ListAllParams::builder()
+                                .with_filter("type:eq:folder".into())
+                                .with_sort("parentPath:asc".into())
+                                .with_offset(offset)
+                                .build(),
+                        ),
+                    )
+                    .await?;
+
+            folders.items.extend(result.items);
+        }
+    }
+
     let folders = folders.get_folders();
 
     // create a directory on target
@@ -257,43 +279,32 @@ async fn download_container(
         .with_sort("parentPath:asc".into())
         .build();
 
-    let files = dracoon
+    let mut files = dracoon
         .search_nodes("*", Some(node.id), Some(-1), Some(params))
         .await?;
 
-    //TODO: FIX 500 item limit
-    // if files.range.total > 500 {
-    //     let reqs = (500..files.range.total)
-    //         .into_iter()
-    //         .step_by(500)
-    //         .map(|offset| {
-    //             async move {
-    //                 let result = dracoon
-    //                     .search_nodes(
-    //                         "*",
-    //                         Some(node.id),
-    //                         Some(-1),
-    //                         Some(
-    //                             ListAllParams::builder()
-    //                                 .with_filter("type:eq:file".into())
-    //                                 .with_sort("parentPath:asc".into())
-    //                                 .with_offset(offset)
-    //                                 .build(),
-    //                         ),
-    //                     )
-    //                     .await?;
 
-    //                 files.items.extend(result.items);
+    if files.range.total > 500 {
 
-    //                 Ok(())
-    //             }
-    //         })
-    //         .collect::<Vec<_>>();
+        for offset in (500..files.range.total).into_iter().step_by(500) {
+            let result = dracoon
+                    .search_nodes(
+                        "*",
+                        Some(node.id),
+                        Some(-1),
+                        Some(
+                            ListAllParams::builder()
+                                .with_filter("type:eq:file".into())
+                                .with_sort("parentPath:asc".into())
+                                .with_offset(offset)
+                                .build(),
+                        ),
+                    )
+                    .await?;
 
-    //     for batch in reqs.chunks(5) {
-    //         let results = join_all(batch).await;
-    //     }
-    // }
+            files.items.extend(result.items);
+        }
+    }
 
     let files = files.get_files();
 
@@ -317,9 +328,12 @@ async fn download_container(
     let files = files
         .into_iter()
         .filter(|f| {
-            !sub_room_paths
-                .iter()
-                .any(|p| f.parent_path.as_ref().unwrap_or(&String::new()).starts_with(p))
+            !sub_room_paths.iter().any(|p| {
+                f.parent_path
+                    .as_ref()
+                    .unwrap_or(&String::new())
+                    .starts_with(p)
+            })
         })
         .collect::<Vec<_>>();
 
