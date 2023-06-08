@@ -120,13 +120,7 @@ async fn download_files(
     targets: Option<HashMap<u64, String>>,
     velocity: Option<u8>,
 ) -> Result<(), DcCmdError> {
-    let mut velocity = velocity.unwrap_or(1);
-
-    if velocity < 1 {
-        velocity = 1;
-    } else if velocity > 10 {
-        velocity = 10;
-    }
+    let velocity = velocity.unwrap_or(1).clamp(1, 10);
 
     let concurrent_reqs = velocity * 5;
 
@@ -180,8 +174,8 @@ async fn download_files(
                     .await?;
 
                 remaining_files -= 1;
-                let message = format!("Downloading {} files", remaining_files);
-                progress_bar_inc.set_message(message.clone());
+                let message = format!("Downloading {remaining_files} files");
+                progress_bar_inc.set_message(message);
                 Ok(())
             };
 
@@ -201,6 +195,7 @@ async fn download_files(
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)] // TODO: refactor (e.g. fetch > 500 files, folders)
 async fn download_container(
     dracoon: &mut Dracoon<Connected>,
     node: &Node,
@@ -327,7 +322,7 @@ async fn download_container(
     let sub_room_paths = sub_rooms
         .get_rooms()
         .into_iter()
-        .map(|r| format!("{}{}/", r.parent_path.unwrap_or("/".into()), r.name))
+        .map(|r| format!("{}{}/", r.parent_path.unwrap_or_else(|| "/".into()), r.name))
         .collect::<Vec<_>>();
 
     let files = files

@@ -834,8 +834,8 @@ fn parse_upload_options(
     bool,
 ) {
     let classification = upload_options.1.unwrap_or(2);
-    let timestamp_modification = file_meta.3.unwrap_or(Utc::now());
-    let timestamp_creation = file_meta.2.unwrap_or(Utc::now());
+    let timestamp_modification = file_meta.3.unwrap_or_else(Utc::now);
+    let timestamp_creation = file_meta.2.unwrap_or_else(Utc::now);
     let expiration = upload_options.clone().0.unwrap_or_default();
     let resolution_strategy = upload_options
         .3

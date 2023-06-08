@@ -62,7 +62,7 @@ async fn init_dracoon(url_path: &str) -> Result<Dracoon<Connected>, DcCmdError> 
     let (client_id, client_secret) = get_client_credentials();
     let base_url = parse_base_url(url_path.to_string())?;
 
-    let mut dracoon = DracoonBuilder::new()
+    let dracoon = DracoonBuilder::new()
         .with_base_url(base_url.clone())
         .with_client_id(client_id)
         .with_client_secret(client_secret)
@@ -73,22 +73,19 @@ async fn init_dracoon(url_path: &str) -> Result<Dracoon<Connected>, DcCmdError> 
         DcCmdError::CredentialStorageFailed
     })?;
 
-    let dracoon = match get_dracoon_env(&entry) {
-        Ok(refresh_token) => {
-            // TODO: fcheck if possible without cloning client
-            if let Ok(dracoon) = dracoon.clone().connect(OAuth2Flow::RefreshToken(refresh_token)).await {
-                dracoon
+    let dracoon = if let Ok(refresh_token) = get_dracoon_env(&entry) {
+                 // TODO: fcheck if possible without cloning client
+                if let Ok(dracoon) = dracoon.clone().connect(OAuth2Flow::RefreshToken(refresh_token)).await {
+                    dracoon
+                } else {
+                    error!("Failed to authenticate to {}.", base_url);
+                    authenticate(dracoon, entry).await?
+               }
             } else {
-                error!("Failed to authenticate to {}.", base_url);
-                authenticate(dracoon, entry).await?
-            }
-        }
-        Err(_) => {
-            debug!("No refresh token stored for {}", base_url);
-            authenticate(dracoon, entry).await?
-        }
-    };
-    
+                 debug!("No refresh token stored for {}", base_url);
+               authenticate(dracoon, entry).await?
+             };
+
     debug!("Successfully authenticated to {}", base_url);
     
     Ok(dracoon)

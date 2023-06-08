@@ -49,8 +49,8 @@ pub fn print_node(
         match &node.updated_by {
             Some(user_info) => node_str.push_str(&format!(
                 "{:<15} {:<15} ",
-                user_info.first_name.clone().unwrap_or("n/a".to_string()),
-                user_info.last_name.clone().unwrap_or("n/a".to_string())
+                user_info.first_name.clone().unwrap_or_else(|| "n/a".to_string()),
+                user_info.last_name.clone().unwrap_or_else(|| "n/a".to_string())
             )),
             None => node_str.push_str("n/a n/a"),
         }
@@ -118,7 +118,7 @@ fn to_readable_size(size: u64) -> String {
 
     if size == 0 {
         // size is 0, so this is safe
-        return format!("{} {}", size, units[size as usize]);
+        return format!("{size} {}", units[size as usize]);
     }
 
     // size is always positive, so this is safe
@@ -131,7 +131,7 @@ fn to_readable_size(size: u64) -> String {
     let res = size as f64 / pot;
     
     // exp is always positive, so this is safe 
-    format!("{:.0} {}", res, units[exp as usize])
+    format!("{res:.0} {}", units[exp as usize])
 }
 
 type ParsedPath = (String, String, u64);

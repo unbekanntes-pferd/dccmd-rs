@@ -119,7 +119,7 @@ pub struct DracoonErrorResponse {
 impl Display for DracoonErrorResponse {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let dbg_info = self.debug_info.as_deref().unwrap_or("No details");
-        write!(f, "{} - {} ({})", self.message, dbg_info, self.code)
+        write!(f, "{} - {dbg_info} ({})", self.message, self.code)
     }
 }
 
@@ -146,7 +146,7 @@ pub struct DracoonAuthErrorResponse {
 
 impl Display for DracoonAuthErrorResponse {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Error: {} ({})", self.error_description.clone().unwrap_or("Unknown".to_string()), self.error)
+        write!(f, "Error: {} ({})", self.error_description.clone().unwrap_or_else(|| "Unknown".to_string()), self.error)
     }
 }
 

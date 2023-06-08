@@ -41,14 +41,14 @@ pub async fn upload(source: PathBuf, target: String, overwrite: bool, classifica
     let timestamp_modification = file_meta
         .modified()
         .or(Err(DcCmdError::IoError))
-        .unwrap_or(SystemTime::now());
+        .unwrap_or_else(|_| SystemTime::now());
 
     let timestamp_modification = to_datetime_utc(timestamp_modification);
 
     let timestamp_creation = file_meta
         .created()
         .or(Err(DcCmdError::IoError))
-        .unwrap_or(SystemTime::now());
+        .unwrap_or_else(|_| SystemTime::now());
 
     let timestamp_creation = to_datetime_utc(timestamp_creation);
 

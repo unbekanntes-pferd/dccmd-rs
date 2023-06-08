@@ -112,19 +112,11 @@ pub struct RangedItems<T> {
     pub items: Vec<T>,
 }
 
-
-impl<'a, T> Iterator for &'a RangedItems<T> {
-    type Item = &'a T;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.items.iter().next()
-    }
-}
-
-impl<T> Iterator for RangedItems<T> where T: Clone {
+impl <T> IntoIterator for RangedItems<T> {
     type Item = T;
+    type IntoIter = std::vec::IntoIter<T>;
 
-    fn next(&mut self) -> Option<Self::Item> {
-        self.items.iter().next().cloned()
+    fn into_iter(self) -> Self::IntoIter {
+        self.items.into_iter()
     }
 }
