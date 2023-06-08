@@ -140,13 +140,13 @@ impl DracoonErrorResponse {
 #[serde(rename_all = "camelCase")]
 pub struct DracoonAuthErrorResponse {
     error: String,
-    error_description: String,
+    error_description: Option<String>,
 }
 
 
 impl Display for DracoonAuthErrorResponse {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Error: {} ({})", self.error_description, self.error)
+        write!(f, "Error: {} ({})", self.error_description.clone().unwrap_or("Unknown".to_string()), self.error)
     }
 }
 

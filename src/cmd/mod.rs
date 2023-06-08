@@ -10,7 +10,7 @@ use self::{
 };
 use crate::{
     api::{
-        auth::{Connected, OAuth2Flow},
+        auth::{Connected, OAuth2Flow, Disconnected},
         constants::get_client_credentials,
         Dracoon, DracoonBuilder,
     },
@@ -73,32 +73,44 @@ async fn init_dracoon(url_path: &str) -> Result<Dracoon<Connected>, DcCmdError> 
         DcCmdError::CredentialStorageFailed
     })?;
 
-    let dracoon = if let Ok(refresh_token) = get_dracoon_env(&entry) {
-         
-            dracoon
-                .connect(OAuth2Flow::RefreshToken(refresh_token))
-                .await?
-        } else {
+    let dracoon = match get_dracoon_env(&entry) {
+        Ok(refresh_token) => {
+            // TODO: fcheck if possible without cloning client
+            if let Ok(dracoon) = dracoon.clone().connect(OAuth2Flow::RefreshToken(refresh_token)).await {
+                dracoon
+            } else {
+                error!("Failed to authenticate to {}.", base_url);
+                authenticate(dracoon, entry).await?
+            }
+        }
+        Err(_) => {
             debug!("No refresh token stored for {}", base_url);
-
-            println!("Please log in via browser (open url): ");
-            println!("{}", dracoon.get_authorize_url());
-
-            let auth_code = dialoguer::Password::new()
-                .with_prompt("Please enter authorization code")
-                .interact()
-                .or(Err(DcCmdError::IoError))?;
-
-            let dracoon = dracoon
-                .connect(OAuth2Flow::AuthCodeFlow(auth_code.trim_end().into()))
-                .await?;
-
-            set_dracoon_env(&entry, dracoon.get_refresh_token())?;
-
-            dracoon
-        };
-
+            authenticate(dracoon, entry).await?
+        }
+    };
+    
     debug!("Successfully authenticated to {}", base_url);
+    
+    Ok(dracoon)
+
+}
+
+async fn authenticate(mut dracoon: Dracoon<Disconnected>, entry: Entry) -> Result<Dracoon<Connected>, DcCmdError> {
+
+
+    println!("Please log in via browser (open url): ");
+    println!("{}", dracoon.get_authorize_url());
+
+    let auth_code = dialoguer::Password::new()
+        .with_prompt("Please enter authorization code")
+        .interact()
+        .or(Err(DcCmdError::IoError))?;
+
+    let dracoon = dracoon
+        .connect(OAuth2Flow::AuthCodeFlow(auth_code.trim_end().into()))
+        .await?;
+
+    set_dracoon_env(&entry, dracoon.get_refresh_token())?;
 
     Ok(dracoon)
 }
