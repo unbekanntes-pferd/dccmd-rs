@@ -44,7 +44,7 @@ Currently, the following commands are working:
 
 ## What is not working?
 
-- Recursive download / upload is not implemented
+- Recursive upload is not implemented
 
 ## Example usage
 
@@ -56,6 +56,19 @@ To download a file, use the download command:
 
 ```bash
 dccmd download your.dracoon.domain/some/room/some-file.pdf ./your/path/your-name.pdf
+```
+
+To download a container (room or folder), use the download command with recursive flag:
+
+```bash
+dccmd download -r your.dracoon.domain/some/room ./your/path
+```
+**Note**: This will create a directory with same name as your container. Sub rooms are **not** included.
+
+To download a list search result, use the download command with a search string:
+
+```bash
+dccmd download your.dracoon.domain/some/*.pdf ./your/path
 ```
 
 ### Uploads
@@ -76,6 +89,9 @@ dccmd ls your.dracoon.domain/some/path
 
 // for root node use a trailing slash
 dccmd ls your.dracoon.domain/
+
+// for searches within the room
+dccmd ls your.dracoon.domain/*.pdf 
 ```
 
 Options:

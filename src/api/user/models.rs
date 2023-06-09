@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::api::{utils::{FromResponse, parse_body}, auth::{errors::DracoonClientError, models::DracoonErrorResponse}};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 #[allow(non_snake_case)]
 pub struct UserAccount {
@@ -30,7 +30,7 @@ pub struct UserAccount {
     user_groups: Vec<UserGroup>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct UserAuthData {
     method: String,
@@ -41,7 +41,7 @@ pub struct UserAuthData {
     oidc_config_id: Option<u64>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Right {
     id: u64,
@@ -49,7 +49,7 @@ pub struct Right {
     description: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Role {
     id: u64,
@@ -58,13 +58,13 @@ pub struct Role {
     items: Option<Vec<Right>>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct RoleList {
     roles: Vec<Role>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct UserGroup {
     id: u64,

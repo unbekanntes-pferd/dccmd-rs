@@ -6,6 +6,7 @@ use std::fmt::Formatter;
 use std::sync::Arc;
 use std::sync::Mutex;
 
+use crate::api::models::RangedItems;
 use crate::api::{
     auth::{errors::DracoonClientError, models::DracoonErrorResponse},
     models::{ObjectExpiration, Range},
@@ -48,7 +49,6 @@ impl CloneableUploadProgressCallback {
         (self.0.lock().unwrap())(bytes_read, total_size);
     }
 }
-
 
 /// file meta information (name, size, timestamp creation, timestamp modification)
 #[derive(Debug, Clone)]
@@ -114,13 +114,17 @@ impl FileMetaBuilder {
 
 /// upload options (expiration, classification, keep share links, resolution strategy)
 #[derive(Debug, Clone, Default)]
-pub struct UploadOptions(pub Option<ObjectExpiration>, pub Option<u8>, pub Option<bool>, pub Option<ResolutionStrategy>);
+pub struct UploadOptions(
+    pub Option<ObjectExpiration>,
+    pub Option<u8>,
+    pub Option<bool>,
+    pub Option<ResolutionStrategy>,
+);
 
 impl UploadOptions {
     pub fn builder() -> UploadOptionsBuilder {
         UploadOptionsBuilder::new()
     }
-
 }
 
 pub struct UploadOptionsBuilder {
@@ -161,21 +165,46 @@ impl UploadOptionsBuilder {
     }
 
     pub fn build(self) -> UploadOptions {
-        UploadOptions(self.expiration, self.classification, self.keep_share_links, self.resolution_strategy)
+        UploadOptions(
+            self.expiration,
+            self.classification,
+            self.keep_share_links,
+            self.resolution_strategy,
+        )
     }
-
 }
 
-
 /// A list of nodes in DRACOON - GET /nodes
-#[derive(Debug, Serialize, Deserialize)]
-pub struct NodeList {
-    pub range: Range,
-    pub items: Vec<Node>,
+pub type NodeList = RangedItems<Node>;
+
+impl NodeList {
+    pub fn get_files(&self) -> Vec<Node> {
+        self.items
+            .iter()
+            .filter(|node| node.node_type == NodeType::File)
+            .cloned()
+            .collect()
+    }
+
+    pub fn get_folders(&self) -> Vec<Node> {
+        self.items
+            .iter()
+            .filter(|node| node.node_type == NodeType::Folder)
+            .cloned()
+            .collect()
+    }
+
+    pub fn get_rooms(&self) -> Vec<Node> {
+        self.items
+            .iter()
+            .filter(|node| node.node_type == NodeType::Room)
+            .cloned()
+            .collect()
+    }
 }
 
 /// A node in DRACOON - GET /nodes/{nodeId}
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Node {
     pub id: u64,
@@ -186,6 +215,7 @@ pub struct Node {
     pub timestamp_creation: Option<String>,
     pub timestamp_modification: Option<String>,
     pub parent_id: Option<u64>,
+    pub parent_path: Option<String>,
     pub created_at: Option<String>,
     pub created_by: Option<UserInfo>,
     pub updated_at: Option<String>,
@@ -220,13 +250,12 @@ pub struct Node {
 
 #[async_trait]
 impl FromResponse for Node {
-
     async fn from_response(response: Response) -> Result<Self, DracoonClientError> {
         parse_body::<Self, DracoonErrorResponse>(response).await
-}
+    }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub enum NodeType {
     #[serde(rename = "room")]
     Room,
@@ -237,7 +266,7 @@ pub enum NodeType {
 }
 
 /// DRACOOON node permissions
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 #[allow(clippy::struct_excessive_bools)]
 pub struct NodePermissions {
@@ -251,7 +280,6 @@ pub struct NodePermissions {
     pub read_recycle_bin: bool,
     pub restore_recycle_bin: bool,
     pub delete_recycle_bin: bool,
-
 }
 
 impl NodePermissions {
@@ -291,7 +319,7 @@ impl ToString for NodePermissions {
 }
 
 /// DRACOOON encryption info (rescue keys)
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct EncryptionInfo {
     user_key_state: String,
@@ -300,7 +328,7 @@ pub struct EncryptionInfo {
 }
 
 /// DRACOON user info on nodes (`created_by`, `updated_by`)
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct UserInfo {
     pub id: u64,
@@ -357,7 +385,10 @@ impl Display for S3ErrorResponse {
         write!(
             f,
             "Error: {} ({})",
-            self.error.message.as_ref().unwrap_or(&String::from("Unknown S3 error")),
+            self.error
+                .message
+                .as_ref()
+                .unwrap_or(&String::from("Unknown S3 error")),
             self.status,
         )
     }
@@ -619,14 +650,17 @@ pub struct S3FileUploadPart {
 
 impl S3FileUploadPart {
     pub fn new(part_number: u32, part_etag: String) -> Self {
-        Self { part_number, part_etag }
+        Self {
+            part_number,
+            part_etag,
+        }
     }
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeleteNodesRequest {
-    node_ids: Vec<u64>
+    node_ids: Vec<u64>,
 }
 
 impl From<Vec<u64>> for DeleteNodesRequest {
@@ -730,7 +764,6 @@ impl TransferNode {
             timestamp_creation: None,
             timestamp_modification: None,
         }
-
     }
 
     pub fn with_name(mut self, name: String) -> Self {
@@ -758,7 +791,6 @@ impl TransferNode {
     }
 }
 
-
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateFolderRequest {
@@ -767,7 +799,7 @@ pub struct CreateFolderRequest {
     notes: Option<String>,
     timestamp_creation: Option<String>,
     timestamp_modification: Option<String>,
-    classification: Option<u8>
+    classification: Option<u8>,
 }
 
 pub struct CreateFolderRequestBuilder {
@@ -776,7 +808,7 @@ pub struct CreateFolderRequestBuilder {
     notes: Option<String>,
     timestamp_creation: Option<String>,
     timestamp_modification: Option<String>,
-    classification: Option<u8>
+    classification: Option<u8>,
 }
 
 impl CreateFolderRequest {
@@ -790,7 +822,6 @@ impl CreateFolderRequest {
             classification: None,
         }
     }
-
 }
 
 impl CreateFolderRequestBuilder {
@@ -823,7 +854,7 @@ impl CreateFolderRequestBuilder {
             timestamp_modification: self.timestamp_modification,
             classification: self.classification,
         }
-}
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -833,7 +864,7 @@ pub struct UpdateFolderRequest {
     notes: Option<String>,
     timestamp_creation: Option<String>,
     timestamp_modification: Option<String>,
-    classification: Option<u8>
+    classification: Option<u8>,
 }
 
 pub struct UpdateFolderRequestBuilder {
@@ -841,7 +872,7 @@ pub struct UpdateFolderRequestBuilder {
     notes: Option<String>,
     timestamp_creation: Option<String>,
     timestamp_modification: Option<String>,
-    classification: Option<u8>
+    classification: Option<u8>,
 }
 
 impl UpdateFolderRequest {
@@ -917,11 +948,10 @@ pub struct FileFileKeys {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MissingKeysResponse {
-
     pub range: Range,
     pub items: Vec<UserIdFileItem>,
     pub users: Vec<UserUserPublicKey>,
-    pub files: Vec<FileFileKeys>
+    pub files: Vec<FileFileKeys>,
 }
 
 #[async_trait]
@@ -934,26 +964,23 @@ impl FromResponse for MissingKeysResponse {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserFileKeySetBatchRequest {
-    items: Vec<UserFileKeySetRequest>
+    items: Vec<UserFileKeySetRequest>,
 }
 
 impl UserFileKeySetBatchRequest {
     pub fn new() -> Self {
-        UserFileKeySetBatchRequest {
-            items: Vec::new()
-        }
+        UserFileKeySetBatchRequest { items: Vec::new() }
     }
 
     pub fn add(&mut self, user_id: u64, file_id: u64, file_key: FileKey) {
-        self.items.push(UserFileKeySetRequest::new(user_id, file_id, file_key));
+        self.items
+            .push(UserFileKeySetRequest::new(user_id, file_id, file_key));
     }
 }
 
 impl From<Vec<UserFileKeySetRequest>> for UserFileKeySetBatchRequest {
     fn from(items: Vec<UserFileKeySetRequest>) -> Self {
-        UserFileKeySetBatchRequest {
-            items
-        }
+        UserFileKeySetBatchRequest { items }
     }
 }
 

@@ -173,7 +173,7 @@ impl DownloadInternal for Dracoon<Connected> {
 
                 // call progress callback if provided
                 if let Some(ref mut callback) = callback {
-                    callback(downloaded_bytes, content_length);
+                    callback(len, content_length);
                 }
                 if downloaded_bytes >= content_length {
                     break;
@@ -261,7 +261,7 @@ impl DownloadInternal for Dracoon<Connected> {
 
                 // call progress callback if provided
                 if let Some(ref mut callback) = callback {
-                    callback(downloaded_bytes, content_length);
+                    callback(len, content_length);
                 }
                 if downloaded_bytes >= content_length {
                     break;

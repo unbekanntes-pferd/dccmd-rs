@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use reqwest::Response;
 use serde::de::DeserializeOwned;
 use serde_xml_rs::from_str;
+use tracing::{debug, error};
 
 use super::{auth::{errors::DracoonClientError, models::StatusCodeState}, nodes::models::{S3ErrorResponse, S3XmlError}};
 
@@ -12,8 +13,11 @@ where
     E: DeserializeOwned + Into<DracoonClientError>,
 {
     match Into::<StatusCodeState>::into(res.status()) {
-        StatusCodeState::Ok(_) => Ok(res.json::<T>().await.expect("Correct response type")),
-        StatusCodeState::Error(_) => Err(build_error_body::<E>(res.json::<E>().await?)),
+        StatusCodeState::Ok(_) => Ok(res.json::<T>().await.map_err(|err| debug!("{}", err)).expect("Correct response type")),
+        StatusCodeState::Error(_) => Err(build_error_body::<E>(res.json::<E>().await.map_err(|err| {
+            error!("Failed to parse error body: {}", err);
+            err
+        })?)),
     }
 }
 

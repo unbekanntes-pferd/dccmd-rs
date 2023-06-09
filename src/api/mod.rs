@@ -16,6 +16,8 @@ pub mod nodes;
 pub mod user;
 pub mod utils;
 
+
+#[derive(Clone)]
 pub struct Dracoon<State = Disconnected> {
     client: DracoonClient<State>,
     state: PhantomData<State>,

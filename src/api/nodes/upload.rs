@@ -544,7 +544,7 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
                             )
                             .await?;
                         let url = url.urls.first().expect("Creating S3 url failed");
-                        
+
                         // truncation is safe because chunk_size is 32 MB
                         #[allow(clippy::cast_possible_truncation, clippy::cast_lossless)]
                         let curr_pos: u64 = ((url_part - 1) * (chunk_size as u32)) as u64;
@@ -687,6 +687,9 @@ impl<R: AsyncRead + Sync + Send + Unpin + 'static> UploadInternal<R> for Dracoon
                         .collect::<Vec<_>>();
 
                     drop(plain_file_key);
+                    // set file keys
+                    <Dracoon<Connected> as UploadInternal<R>>::set_file_keys(self, key_reqs.into())
+                        .await?;
 
                     return Ok(status_response
                         .node
@@ -831,8 +834,8 @@ fn parse_upload_options(
     bool,
 ) {
     let classification = upload_options.1.unwrap_or(2);
-    let timestamp_modification = file_meta.3.unwrap_or(Utc::now());
-    let timestamp_creation = file_meta.2.unwrap_or(Utc::now());
+    let timestamp_modification = file_meta.3.unwrap_or_else(Utc::now);
+    let timestamp_creation = file_meta.2.unwrap_or_else(Utc::now);
     let expiration = upload_options.clone().0.unwrap_or_default();
     let resolution_strategy = upload_options
         .3

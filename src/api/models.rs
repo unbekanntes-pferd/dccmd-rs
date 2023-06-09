@@ -86,7 +86,7 @@ impl From<ListAllParams> for String {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Range {
     pub offset: u64,
     pub limit: u64,
@@ -100,9 +100,23 @@ pub struct ObjectExpiration {
     pub expire_at: Option<String>,
 }
 
-
 impl AsRef<ObjectExpiration> for ObjectExpiration {
     fn as_ref(&self) -> &Self {
         self
+    }
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct RangedItems<T> {
+    pub range: Range,
+    pub items: Vec<T>,
+}
+
+impl <T> IntoIterator for RangedItems<T> {
+    type Item = T;
+    type IntoIter = std::vec::IntoIter<T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.items.into_iter()
     }
 }
