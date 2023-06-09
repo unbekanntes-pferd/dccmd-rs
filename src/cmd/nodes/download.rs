@@ -213,7 +213,7 @@ async fn download_container(
         .await?;
 
     if folders.range.total > 500 {
-        for offset in (500..folders.range.total).into_iter().step_by(500) {
+        for offset in (500..folders.range.total).step_by(500) {
             let result = dracoon
                     .search_nodes(
                         "*",
@@ -286,7 +286,7 @@ async fn download_container(
 
     if files.range.total > 500 {
 
-        for offset in (500..files.range.total).into_iter().step_by(500) {
+        for offset in (500..files.range.total).step_by(500) {
             let result = dracoon
                     .search_nodes(
                         "*",
