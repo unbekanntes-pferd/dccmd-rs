@@ -9,7 +9,7 @@ use crate::{
         auth::Connected,
         models::ListAllParams,
         nodes::{
-            models::{Node, NodeType},
+            models::{Node, NodeType, filters::{NodesSearchFilter}, sorts::NodesSearchSortBy},
             Download, Nodes,
         },
         Dracoon,
@@ -203,9 +203,10 @@ async fn download_container(
     velocity: Option<u8>,
 ) -> Result<(), DcCmdError> {
     // first get all folders below parent
+
     let params = ListAllParams::builder()
-        .with_filter("type:eq:folder".into())
-        .with_sort("parentPath:asc".into())
+        .with_filter(NodesSearchFilter::is_folder())
+        .with_sort(NodesSearchSortBy::parent_path_asc())
         .build();
 
     let mut folders = dracoon
@@ -221,8 +222,8 @@ async fn download_container(
                         Some(-1),
                         Some(
                             ListAllParams::builder()
-                                .with_filter("type:eq:folder".into())
-                                .with_sort("parentPath:asc".into())
+                                .with_filter(NodesSearchFilter::is_folder())
+                                .with_sort(NodesSearchSortBy::parent_path_asc())
                                 .with_offset(offset)
                                 .build(),
                         ),
@@ -275,8 +276,8 @@ async fn download_container(
 
     // get all the files
     let params = ListAllParams::builder()
-        .with_filter("type:eq:file".into())
-        .with_sort("parentPath:asc".into())
+        .with_filter(NodesSearchFilter::is_file())
+        .with_sort(NodesSearchSortBy::parent_path_asc())
         .build();
 
     let mut files = dracoon
@@ -294,8 +295,8 @@ async fn download_container(
                         Some(-1),
                         Some(
                             ListAllParams::builder()
-                                .with_filter("type:eq:file".into())
-                                .with_sort("parentPath:asc".into())
+                                .with_filter(NodesSearchFilter::is_file())
+                                .with_sort(NodesSearchSortBy::parent_path_asc())
                                 .with_offset(offset)
                                 .build(),
                         ),
@@ -309,8 +310,8 @@ async fn download_container(
     let files = files.get_files();
 
     let params = ListAllParams::builder()
-        .with_filter("type:eq:room".into())
-        .with_sort("parentPath:asc".into())
+        .with_filter(NodesSearchFilter::is_room())
+        .with_sort(NodesSearchSortBy::parent_path_asc())
         .build();
 
     debug!("Total file count: {}", files.len());

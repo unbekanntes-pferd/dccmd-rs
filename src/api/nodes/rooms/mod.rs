@@ -111,12 +111,14 @@ impl Rooms for Dracoon<Connected> {
         let mut api_url = self.build_api_url(&url_part);
 
         let params = params.unwrap_or_default();
+        let filters = params.filter_to_string();
+        let sorts = params.sort_to_string();
 
         api_url.query_pairs_mut()
         .extend_pairs(params.limit.map(|limit| ("limit", limit.to_string())))
         .extend_pairs(params.offset.map(|offset| ("offset", offset.to_string())))
-        .extend_pairs(params.filter.map(|filter| ("filter", filter)))
-        .extend_pairs(params.sort.map(|sort| ("sort", sort)))
+        .extend_pairs(params.filter.map(|filter| ("filter", filters)))
+        .extend_pairs(params.sort.map(|sort| ("sort", sorts)))
         .finish();
 
         let response = self
@@ -190,11 +192,14 @@ impl Rooms for Dracoon<Connected> {
 
         let params = params.unwrap_or_default();
 
+        let filters = params.filter_to_string();
+        let sorts = params.sort_to_string();
+
         api_url.query_pairs_mut()
         .extend_pairs(params.limit.map(|limit| ("limit", limit.to_string())))
         .extend_pairs(params.offset.map(|offset| ("offset", offset.to_string())))
-        .extend_pairs(params.filter.map(|filter| ("filter", filter)))
-        .extend_pairs(params.sort.map(|sort| ("sort", sort)))
+        .extend_pairs(params.filter.map(|filter| ("filter", filters)))
+        .extend_pairs(params.sort.map(|sort| ("sort", sorts)))
         .finish();
 
         let response = self

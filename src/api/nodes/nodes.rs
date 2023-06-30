@@ -30,12 +30,15 @@ impl Nodes for Dracoon<Connected> {
 
         let mut api_url = self.build_api_url(&url_part);
 
+        let filters = params.filter_to_string();
+        let sorts = params.sort_to_string();
+
         api_url
             .query_pairs_mut()
             .extend_pairs(params.limit.map(|v| ("limit", v.to_string())))
             .extend_pairs(params.offset.map(|v| ("offset", v.to_string())))
-            .extend_pairs(params.sort.map(|v| ("sort", v)))
-            .extend_pairs(params.filter.map(|v| ("filter", v)))
+            .extend_pairs(params.sort.map(|_| ("sort", sorts)))
+            .extend_pairs(params.filter.map(|_| ("filter", filters)))
             .extend_pairs(room_manager.map(|v| ("room_manager", v.to_string())))
             .extend_pairs(parent_id.map(|v| ("parent_id", v.to_string())))
             .finish();
@@ -123,14 +126,17 @@ impl Nodes for Dracoon<Connected> {
 
         let mut api_url = self.build_api_url(&url_part);
 
+        let filters = params.filter_to_string();
+        let sorts = params.sort_to_string();
+
         api_url
             .query_pairs_mut()
             .append_pair("search_string", search_string)
             .extend_pairs(depth_level.map(|v| ("depth_level", v.to_string())))
             .extend_pairs(params.limit.map(|v| ("limit", v.to_string())))
             .extend_pairs(params.offset.map(|v| ("offset", v.to_string())))
-            .extend_pairs(params.sort.map(|v| ("sort_by", v)))
-            .extend_pairs(params.filter.map(|v| ("filter", v)))
+            .extend_pairs(params.sort.map(|v| ("sort", sorts)))
+            .extend_pairs(params.filter.map(|v| ("filter", filters)))
             .extend_pairs(parent_id.map(|v| ("parent_id", v.to_string())))
             .finish();
 

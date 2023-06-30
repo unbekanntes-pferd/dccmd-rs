@@ -1,5 +1,8 @@
 #![allow(dead_code, unused_imports)]
 
+pub mod filters;
+pub mod sorts;
+
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Formatter;
@@ -263,6 +266,26 @@ pub enum NodeType {
     Folder,
     #[serde(rename = "file")]
     File,
+}
+
+impl From<NodeType> for String {
+    fn from(node_type: NodeType) -> Self {
+        match node_type {
+            NodeType::Room => "room".to_string(),
+            NodeType::Folder => "folder".to_string(),
+            NodeType::File => "file".to_string(),
+        }
+    }
+}
+
+impl From<&NodeType> for String {
+    fn from(node_type: &NodeType) -> Self {
+        match node_type {
+            NodeType::Room => "room".to_string(),
+            NodeType::Folder => "folder".to_string(),
+            NodeType::File => "file".to_string(),
+        }
+    }
 }
 
 /// DRACOOON node permissions
