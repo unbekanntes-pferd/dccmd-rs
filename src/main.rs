@@ -10,7 +10,6 @@ use console::Term;
 use tracing::metadata::LevelFilter;
 use tracing_subscriber::{filter::EnvFilter, prelude::*, fmt};
 
-mod api;
 mod cmd;
 
 #[tokio::main]

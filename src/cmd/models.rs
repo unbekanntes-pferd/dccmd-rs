@@ -1,7 +1,7 @@
 use clap::Parser;
 use thiserror::Error;
 
-use crate::api::{
+use dco3::{
     auth::{
         errors::DracoonClientError,
         models::{DracoonAuthErrorResponse, DracoonErrorResponse},

@@ -2,7 +2,8 @@ use std::{path::PathBuf, time::SystemTime};
 
 use indicatif::{ProgressBar, ProgressStyle};
 
-use crate::{cmd::{models::DcCmdError, init_encryption, init_dracoon, utils::dates::to_datetime_utc}, api::nodes::{models::{ResolutionStrategy, FileMeta, UploadOptions}, Upload, Nodes}};
+use crate::cmd::{models::DcCmdError, init_encryption, init_dracoon, utils::dates::to_datetime_utc};
+use dco3::nodes::{models::{ResolutionStrategy, FileMeta, UploadOptions}, Upload, Nodes};
 
 const DEFAULT_CHUNK_SIZE: usize = 1024 * 1024 * 5; // 5 MB
 

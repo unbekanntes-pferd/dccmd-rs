@@ -5,21 +5,22 @@ use indicatif::{ProgressBar, ProgressStyle};
 use tracing::{debug, error};
 
 use crate::{
-    api::{
-        auth::Connected,
-        models::ListAllParams,
-        nodes::{
-            models::{Node, NodeType, filters::{NodesSearchFilter}, sorts::NodesSearchSortBy},
-            Download, Nodes,
-        },
-        Dracoon,
-    },
     cmd::{
         init_dracoon, init_encryption,
         models::DcCmdError,
         nodes::{is_search_query, search_nodes},
         utils::strings::parse_path,
     },
+};
+
+use dco3::{
+    auth::Connected,
+    models::ListAllParams,
+    nodes::{
+        models::{Node, NodeType, filters::{NodesSearchFilter}, sorts::NodesSearchSortBy},
+        Download, Nodes,
+    },
+    Dracoon,
 };
 
 pub async fn download(

@@ -4,20 +4,21 @@ use futures_util::future::join_all;
 use tracing::debug;
 
 use crate::{
-    api::{
-        auth::Connected,
-        models::ListAllParams,
-        nodes::{
-            models::{CreateFolderRequest, NodeList, NodeType},
-            rooms::models::CreateRoomRequest,
-            Folders, Nodes, Rooms,
-        },
-        Dracoon,
-    },
     cmd::{
         init_dracoon,
         utils::strings::{build_node_path, parse_path, print_node},
     },
+};
+
+use dco3::{
+    auth::Connected,
+    models::ListAllParams,
+    nodes::{
+        models::{CreateFolderRequest, NodeList, NodeType},
+        rooms::models::CreateRoomRequest,
+        Folders, Nodes, Rooms,
+    },
+    Dracoon,
 };
 
 use super::{
