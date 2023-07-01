@@ -16,7 +16,7 @@ pub enum NodesFilter {
 }
 
 impl FilterQuery for NodesFilter {
-    fn filter_to_string(&self) -> String {
+    fn to_filter_string(&self) -> String {
         match self {
             NodesFilter::Name(op, value) => {
                 let op = String::from(op);
@@ -221,7 +221,7 @@ impl From<NodesSearchFilter> for Box<dyn FilterQuery> {
 
 impl FilterQuery for NodesSearchFilter {
 
-    fn filter_to_string(&self) -> String {
+    fn to_filter_string(&self) -> String {
         match self {
             NodesSearchFilter::BranchVersion(op, val) => {
                 let op = String::from(op);
@@ -305,31 +305,179 @@ mod tests {
     #[test]
     fn test_nodes_filter_name_eq() {
         let filter = NodesFilter::name_equals("test");
-        assert_eq!(filter.filter_to_string(), "name:eq:test");
+        assert_eq!(filter.to_filter_string(), "name:eq:test");
     }
 
     #[test]
     fn test_nodes_filter_name_contains() {
         let filter = NodesFilter::name_contains("test");
-        assert_eq!(filter.filter_to_string(), "name:cn:test");
-    }
-
-    #[test]
-    fn test_filter_branch_version_before() {
-        let filter = NodesFilter::branch_version_before(1);
-        assert_eq!(filter.filter_to_string(), "branchVersion:le:1");
-    }
-
-    #[test]
-    fn test_nodes_filter_branch_version_after() {
-        let filter = NodesFilter::branch_version_after(1);
-        assert_eq!(filter.filter_to_string(), "branchVersion:ge:1");
+        assert_eq!(filter.to_filter_string(), "name:cn:test");
     }
 
     #[test]
     fn test_nodes_filter_is_file() {
         let filter = NodesFilter::is_file();
-        assert_eq!(filter.filter_to_string(), "type:eq:file");
+        assert_eq!(filter.to_filter_string(), "type:eq:file");
+    }
+
+    #[test]
+    fn test_nodes_filter_is_encrypted() {
+        let filter = NodesFilter::is_encrypted(true);
+        let neg_filter = NodesFilter::is_encrypted(false);
+        assert_eq!(filter.to_filter_string(), "encrypted:eq:true");
+        assert_eq!(neg_filter.to_filter_string(), "encrypted:eq:false");
+    }
+
+    #[test]
+    fn test_nodes_filter_created_before(){
+        let filter = NodesFilter::created_before("2020-01-01T00:00:00.000Z");
+        assert_eq!(filter.to_filter_string(), "timestampCreation:le:2020-01-01T00:00:00.000Z");
+    }
+
+    #[test]
+    fn test_nodes_filter_created_after(){
+        let filter = NodesFilter::created_after("2020-01-01T00:00:00.000Z");
+        assert_eq!(filter.to_filter_string(), "timestampCreation:ge:2020-01-01T00:00:00.000Z");
+    }
+
+    #[test]
+    fn test_nodes_filter_modified_before() {
+        let filter = NodesFilter::modified_before("2020-01-01T00:00:00.000Z");
+        assert_eq!(filter.to_filter_string(), "timestampModification:le:2020-01-01T00:00:00.000Z");
+    }
+
+    #[test]
+    fn test_nodes_filter_modified_after() {
+        let filter = NodesFilter::modified_after("2020-01-01T00:00:00.000Z");
+        assert_eq!(filter.to_filter_string(), "timestampModification:ge:2020-01-01T00:00:00.000Z");
+    }
+
+    #[test]
+    fn test_nodes_filter_branch_version_before() {
+        let filter = NodesFilter::branch_version_before(1);
+        assert_eq!(filter.to_filter_string(), "branchVersion:le:1");
+    }
+
+    #[test]
+    fn test_nodes_filter_branch_version_after() {
+        let filter = NodesFilter::branch_version_after(1);
+        assert_eq!(filter.to_filter_string(), "branchVersion:ge:1");
+    }
+
+    #[test]
+    fn test_nodes_search_filter_is_folder() {
+        let filter = NodesSearchFilter::is_folder();
+        assert_eq!(filter.to_filter_string(), "type:eq:folder");
+    }
+
+    #[test]
+    fn test_nodes_search_filter_is_file() {
+        let filter = NodesSearchFilter::is_file();
+        assert_eq!(filter.to_filter_string(), "type:eq:file");
+    }
+
+    #[test]
+    fn test_nodes_search_filter_is_room() {
+        let filter = NodesSearchFilter::is_room();
+        assert_eq!(filter.to_filter_string(), "type:eq:room");
+    }
+
+    #[test]
+    fn test_nodes_search_filter_is_favorite() {
+        let filter = NodesSearchFilter::is_favorite(true);
+        let neg_filter = NodesSearchFilter::is_favorite(false);
+        assert_eq!(filter.to_filter_string(), "isFavorite:eq:true");
+        assert_eq!(neg_filter.to_filter_string(), "isFavorite:eq:false");
+    }
+
+    #[test]
+    fn test_nodes_search_filter_parent_path_equals() {
+        let filter = NodesSearchFilter::parent_path_equals("test");
+        assert_eq!(filter.to_filter_string(), "parentPath:eq:test");
+    }
+
+    #[test]
+    fn test_nodes_search_filter_parent_path_contains() {
+        let filter = NodesSearchFilter::parent_path_contains("test");
+        assert_eq!(filter.to_filter_string(), "parentPath:cn:test");
+    }
+
+    #[test]
+    fn test_nodes_search_filter_size_greater_equals() {
+        let filter = NodesSearchFilter::size_greater_equals(1);
+        assert_eq!(filter.to_filter_string(), "size:ge:1");    
+    }
+
+    #[test]
+    fn test_nodes_search_filter_size_less_equals() {
+        let filter = NodesSearchFilter::size_less_equals(1);
+        assert_eq!(filter.to_filter_string(), "size:le:1");    
+    }
+
+    #[test]
+    fn test_nodess_search_filter_branch_version_before() {
+        let filter = NodesSearchFilter::branch_version_before(1);
+        assert_eq!(filter.to_filter_string(), "branchVersion:le:1");
+    }
+
+    #[test]
+    fn test_nodes_search_filter_branch_version_after() {
+        let filter = NodesSearchFilter::branch_version_after(1);
+        assert_eq!(filter.to_filter_string(), "branchVersion:ge:1");
+    }
+
+    #[test]
+    fn test_nodes_search_filter_created_at_before() {
+        let filter = NodesSearchFilter::created_at_before("2021-02-01T00:00:00.000Z");
+        assert_eq!(filter.to_filter_string(), "createdAt:le:2021-02-01T00:00:00.000Z");
+    }
+
+    #[test]
+    fn test_nodes_search_filter_created_at_after() {
+        let filter = NodesSearchFilter::created_at_after("2021-02-01T00:00:00.000Z");
+        assert_eq!(filter.to_filter_string(), "createdAt:ge:2021-02-01T00:00:00.000Z");
+    }
+
+    #[test]
+    fn test_nodes_search_filter_updated_at_before() {
+        let filter = NodesSearchFilter::updated_at_before("2021-02-01T00:00:00.000Z");
+        assert_eq!(filter.to_filter_string(), "updatedAt:le:2021-02-01T00:00:00.000Z");
+    }
+
+    #[test]
+    fn test_nodes_search_filter_updated_at_after() {
+        let filter = NodesSearchFilter::updated_at_after("2021-02-01T00:00:00.000Z");
+        assert_eq!(filter.to_filter_string(), "updatedAt:ge:2021-02-01T00:00:00.000Z");
+    }
+
+    #[test]
+    fn test_nodes_search_filter_expire_at_before() {
+        let filter = NodesSearchFilter::expire_at_before("2021-02-01T00:00:00.000Z");
+        assert_eq!(filter.to_filter_string(), "expireAt:le:2021-02-01T00:00:00.000Z");
+    }
+
+    #[test]
+    fn test_nodes_search_filter_expire_at_after() {
+        let filter = NodesSearchFilter::expire_at_after("2021-02-01T00:00:00.000Z");
+        assert_eq!(filter.to_filter_string(), "expireAt:ge:2021-02-01T00:00:00.000Z");
+    }
+
+    #[test]
+    fn test_nodes_search_filter_classification_equals() {
+        let filter = NodesSearchFilter::classification_equals(1);
+        assert_eq!(filter.to_filter_string(), "classification:eq:1");
+    }
+
+    #[test]
+    fn test_nodes_search_filter_file_type_equals() {
+        let filter = NodesSearchFilter::file_type_equals("jpg");
+        assert_eq!(filter.to_filter_string(), "fileType:eq:jpg");
+    }
+
+    #[test]
+    fn test_nodes_search_filter_file_type_contains() {
+        let filter = NodesSearchFilter::file_type_contains("jpg");
+        assert_eq!(filter.to_filter_string(), "fileType:cn:jpg");
     }
 
 }

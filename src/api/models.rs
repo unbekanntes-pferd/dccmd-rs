@@ -2,6 +2,8 @@ use std::fmt::Debug;
 
 use serde::{Deserialize, Serialize};
 
+use super::auth::errors::DracoonClientError;
+
 
 #[derive(Debug)]
 pub struct ListAllParams {
@@ -33,7 +35,7 @@ impl ListAllParams {
             Some(filters) =>{
                 filters
                     .iter()
-                    .map(|filter| filter.filter_to_string())
+                    .map(|filter| filter.to_filter_string())
                     .collect::<Vec<String>>()
                     .join("|")
             },
@@ -47,7 +49,7 @@ impl ListAllParams {
             Some(sorts) =>{
                 sorts
                     .into_iter()
-                    .map(|sort| sort.sort_to_string())
+                    .map(|sort| sort.to_sort_string())
                     .collect::<Vec<String>>()
                     .join("|")
             },
@@ -179,11 +181,11 @@ impl <T> IntoIterator for RangedItems<T> {
 }
 
 pub trait FilterQuery: Debug + Send + Sync {
-    fn filter_to_string(&self) -> String;
+    fn to_filter_string(&self) -> String;
 }
 
 pub trait SortQuery: Debug + Send + Sync {
-    fn sort_to_string(&self) -> String;
+    fn to_sort_string(&self) -> String;
 }
 
 pub type FilterQueries = Vec<Box<dyn FilterQuery>>;
@@ -245,3 +247,211 @@ impl From<&SortOrder> for String {
         }
     }
 }
+
+struct FilterQueryBuilder {
+    field: Option<String>,
+    operator: Option<FilterOperator>,
+    value: Option<String>,
+}
+
+impl FilterQueryBuilder {
+    pub fn new() -> Self {
+        Self {
+            field: None,
+            operator: None,
+            value: None,
+        }
+    }
+
+    pub fn with_field(mut self, field: impl Into<String>) -> Self {
+        self.field = Some(field.into());
+        self
+    }
+
+    pub fn with_operator(mut self, operator: FilterOperator) -> Self {
+        self.operator = Some(operator);
+        self
+    }
+
+    pub fn with_value(mut self, value: impl Into<String>) -> Self {
+        self.value = Some(value.into());
+        self
+    }
+
+    pub fn try_build(self) -> Result<String, DracoonClientError> {
+
+        let field = self.field.ok_or(DracoonClientError::MissingArgument)?;
+        let operator = self.operator.ok_or(DracoonClientError::MissingArgument)?;
+        let operator: String = operator.into();
+        let value = self.value.ok_or(DracoonClientError::MissingArgument)?;
+
+        Ok(format!("{}:{}:{}", field, operator, value))
+
+    }
+}
+
+
+struct SortQueryBuilder {
+    field: Option<String>,
+    order: Option<SortOrder>,
+}
+
+impl SortQueryBuilder {
+    pub fn new() -> Self {
+        Self {
+            field: None,
+            order: None,
+        }
+    }
+
+    pub fn with_field(mut self, field: impl Into<String>) -> Self {
+        self.field = Some(field.into());
+        self
+    }
+
+    pub fn with_order(mut self, order: SortOrder) -> Self {
+        self.order = Some(order);
+        self
+    }
+
+    pub fn try_build(self) -> Result<String, DracoonClientError> {
+
+        let field = self.field.ok_or(DracoonClientError::MissingArgument)?;
+        let order = self.order.ok_or(DracoonClientError::MissingArgument)?;
+        let order: String = order.into();
+
+        Ok(format!("{}:{}", field, order))
+
+    }
+}
+
+
+impl FilterQuery for String {
+    fn to_filter_string(&self) -> String {
+        self.clone()
+    }
+}
+
+impl SortQuery for String {
+    fn to_sort_string(&self) -> String {
+        self.clone()
+    }
+}
+
+impl From<String> for Box<dyn FilterQuery> {
+    fn from(value: String) -> Self {
+        Box::new(value)
+    }
+}
+
+impl From<String> for Box<dyn SortQuery> {
+    fn from(value: String) -> Self {
+        Box::new(value)
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_filter_query_builder() {
+
+        let query = FilterQueryBuilder::new()
+            .with_field("field")
+            .with_operator(FilterOperator::Eq)
+            .with_value("value")
+            .try_build()
+            .unwrap();
+
+        assert_eq!(query, "field:eq:value");
+
+        let params = ListAllParams::builder()
+            .with_filter(query.to_filter_string())
+            .build();
+
+       assert_eq!(params.filter_to_string(), "field:eq:value");
+
+    }
+
+    #[test]
+    fn test_sort_query_builder() {
+
+        let query = SortQueryBuilder::new()
+            .with_field("field")
+            .with_order(SortOrder::Asc)
+            .try_build()
+            .unwrap();
+
+        assert_eq!(query, "field:asc");
+
+        let params = ListAllParams::builder()
+            .with_sort(query.to_sort_string())
+            .build();
+
+        assert_eq!(params.sort_to_string(), "field:asc");
+
+    }
+
+    #[test]
+    fn test_filter_query_builder_missing_field() {
+
+        let query = FilterQueryBuilder::new()
+            .with_operator(FilterOperator::Eq)
+            .with_value("value")
+            .try_build();
+
+        assert!(query.is_err());
+
+    }
+
+    #[test]
+    fn test_filter_query_builder_missing_operator() {
+
+        let query = FilterQueryBuilder::new()
+            .with_field("field")
+            .with_value("value")
+            .try_build();
+
+        assert!(query.is_err());
+
+    }
+
+    #[test]
+    fn test_filter_query_builder_missing_value() {
+
+        let query = FilterQueryBuilder::new()
+            .with_field("field")
+            .with_operator(FilterOperator::Eq)
+            .try_build();
+
+        assert!(query.is_err());
+
+    }
+
+    #[test]
+    fn test_sort_query_builder_missing_field() {
+
+        let query = SortQueryBuilder::new()
+            .with_order(SortOrder::Asc)
+            .try_build();
+
+        assert!(query.is_err());
+
+    }
+
+    #[test]
+    fn test_sort_query_builder_missing_order() {
+
+        let query = SortQueryBuilder::new()
+            .with_field("field")
+            .try_build();
+
+        assert!(query.is_err());
+
+    }
+
+
+}
+

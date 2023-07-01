@@ -67,6 +67,97 @@ impl From<NodesSortBy> for String {
     }
 }
 
+impl NodesSortBy {
+    pub fn name_asc() -> Self {
+        NodesSortBy::Name(SortOrder::Asc)
+    }
+
+    pub fn name_desc() -> Self {
+        NodesSortBy::Name(SortOrder::Desc)
+    }
+
+    pub fn created_at_asc() -> Self {
+        NodesSortBy::CreatedAt(SortOrder::Asc)
+    }
+
+    pub fn created_at_desc() -> Self {
+        NodesSortBy::CreatedAt(SortOrder::Desc)
+    }
+
+    pub fn created_by_asc() -> Self {
+        NodesSortBy::CreatedBy(SortOrder::Asc)
+    }
+
+    pub fn created_by_desc() -> Self {
+        NodesSortBy::CreatedBy(SortOrder::Desc)
+    }
+
+    pub fn updated_at_asc() -> Self {
+        NodesSortBy::UpdatedAt(SortOrder::Asc)
+    }
+
+    pub fn updated_at_desc() -> Self {
+        NodesSortBy::UpdatedAt(SortOrder::Desc)
+    }
+
+    pub fn updated_by_asc() -> Self {
+        NodesSortBy::UpdatedBy(SortOrder::Asc)
+    }
+
+    pub fn updated_by_desc() -> Self {
+        NodesSortBy::UpdatedBy(SortOrder::Desc)
+    }
+
+    pub fn file_type_asc() -> Self {
+        NodesSortBy::FileType(SortOrder::Asc)
+    }
+
+    pub fn file_type_desc() -> Self {
+        NodesSortBy::FileType(SortOrder::Desc)
+    }
+
+    pub fn classification_asc() -> Self {
+        NodesSortBy::Classification(SortOrder::Asc)
+    }
+
+    pub fn classification_desc() -> Self {
+        NodesSortBy::Classification(SortOrder::Desc)
+    }
+
+    pub fn size_asc() -> Self {
+        NodesSortBy::Size(SortOrder::Asc)
+    }
+
+    pub fn size_desc() -> Self {
+        NodesSortBy::Size(SortOrder::Desc)
+    }
+
+    pub fn cnt_deleted_versions_asc() -> Self {
+        NodesSortBy::CntDeletedVersions(SortOrder::Asc)
+    }
+
+    pub fn cnt_deleted_versions_desc() -> Self {
+        NodesSortBy::CntDeletedVersions(SortOrder::Desc)
+    }
+
+    pub fn timestamp_creation_asc() -> Self {
+        NodesSortBy::TimestampCreation(SortOrder::Asc)
+    }
+
+    pub fn timestamp_creation_desc() -> Self {
+        NodesSortBy::TimestampCreation(SortOrder::Desc)
+    }
+
+    pub fn timestamp_modification_asc() -> Self {
+        NodesSortBy::TimestampModification(SortOrder::Asc)
+    }
+
+    pub fn timestamp_modification_desc() -> Self {
+        NodesSortBy::TimestampModification(SortOrder::Desc)
+    }
+
+}
+
 #[derive(Debug)]
 pub enum NodesSearchSortBy {
    Name(SortOrder),
@@ -252,7 +343,7 @@ impl NodesSearchSortBy {
 }
 
 impl SortQuery for NodesSearchSortBy {
-    fn sort_to_string(&self) -> String {
+    fn to_sort_string(&self) -> String {
         match self {
             NodesSearchSortBy::Name(order) => {
                 let order = String::from(order);
@@ -323,7 +414,7 @@ impl From<NodesSortBy> for Box<dyn SortQuery> {
 }
 
 impl SortQuery for NodesSortBy {
-    fn sort_to_string(&self) -> String {
+    fn to_sort_string(&self) -> String {
         match self {
             NodesSortBy::Classification(order) => {
                 let order = String::from(order);
@@ -373,4 +464,277 @@ impl SortQuery for NodesSortBy {
 
         }
     }
+}
+
+
+#[cfg(test)]
+
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_nodes_sort_by_name_asc() {
+        let sort_by = NodesSortBy::name_asc();
+        assert_eq!(sort_by.to_sort_string(), "name:asc");
+    }
+
+    #[test]
+    fn test_nodes_sort_by_name_desc() {
+        let sort_by = NodesSortBy::name_desc();
+        assert_eq!(sort_by.to_sort_string(), "name:desc");
+    }
+
+    #[test]
+    fn test_nodes_sort_by_created_at_asc() {
+        let sort_by = NodesSortBy::created_at_asc();
+        assert_eq!(sort_by.to_sort_string(), "createdAt:asc");
+    }
+
+    #[test]
+    fn test_nodes_sort_by_created_at_desc() {
+        let sort_by = NodesSortBy::created_at_desc();
+        assert_eq!(sort_by.to_sort_string(), "createdAt:desc");
+    }
+
+    #[test]
+    fn test_nodes_sort_by_created_by_asc() {
+        let sort_by = NodesSortBy::created_by_asc();
+        assert_eq!(sort_by.to_sort_string(), "createdBy:asc");
+    }
+
+    #[test]
+    fn test_nodes_sort_by_created_by_desc() {
+        let sort_by = NodesSortBy::created_by_desc();
+        assert_eq!(sort_by.to_sort_string(), "createdBy:desc");
+    }
+
+    #[test]
+    fn test_nodes_sort_by_updated_at_asc() {
+        let sort_by = NodesSortBy::updated_at_asc();
+        assert_eq!(sort_by.to_sort_string(), "updatedAt:asc");
+    }
+
+    #[test]
+    fn test_nodes_sort_by_updated_at_desc() {
+        let sort_by = NodesSortBy::updated_at_desc();
+        assert_eq!(sort_by.to_sort_string(), "updatedAt:desc");
+    }
+
+    #[test]
+    fn test_nodes_sort_by_updated_by_asc() {
+        let sort_by = NodesSortBy::updated_by_asc();
+        assert_eq!(sort_by.to_sort_string(), "updatedBy:asc");
+    }
+
+    #[test]
+    fn test_nodes_sort_by_updated_by_desc() {
+        let sort_by = NodesSortBy::updated_by_desc();
+        assert_eq!(sort_by.to_sort_string(), "updatedBy:desc");
+    }
+
+    #[test]
+    fn test_nodes_sort_by_file_type_asc() {
+        let sort_by = NodesSortBy::file_type_asc();
+        assert_eq!(sort_by.to_sort_string(), "fileType:asc");
+    }
+
+    #[test]
+    fn test_nodes_sort_by_file_type_desc() {
+        let sort_by = NodesSortBy::file_type_desc();
+        assert_eq!(sort_by.to_sort_string(), "fileType:desc");
+    }
+
+    #[test]
+    fn test_nodes_sort_by_classification_asc() {
+        let sort_by = NodesSortBy::classification_asc();
+        assert_eq!(sort_by.to_sort_string(), "classification:asc");
+    }
+
+    #[test]
+    fn test_nodes_sort_by_classification_desc() {
+        let sort_by = NodesSortBy::classification_desc();
+        assert_eq!(sort_by.to_sort_string(), "classification:desc");
+    }
+
+    #[test]
+    fn test_nodes_sort_by_size_asc() {
+        let sort_by = NodesSortBy::size_asc();
+        assert_eq!(sort_by.to_sort_string(), "size:asc");
+    }
+
+    #[test]
+    fn test_nodes_sort_by_size_desc() {
+        let sort_by = NodesSortBy::size_desc();
+        assert_eq!(sort_by.to_sort_string(), "size:desc");
+    }
+
+
+    #[test]
+    fn test_nodes_sort_by_cnt_deleted_versions_asc() {
+        let sort_by = NodesSortBy::cnt_deleted_versions_asc();
+        assert_eq!(sort_by.to_sort_string(), "cntDeletedVersions:asc");
+    }
+
+    #[test]
+    fn test_nodes_sort_by_cnt_deleted_versions_desc() {
+        let sort_by = NodesSortBy::cnt_deleted_versions_desc();
+        assert_eq!(sort_by.to_sort_string(), "cntDeletedVersions:desc");
+    }
+
+    #[test]
+    fn test_nodes_sort_by_timestamp_creation_asc() {
+        let sort_by = NodesSortBy::timestamp_creation_asc();
+        assert_eq!(sort_by.to_sort_string(), "timestampCreation:asc");
+    }
+
+    #[test]
+    fn test_nodes_sort_by_timestamp_creation_desc() {
+        let sort_by = NodesSortBy::timestamp_creation_desc();
+        assert_eq!(sort_by.to_sort_string(), "timestampCreation:desc");
+    }
+
+    #[test]
+    fn test_nodes_sort_by_timestamp_modification_asc() {
+        let sort_by = NodesSortBy::timestamp_modification_asc();
+        assert_eq!(sort_by.to_sort_string(), "timestampModification:asc");
+    }
+
+    #[test]
+    fn test_nodes_sort_by_timestamp_modification_desc() {
+        let sort_by = NodesSortBy::timestamp_modification_desc();
+        assert_eq!(sort_by.to_sort_string(), "timestampModification:desc");
+    }
+
+    #[test]
+    fn test_nodes_search_sort_by_name_asc() {
+        let sort_by = NodesSearchSortBy::name_asc();
+        assert_eq!(sort_by.to_sort_string(), "name:asc");
+    }
+
+    #[test]
+    fn test_nodes_search_sort_by_name_desc() {
+        let sort_by = NodesSearchSortBy::name_desc();
+        assert_eq!(sort_by.to_sort_string(), "name:desc");
+    }
+
+    #[test]
+    fn test_nodes_search_sort_by_created_at_asc() {
+        let sort_by = NodesSearchSortBy::created_at_asc();
+        assert_eq!(sort_by.to_sort_string(), "createdAt:asc");
+    }
+
+    #[test]
+    fn test_nodes_search_sort_by_created_at_desc() {
+        let sort_by = NodesSearchSortBy::created_at_desc();
+        assert_eq!(sort_by.to_sort_string(), "createdAt:desc");
+    }
+
+    #[test]
+    fn test_nodes_search_sort_by_created_by_asc() {
+        let sort_by = NodesSearchSortBy::created_by_asc();
+        assert_eq!(sort_by.to_sort_string(), "createdBy:asc");
+    }
+
+    #[test]
+    fn test_nodes_search_sort_by_created_by_desc() {
+        let sort_by = NodesSearchSortBy::created_by_desc();
+        assert_eq!(sort_by.to_sort_string(), "createdBy:desc");
+    }
+
+    #[test]
+    fn test_nodes_search_sort_by_updated_at_asc() {
+        let sort_by = NodesSearchSortBy::updated_at_asc();
+        assert_eq!(sort_by.to_sort_string(), "updatedAt:asc");
+    }
+
+    #[test]
+    fn test_nodes_search_sort_by_updated_at_desc() {
+        let sort_by = NodesSearchSortBy::updated_at_desc();
+        assert_eq!(sort_by.to_sort_string(), "updatedAt:desc");
+    }
+
+    #[test]
+    fn test_nodes_search_sort_by_updated_by_asc() {
+        let sort_by = NodesSearchSortBy::updated_by_asc();
+        assert_eq!(sort_by.to_sort_string(), "updatedBy:asc");
+    }
+
+    #[test]
+    fn test_nodes_search_sort_by_updated_by_desc() {
+        let sort_by = NodesSearchSortBy::updated_by_desc();
+        assert_eq!(sort_by.to_sort_string(), "updatedBy:desc");
+    }
+
+    #[test]
+    fn test_nodes_search_sort_by_file_type_asc() {
+        let sort_by = NodesSearchSortBy::file_type_asc();
+        assert_eq!(sort_by.to_sort_string(), "fileType:asc");
+    }
+
+    #[test]
+    fn test_nodes_search_sort_by_file_type_desc() {
+        let sort_by = NodesSearchSortBy::file_type_desc();
+        assert_eq!(sort_by.to_sort_string(), "fileType:desc");
+    }
+
+    #[test]
+    fn test_nodes_search_sort_by_classification_asc() {
+        let sort_by = NodesSearchSortBy::classification_asc();
+        assert_eq!(sort_by.to_sort_string(), "classification:asc");
+    }
+
+    #[test]
+    fn test_nodes_search_sort_by_classification_desc() {
+        let sort_by = NodesSearchSortBy::classification_desc();
+        assert_eq!(sort_by.to_sort_string(), "classification:desc");
+    }
+
+    #[test]
+    fn test_nodes_search_sort_by_size_asc() {
+        let sort_by = NodesSearchSortBy::size_asc();
+        assert_eq!(sort_by.to_sort_string(), "size:asc");
+    }
+
+    #[test]
+    fn test_nodes_search_sort_by_size_desc() {
+        let sort_by = NodesSearchSortBy::size_desc();
+        assert_eq!(sort_by.to_sort_string(), "size:desc");
+    }
+
+    #[test]
+    fn test_nodes_search_sort_by_cnt_deleted_versions_asc() {
+        let sort_by = NodesSearchSortBy::cnt_deleted_versions_asc();
+        assert_eq!(sort_by.to_sort_string(), "cntDeletedVersions:asc");
+    }
+
+    #[test]
+    fn test_nodes_search_sort_by_cnt_deleted_versions_desc() {
+        let sort_by = NodesSearchSortBy::cnt_deleted_versions_desc();
+        assert_eq!(sort_by.to_sort_string(), "cntDeletedVersions:desc");
+    }
+
+    #[test]
+    fn test_nodes_search_sort_by_timestamp_creation_asc() {
+        let sort_by = NodesSearchSortBy::timestamp_creation_asc();
+        assert_eq!(sort_by.to_sort_string(), "timestampCreation:asc");
+    }
+
+    #[test]
+    fn test_nodes_search_sort_by_timestamp_creation_desc() {
+        let sort_by = NodesSearchSortBy::timestamp_creation_desc();
+        assert_eq!(sort_by.to_sort_string(), "timestampCreation:desc");
+    }
+
+    #[test]
+    fn test_nodes_search_sort_by_timestamp_modification_asc() {
+        let sort_by = NodesSearchSortBy::timestamp_modification_asc();
+        assert_eq!(sort_by.to_sort_string(), "timestampModification:asc");
+    }
+
+    #[test]
+    fn test_nodes_search_sort_by_timestamp_modification_desc() {
+        let sort_by = NodesSearchSortBy::timestamp_modification_desc();
+        assert_eq!(sort_by.to_sort_string(), "timestampModification:desc");
+    }
+
 }

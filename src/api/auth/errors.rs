@@ -37,6 +37,8 @@ pub enum DracoonClientError {
     CryptoError(DracoonCryptoError),
     #[error("Missing encryption secret")]
     MissingEncryptionSecret,
+    #[error("Missing argument")]
+    MissingArgument,
 }
 
 impl From<ReqError> for DracoonClientError {
