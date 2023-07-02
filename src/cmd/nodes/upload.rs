@@ -1,19 +1,23 @@
 use std::{path::PathBuf, time::SystemTime};
 
 use indicatif::{ProgressBar, ProgressStyle};
+use tracing::error;
 
-use crate::cmd::{models::DcCmdError, init_encryption, init_dracoon, utils::dates::to_datetime_utc};
+use crate::cmd::{models::DcCmdError, init_encryption, init_dracoon, utils::{dates::to_datetime_utc, strings::parse_path}};
 use dco3::nodes::{models::{ResolutionStrategy, FileMeta, UploadOptions}, Upload, Nodes};
 
 const DEFAULT_CHUNK_SIZE: usize = 1024 * 1024 * 5; // 5 MB
 
 pub async fn upload(source: PathBuf, target: String, overwrite: bool, classification: Option<u8>) -> Result<(), DcCmdError> {
     let mut dracoon = init_dracoon(&target).await?;
-    
 
-    let parent_node = dracoon.get_node_from_path(&target).await?;
+    let (parent_path, node_name, _) = parse_path(&target, dracoon.get_base_url().as_str()).or(Err(DcCmdError::InvalidPath(target.clone())))?;
+    let node_path = format!("{parent_path}{node_name}/");
+
+    let parent_node = dracoon.get_node_from_path(&node_path).await?;
 
     let Some(parent_node) = parent_node else {
+        error!("Target path not found: {}", target);
         return Err(DcCmdError::InvalidPath(target.clone()))
     };
 
