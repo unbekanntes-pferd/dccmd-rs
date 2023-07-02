@@ -477,7 +477,8 @@ dependencies = [
 [[package]]
 name = "dco3"
 version = "0.1.0"
-source = "git+https://github.com/unbekanntes-pferd/dco3.git#dc36fffe97a32389b3869efb596ca754b255db07"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6351c3eb4c12900f3aa9f0ac884f42eaea7fe08078d589f8f6e9859a6b87757c"
 dependencies = [
  "async-stream",
  "async-trait",

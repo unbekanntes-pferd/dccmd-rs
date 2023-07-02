@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 # DRACOON API
-dco3 = { git = "https://github.com/unbekanntes-pferd/dco3.git" }
+dco3 = "0.1.0"
 
 # CLI helpers
 clap = { version = "4.1.8", features = ["derive"] }
