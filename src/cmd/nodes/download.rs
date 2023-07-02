@@ -82,6 +82,25 @@ async fn download_file(
     node: &Node,
     target: &str,
 ) -> Result<(), DcCmdError> {
+
+    let original_target = target.to_string();
+
+    // if own name provided - use it - otherwise use node name
+    let target = if std::path::Path::new(target).is_dir() {
+        let path = std::path::Path::new(target);
+        let target = path.join(node.name.clone());
+
+        let Some(target) = target.to_str() else {
+            return Err(DcCmdError::InvalidPath(original_target));
+        };
+
+        target.to_string()
+
+    } else {
+        target.to_string()
+    };
+
+
     let mut out_file = std::fs::File::create(target).or(Err(DcCmdError::IoError))?;
 
     let progress_bar = ProgressBar::new(node.size.unwrap_or(0));
