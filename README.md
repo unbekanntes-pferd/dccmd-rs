@@ -2,7 +2,7 @@
 
 ## What is this?
 This is a port of [DRACOON Commander](https://github.com/unbekanntes-pferd/dccmd) - initially a Python3 project to use DRACOON via CLI.
-The project serves to define a Rust DRACOON API wrapper.
+The project serves as a demo client implementation using `dco3` - an API wrapper in Rust for DRACOON. 
 
 ### Built with
 This project makes use of several awesome crates and uses async Rust throughout the project.
@@ -15,9 +15,9 @@ Crates used:
 
 Full dependency list: [Cargo.toml](Cargo.toml)
 
-For cryptography, the experimental crate `dco3-crypto` is used.
+For all DRACOON operations `dco3` is used.
 
-- [dco3-crypto](https://github.com/unbekanntes-pferd/dco3-crypto)
+- [dco3](https://github.com/unbekanntes-pferd/dco3)
 
 ## Installation
 
