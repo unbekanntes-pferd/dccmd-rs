@@ -1,6 +1,5 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf, time::Duration};
 
-use chrono::Duration;
 use futures_util::future::join_all;
 use indicatif::{ProgressBar, ProgressStyle};
 use tracing::{debug, error};
@@ -217,9 +216,10 @@ async fn download_container(
     velocity: Option<u8>,
 ) -> Result<(), DcCmdError> {
 
+    // indicate listing files and folders
     let progress_spinner = ProgressBar::new_spinner();
-    progress_spinner.enable_steady_tick(Duration::from_millis(200))
-
+    progress_spinner.set_message("Listing files and folders...");
+    progress_spinner.enable_steady_tick(Duration::from_millis(100));
 
     // first get all folders below parent
     let folders = get_folders(&dracoon, node).await?;
@@ -244,6 +244,8 @@ async fn download_container(
 
     // remove files in sub rooms
     let files = filter_files_in_sub_rooms(dracoon, node, files).await?;
+
+    progress_spinner.finish_and_clear();
 
     // download all files
     let mut targets = HashMap::new();
