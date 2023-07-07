@@ -3,18 +3,17 @@ use keyring::Entry;
 use tracing::{debug, error};
 
 
+use crate::cmd::credentials::get_client_credentials;
+
 use self::{
     credentials::{get_dracoon_env, set_dracoon_env},
     models::DcCmdError, utils::{ strings::{format_error_message}},
    
 };
-use crate::{
-    api::{
+use dco3::{
         auth::{Connected, OAuth2Flow, Disconnected},
-        constants::get_client_credentials,
         Dracoon, DracoonBuilder,
-    },
-};
+    };
 
 pub mod credentials;
 pub mod models;

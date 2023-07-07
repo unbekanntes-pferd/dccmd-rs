@@ -1,7 +1,8 @@
 use crate::{
-    api::nodes::models::{Node, NodeType},
     cmd::models::DcCmdError,
 };
+
+use dco3::nodes::models::{Node, NodeType};
 
 use chrono::{DateTime, Utc};
 use console::{style, Term};
