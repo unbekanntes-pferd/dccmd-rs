@@ -222,7 +222,7 @@ async fn download_container(
     progress_spinner.enable_steady_tick(Duration::from_millis(100));
 
     // first get all folders below parent
-    let folders = get_folders(&dracoon, node).await?;
+    let folders = get_folders(dracoon, node).await?;
 
     // create root directory on target
     let target = std::path::PathBuf::from(target);
@@ -240,7 +240,7 @@ async fn download_container(
     create_folders(target.clone(), node, &base_path, folders)?;
 
     // get all files
-    let files = get_files(&dracoon, node).await?;
+    let files = get_files(dracoon, node).await?;
 
     // remove files in sub rooms
     let files = filter_files_in_sub_rooms(dracoon, node, files).await?;
@@ -439,7 +439,7 @@ fn create_folders(
             .clone()
             .parent_path
             .expect("Folder has no parent path")
-            .trim_start_matches(&base_path)
+            .trim_start_matches(base_path)
             .to_string()
             .trim_start_matches('/')
             .to_string();
