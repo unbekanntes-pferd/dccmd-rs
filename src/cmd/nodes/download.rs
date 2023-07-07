@@ -1,26 +1,24 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 
-use futures_util::{future::join_all};
+use chrono::Duration;
+use futures_util::future::join_all;
 use indicatif::{ProgressBar, ProgressStyle};
 use tracing::{debug, error};
 
-use crate::{
-    cmd::{
-        init_dracoon, init_encryption,
-        models::DcCmdError,
-        nodes::{is_search_query, search_nodes},
-        utils::strings::parse_path,
-    },
+use crate::cmd::{
+    init_dracoon, init_encryption,
+    models::DcCmdError,
+    nodes::{is_search_query, search_nodes},
+    utils::strings::parse_path,
 };
 
 use dco3::{
     auth::Connected,
-    models::ListAllParams,
     nodes::{
-        models::{Node, NodeType, filters::{NodesSearchFilter}, sorts::NodesSearchSortBy},
+        models::{filters::NodesSearchFilter, sorts::NodesSearchSortBy, Node, NodeType},
         Download, Nodes,
     },
-    Dracoon,
+    Dracoon, ListAllParams, SortOrder,
 };
 
 pub async fn download(
@@ -82,7 +80,6 @@ async fn download_file(
     node: &Node,
     target: &str,
 ) -> Result<(), DcCmdError> {
-
     let original_target = target.to_string();
 
     // if own name provided - use it - otherwise use node name
@@ -95,11 +92,9 @@ async fn download_file(
         };
 
         target.to_string()
-
     } else {
         target.to_string()
     };
-
 
     let mut out_file = std::fs::File::create(target).or(Err(DcCmdError::IoError))?;
 
@@ -215,51 +210,23 @@ async fn download_files(
     Ok(())
 }
 
-#[allow(clippy::too_many_lines)] // TODO: refactor (e.g. fetch > 500 files, folders)
 async fn download_container(
     dracoon: &mut Dracoon<Connected>,
     node: &Node,
     target: &str,
     velocity: Option<u8>,
 ) -> Result<(), DcCmdError> {
+
+    let progress_spinner = ProgressBar::new_spinner();
+    progress_spinner.enable_steady_tick(Duration::from_millis(200))
+
+
     // first get all folders below parent
+    let folders = get_folders(&dracoon, node).await?;
 
-    let params = ListAllParams::builder()
-        .with_filter(NodesSearchFilter::is_folder())
-        .with_sort(NodesSearchSortBy::parent_path_asc())
-        .build();
-
-    let mut folders = dracoon
-        .search_nodes("*", Some(node.id), Some(-1), Some(params))
-        .await?;
-
-    if folders.range.total > 500 {
-        for offset in (500..folders.range.total).step_by(500) {
-            let result = dracoon
-                    .search_nodes(
-                        "*",
-                        Some(node.id),
-                        Some(-1),
-                        Some(
-                            ListAllParams::builder()
-                                .with_filter(NodesSearchFilter::is_folder())
-                                .with_sort(NodesSearchSortBy::parent_path_asc())
-                                .with_offset(offset)
-                                .build(),
-                        ),
-                    )
-                    .await?;
-
-            folders.items.extend(result.items);
-        }
-    }
-
-    let folders = folders.get_folders();
-
-    // create a directory on target
+    // create root directory on target
     let target = std::path::PathBuf::from(target);
     let target = target.clone().join(&node.name);
-
     std::fs::create_dir_all(&target).or(Err(DcCmdError::IoError))?;
 
     let base_path = node
@@ -269,96 +236,14 @@ async fn download_container(
         .trim_end_matches('/')
         .to_string();
 
-    // create all other directories
-    for folder in folders {
-        let curr_target = target.clone();
+    // create all sub folders
+    create_folders(target.clone(), node, &base_path, folders)?;
 
-        let folder_base_path = folder
-            .clone()
-            .parent_path
-            .expect("Folder has no parent path")
-            .trim_start_matches(&base_path)
-            .to_string()
-            .trim_start_matches('/')
-            .to_string();
-        let folder_base_path = folder_base_path
-            .trim_start_matches(format!("{}/", node.name).as_str())
-            .to_string();
-        debug!("Folder base path: {}", folder_base_path);
-        let curr_target = curr_target.join(folder_base_path);
-        let curr_target = curr_target.join(folder.name);
+    // get all files
+    let files = get_files(&dracoon, node).await?;
 
-        std::fs::create_dir_all(&curr_target).map_err(|_| {
-            error!("Error creating directory: {:?}", curr_target);
-            DcCmdError::IoError
-        })?;
-    }
-
-    // get all the files
-    let params = ListAllParams::builder()
-        .with_filter(NodesSearchFilter::is_file())
-        .with_sort(NodesSearchSortBy::parent_path_asc())
-        .build();
-
-    let mut files = dracoon
-        .search_nodes("*", Some(node.id), Some(-1), Some(params))
-        .await?;
-
-
-    if files.range.total > 500 {
-
-        for offset in (500..files.range.total).step_by(500) {
-            let result = dracoon
-                    .search_nodes(
-                        "*",
-                        Some(node.id),
-                        Some(-1),
-                        Some(
-                            ListAllParams::builder()
-                                .with_filter(NodesSearchFilter::is_file())
-                                .with_sort(NodesSearchSortBy::parent_path_asc())
-                                .with_offset(offset)
-                                .build(),
-                        ),
-                    )
-                    .await?;
-
-            files.items.extend(result.items);
-        }
-    }
-
-    let files = files.get_files();
-
-    let params = ListAllParams::builder()
-        .with_filter(NodesSearchFilter::is_room())
-        .with_sort(NodesSearchSortBy::parent_path_asc())
-        .build();
-
-    debug!("Total file count: {}", files.len());
-
-    // ignore files in sub rooms
-    let sub_rooms = dracoon
-        .search_nodes("*", Some(node.id), Some(-1), Some(params))
-        .await?;
-    let sub_room_paths = sub_rooms
-        .get_rooms()
-        .into_iter()
-        .map(|r| format!("{}{}/", r.parent_path.unwrap_or_else(|| "/".into()), r.name))
-        .collect::<Vec<_>>();
-
-    let files = files
-        .into_iter()
-        .filter(|f| {
-            !sub_room_paths.iter().any(|p| {
-                f.parent_path
-                    .as_ref()
-                    .unwrap_or(&String::new())
-                    .starts_with(p)
-            })
-        })
-        .collect::<Vec<_>>();
-
-    debug!("File count (no rooms): {}", files.len());
+    // remove files in sub rooms
+    let files = filter_files_in_sub_rooms(dracoon, node, files).await?;
 
     // download all files
     let mut targets = HashMap::new();
@@ -391,6 +276,183 @@ async fn download_container(
         velocity,
     )
     .await?;
+
+    Ok(())
+}
+
+async fn get_files(
+    dracoon: &Dracoon<Connected>,
+    parent_node: &Node,
+) -> Result<Vec<Node>, DcCmdError> {
+    // get all the files
+    let params = ListAllParams::builder()
+        .with_filter(NodesSearchFilter::is_file())
+        .with_sort(NodesSearchSortBy::parent_path(SortOrder::Asc))
+        .build();
+
+    let mut files = dracoon
+        .search_nodes("*", Some(parent_node.id), Some(-1), Some(params))
+        .await?;
+
+    // TODO: refactor to max velocity (currently all reqs are run in parallel)
+    if files.range.total > 500 {
+        let mut file_reqs = vec![];
+
+        (500..files.range.total).step_by(500).for_each(|offset| {
+            let dracoon_client = dracoon.clone();
+            let parent_node = parent_node.clone();
+            let get_task = async move {
+                let params = ListAllParams::builder()
+                    .with_filter(NodesSearchFilter::is_file())
+                    .with_sort(NodesSearchSortBy::parent_path(SortOrder::Asc))
+                    .with_offset(offset)
+                    .build();
+
+                let files = dracoon_client
+                    .search_nodes("*", Some(parent_node.id), Some(-1), Some(params))
+                    .await?;
+
+                Ok(files.items)
+            };
+            file_reqs.push(get_task);
+        });
+
+        let results: Vec<Result<Vec<Node>, DcCmdError>> = join_all(file_reqs).await;
+
+        for result in results {
+            match result {
+                Ok(new_files) => files.items.extend(new_files),
+                Err(e) => {
+                    error!("Error getting files: {}", e);
+                    return Err(e);
+                }
+            }
+        }
+    }
+
+    Ok(files.get_files())
+}
+
+async fn filter_files_in_sub_rooms(
+    dracoon: &Dracoon<Connected>,
+    parent_node: &Node,
+    files: Vec<Node>,
+) -> Result<Vec<Node>, DcCmdError> {
+    let params = ListAllParams::builder()
+        .with_filter(NodesSearchFilter::is_room())
+        .with_sort(NodesSearchSortBy::parent_path(dco3::SortOrder::Asc))
+        .build();
+
+    debug!("Total file count: {}", files.len());
+
+    // ignore files in sub rooms
+    let sub_rooms = dracoon
+        .search_nodes("*", Some(parent_node.id), None, Some(params))
+        .await?;
+
+    // TODO: handle more than 500 sub rooms on first level
+    let sub_room_paths = sub_rooms
+        .get_rooms()
+        .into_iter()
+        .map(|r| format!("{}{}/", r.parent_path.unwrap_or_else(|| "/".into()), r.name))
+        .collect::<Vec<_>>();
+
+    Ok(files
+        .into_iter()
+        .filter(|f| {
+            !sub_room_paths.iter().any(|p| {
+                f.parent_path
+                    .as_ref()
+                    .unwrap_or(&String::new())
+                    .starts_with(p)
+            })
+        })
+        .collect::<Vec<_>>())
+}
+
+async fn get_folders(
+    dracoon: &Dracoon<Connected>,
+    parent_node: &Node,
+) -> Result<Vec<Node>, DcCmdError> {
+    let params = ListAllParams::builder()
+        .with_filter(NodesSearchFilter::is_folder())
+        .with_sort(NodesSearchSortBy::parent_path(SortOrder::Asc))
+        .build();
+
+    let mut folders = dracoon
+        .search_nodes("*", Some(parent_node.id), Some(-1), Some(params))
+        .await?;
+
+    // TODO: refactor to max velocity (currently all reqs are run in parallel)
+    if folders.range.total > 500 {
+        let mut folder_reqs = vec![];
+
+        (500..folders.range.total).step_by(500).for_each(|offset| {
+            let dracoon_client = dracoon.clone();
+            let parent_node = parent_node.clone();
+            let get_task = async move {
+                let params = ListAllParams::builder()
+                    .with_filter(NodesSearchFilter::is_folder())
+                    .with_sort(NodesSearchSortBy::parent_path(SortOrder::Asc))
+                    .with_offset(500)
+                    .build();
+
+                let folders = dracoon_client
+                    .search_nodes("*", Some(parent_node.id), Some(-1), Some(params))
+                    .await?;
+
+                Ok(folders.items)
+            };
+
+            folder_reqs.push(get_task);
+        });
+
+        let results: Vec<Result<Vec<Node>, DcCmdError>> = join_all(folder_reqs).await;
+
+        for result in results {
+            match result {
+                Ok(new_folders) => folders.items.extend(new_folders),
+                Err(e) => {
+                    error!("Error getting folders: {}", e);
+                    return Err(e);
+                }
+            }
+        }
+    }
+
+    Ok(folders.get_folders())
+}
+
+fn create_folders(
+    target: PathBuf,
+    parent_node: &Node,
+    base_path: &str,
+    folders: Vec<Node>,
+) -> Result<(), DcCmdError> {
+    // create all sub directories
+    for folder in folders {
+        let curr_target = target.clone();
+
+        let folder_base_path = folder
+            .clone()
+            .parent_path
+            .expect("Folder has no parent path")
+            .trim_start_matches(&base_path)
+            .to_string()
+            .trim_start_matches('/')
+            .to_string();
+        let folder_base_path = folder_base_path
+            .trim_start_matches(format!("{}/", parent_node.name).as_str())
+            .to_string();
+        debug!("Folder base path: {}", folder_base_path);
+        let curr_target = curr_target.join(folder_base_path);
+        let curr_target = curr_target.join(folder.name);
+
+        std::fs::create_dir_all(&curr_target).map_err(|_| {
+            error!("Error creating directory: {:?}", curr_target);
+            DcCmdError::IoError
+        })?;
+    }
 
     Ok(())
 }
