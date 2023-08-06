@@ -84,6 +84,13 @@ pub enum DcCmdCommand {
         /// classification of the node (1-4)
         #[clap(long)]
         classification: Option<u8>,
+
+        #[clap(long, short)]
+        velocity: Option<u8>,
+
+        /// recursive upload
+        #[clap(short, long)]
+        recursive: bool,
     },
     /// download a file from DRACOON to target
     Download {

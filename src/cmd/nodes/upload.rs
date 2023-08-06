@@ -1,10 +1,15 @@
-use std::{collections::HashMap, fs::Metadata, path::PathBuf, time::SystemTime};
+use std::{
+    collections::HashMap,
+    fs::Metadata,
+    path::{Path, PathBuf},
+    time::SystemTime,
+};
 
 use async_recursion::async_recursion;
 use futures_util::future::join_all;
 use indicatif::{ProgressBar, ProgressStyle};
 
-use tracing::error;
+use tracing::{debug, error};
 
 use crate::cmd::{
     init_dracoon, init_encryption,
@@ -29,6 +34,8 @@ pub async fn upload(
     target: String,
     overwrite: bool,
     classification: Option<u8>,
+    velocity: Option<u8>,
+    recursive: bool,
 ) -> Result<(), DcCmdError> {
     let mut dracoon = init_dracoon(&target).await?;
 
@@ -57,7 +64,26 @@ pub async fn upload(
         )
         .await?;
     } else if source.is_dir() {
-        upload_container(&mut dracoon, source.clone(), &parent_node).await?;
+
+        if recursive {
+                     upload_container(
+            &mut dracoon,
+            source.clone(),
+            &parent_node,
+            &node_path,
+            overwrite,
+            classification,
+            velocity
+        )
+        .await?;
+        } else {
+            return Err(DcCmdError::InvalidArgument(
+                "Container upload requires recursive flag".to_string(),
+            ));
+        }
+
+
+
     } else {
         return Err(DcCmdError::InvalidPath(
             source.to_string_lossy().to_string(),
@@ -98,6 +124,9 @@ async fn upload_file(
 
     let progress_bar_mv = progress_bar.clone();
 
+    progress_bar_mv.set_message("Uploading");
+    progress_bar_mv.set_length(file_meta.1);
+
     let classification = classification.unwrap_or(2);
     let resolution_strategy = if overwrite {
         ResolutionStrategy::Overwrite
@@ -121,8 +150,6 @@ async fn upload_file(
             upload_options,
             reader,
             Some(Box::new(move |progress, total| {
-                progress_bar_mv.set_message("Uploading");
-                progress_bar_mv.set_length(total);
                 progress_bar_mv.set_position(progress);
             })),
             Some(DEFAULT_CHUNK_SIZE),
@@ -138,6 +165,10 @@ async fn upload_container(
     dracoon: &mut Dracoon<Connected>,
     source: PathBuf,
     target: &Node,
+    target_parent: &str,
+    overwrite: bool,
+    classification: Option<u8>,
+    velocity: Option<u8>,
 ) -> Result<(), DcCmdError> {
     // create folder first
     let name = source
@@ -151,98 +182,239 @@ async fn upload_container(
         ))?
         .to_string();
 
-    let folder = CreateFolderRequest::builder(name, target.id).build();
-    let folder = dracoon.create_folder(folder).await?;
+    let root_folder = CreateFolderRequest::builder(name, target.id).build();
+    let root_folder = dracoon.create_folder(root_folder).await?;
 
-    let (files, folders) = tokio::join!(
-        list_files(source.clone()),
-        list_directories(source.clone())
-    );
+    let (files, folders) =
+        tokio::join!(list_files(source.clone()), list_directories(source.clone()));
 
     let files = files?;
     let folders = folders?;
 
-    // sort the folders by depth 
+    // sort the folders by depth
     let mut folders = folders
         .iter()
         .map(|folder| {
-            let depth = folder.components().count();
+            let depth = folder.components().count() - 1; // remove root dir
             (folder, depth)
         })
         .collect::<Vec<_>>();
 
     folders.sort_by(|a, b| a.1.cmp(&b.1));
 
-    // get all depth levels in folders
-    let mut depth_levels = folders
-        .iter()
-        .map(|folder| folder.1)
-        .collect::<Vec<_>>();
-    depth_levels.sort();
-
     // create HashMap of path and created node id
     let mut created_nodes = HashMap::new();
 
+    let root_depth_level = if folders.is_empty() {
+        0
+    } else {
+        folders.get(0).expect("No folders found").1
+    };
+
+    let root_path = source.parent().unwrap_or_else(|| Path::new("/"));
+
+    let mut all_depth_levels = folders.iter().map(|(_, depth)| depth).collect::<Vec<_>>();
+    all_depth_levels.sort();
+
     // create folders
-    for depth_level in depth_levels {
-        let folders = folders
-            .iter()
-            .filter(|folder| folder.1 == depth_level)
-            .map(|folder| folder.0)
-            .collect::<Vec<_>>();
+    let mut prev_depth = 0;
+    let mut folder_reqs = Vec::new();
 
-        // check if first level
-        if depth_level == 1 {
-            let mut folder_reqs = Vec::new();
-            for folder in folders {
-                let folder = CreateFolderRequest::builder(
-                    folder
-                        .file_name()
-                        .ok_or(DcCmdError::InvalidPath(
-                            folder.to_string_lossy().to_string(),
-                        ))?
-                        .to_str()
-                        .ok_or(DcCmdError::InvalidPath(
-                            folder.to_string_lossy().to_string(),
-                        ))?
-                        .to_string(),
-                    target.id
-                    ).build();
+    for (folder, depth) in folders {
+        if depth >= prev_depth {
+            // execute all previous requests
+            let created_folders = join_all(folder_reqs).await;
+            // return error if any of the folders failed to create
+            for folder in created_folders {
+                let folder: Node = folder?;
+                let folder_path = format!(
+                    "{}{}",
+                    folder.parent_path.unwrap_or("/".into()),
+                    folder.name
+                );
 
-                let folder_req = dracoon.create_folder(folder);
-                folder_reqs.push(folder_req);
+                let target_parent = folder_path.trim_start_matches(target_parent);
+                // ensure target parent starts with a slash
+                let target_parent = if target_parent.starts_with('/') {
+                    target_parent.to_string()
+                } else {
+                    format!("/{}", target_parent)
+                };
+
+                created_nodes.insert(target_parent, folder.id);
+            }
+
+            prev_depth = depth;
+            // reset folder_reqs
+            folder_reqs = Vec::new();
         }
 
-        let folders = join_all(folder_reqs).await;
+        let name = folder
+            .file_name()
+            .ok_or(DcCmdError::InvalidPath(
+                folder.to_string_lossy().to_string(),
+            ))?
+            .to_str()
+            .ok_or(DcCmdError::InvalidPath(
+                folder.to_string_lossy().to_string(),
+            ))?
+            .to_string();
 
-        // return error if any of the folders failed to create
-        for folder in folders {
-            let folder = folder?;
-            let folder_path = format!("{}{}", folder.parent_path.unwrap_or("/".into()), folder.name);
+        let parent_id = if depth == root_depth_level {
+            root_folder.id
+        } else {
+            // we need to find the parent id from the created_nodes map
+            // we assume that the parent folder has already been created and is present in the map
+            debug!("Processing sub folder: {}", folder.to_string_lossy());
+            let parent_path = folder.parent().ok_or(DcCmdError::IoError)?.to_path_buf();
+            let parent_path = parent_path.to_string_lossy();
+            debug!("Parent path: {}", parent_path);
+            let parent_path = parent_path.trim_start_matches('.');
 
-            // truncate path based on source to a relative path
+            let root_path_str = root_path.to_string_lossy().to_string();
 
-            // upload ./a/b/c
-            // in DRACOON /some/other/path/target_path
+            let parent_path = parent_path
+                .strip_prefix(&root_path_str)
+                .ok_or(DcCmdError::IoError)?;
 
-            // TODO: fix path 
+            *created_nodes.get(parent_path).ok_or(DcCmdError::IoError)?
+        };
 
-            created_nodes.insert(folder_path, folder.id);
-        }
-
+        let folder_req = CreateFolderRequest::builder(name, parent_id).build();
+        folder_reqs.push(dracoon.create_folder(folder_req));
     }
-}
+
+    // execute all previous requests
+    let created_folders = join_all(folder_reqs).await;
+    // return error if any of the folders failed to create
+    if let Some(folder) = created_folders.into_iter().find(|folder| folder.is_err()) {
+        return Err(folder.unwrap_err().into());
+    }
+
+    let mut file_map = HashMap::new();
+
+    for file in files {
+        let file_rel_path = file
+            .strip_prefix(root_path)
+            .unwrap_or_else(|_| file.as_ref());
+        let file_rel_path = file_rel_path.to_string_lossy().to_string();
+        let node_id = *created_nodes
+            .get(&file_rel_path)
+            .ok_or(DcCmdError::IoError)?;
+
+        let file_meta = tokio::fs::metadata(&file)
+            .await
+            .map_err(|_| DcCmdError::IoError)?;
+        let file_size = file_meta.len();
+
+        file_map.insert(file, (node_id, file_size));
+    }
 
     // upload files
+
+    upload_files(dracoon, target, file_map, overwrite, classification, velocity).await?;
 
     Ok(())
 }
 
 async fn upload_files(
     dracoon: &mut Dracoon<Connected>,
-    files: HashMap<PathBuf, u64>,
+    parent_node: &Node,
+    files: HashMap<PathBuf, (u64, u64)>,
+    overwrite: bool,
+    classification: Option<u8>,
+    velocity: Option<u8>,
 ) -> Result<(), DcCmdError> {
-    // TODO: implement bulk upload
+    let velocity = velocity.unwrap_or(1).clamp(1, 10);
+
+    let concurrent_reqs = velocity * 5;
+
+    let total_size = files.values().fold(0, |acc, (_, val)| acc + val);
+
+    let progress_bar = ProgressBar::new(total_size);
+    progress_bar.set_style(
+        ProgressStyle::default_bar()
+        .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}) {msg}").unwrap()
+        .progress_chars("=>-"),
+    );
+
+    progress_bar.set_length(total_size);
+    let message = format!("Uploading {} files", files.len());
+    progress_bar.set_message(message.clone());
+    let mut remaining_files = files.len();
+
+    let files_iter: Vec<_> = files.into_iter().collect();
+
+    for batch in files_iter.chunks(concurrent_reqs.into()) {
+        let mut file_reqs = Vec::new();
+
+        for (source, (node_id, file_size)) in batch {
+            let progress_bar_mv = progress_bar.clone();
+            let progress_bar_inc = progress_bar.clone();
+            let client = dracoon.clone();
+
+            let upload_task = async move {
+                let file = tokio::fs::File::open(&source)
+                    .await
+                    .or(Err(DcCmdError::IoError))?;
+
+                let file_meta = file.metadata().await.or(Err(DcCmdError::IoError))?;
+                let file_meta = get_file_meta(&file_meta, source.to_owned())?;
+
+                let file_name = file_meta.0.clone();
+
+                let classification = classification.unwrap_or(2);
+                let resolution_strategy = if overwrite {
+                    ResolutionStrategy::Overwrite
+                } else {
+                    ResolutionStrategy::AutoRename
+                };
+
+                let keep_share_links = matches!(resolution_strategy, ResolutionStrategy::Overwrite);
+
+                let upload_options = UploadOptions::builder()
+                    .with_classification(classification)
+                    .with_resolution_strategy(resolution_strategy)
+                    .with_keep_share_links(keep_share_links)
+                    .build();
+
+                let reader = tokio::io::BufReader::new(file);
+
+                client
+                    .upload(
+                        file_meta,
+                        parent_node,
+                        upload_options,
+                        reader,
+                        Some(Box::new(move |progress: u64, _total: u64| {
+                            progress_bar_mv.inc(progress)
+                        })),
+                        None,
+                    )
+                    .await?;
+
+                remaining_files -= 1;
+                let message = format!("Uploading {remaining_files} files");
+                progress_bar_inc.set_message(message);
+
+                Ok::<(), DcCmdError>(())
+            };
+
+            file_reqs.push(upload_task);
+        }
+
+        let results: Vec<Result<(), DcCmdError>> = join_all(file_reqs).await;
+        for result in results {
+            if let Err(e) = result {
+                error!("Error downloading file: {}", e);
+            }
+        }
+    }
+
+    let target = parent_node.name.clone();
+
+    progress_bar.finish_with_message(format!("Upload to {target} complete"));
+
     Ok(())
 }
 

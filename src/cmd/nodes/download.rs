@@ -157,7 +157,7 @@ async fn download_files(
     for batch in files.chunks(concurrent_reqs.into()) {
         let mut download_reqs = vec![];
         for file in batch {
-            let mut dracoon_client = dracoon.clone();
+            let dracoon_client = dracoon.clone();
             let target = target.to_string();
             debug!("Target: {}", target);
             let targets = targets.clone();

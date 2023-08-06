@@ -4,17 +4,19 @@
 use clap::Parser;
 use cmd::{
     handle_error,
-    models::{DcCmd, DcCmdCommand}, nodes::{download::download, upload::upload, list_nodes, create_folder, create_room, delete_node},
+    models::{DcCmd, DcCmdCommand},
+    nodes::{
+        create_folder, create_room, delete_node, download::download, list_nodes, upload::upload,
+    },
 };
 use console::Term;
 use tracing::metadata::LevelFilter;
-use tracing_subscriber::{filter::EnvFilter, prelude::*, fmt};
+use tracing_subscriber::{filter::EnvFilter, fmt, prelude::*};
 
 mod cmd;
 
 #[tokio::main]
 async fn main() {
-
     let opt = DcCmd::parse();
 
     let env_filter = if opt.debug {
@@ -24,17 +26,38 @@ async fn main() {
     };
 
     tracing_subscriber::registry()
-    .with(fmt::layer())
-    .with(env_filter)
-    .init();
-
+        .with(fmt::layer())
+        .with(env_filter)
+        .init();
 
     let term = Term::stdout();
     let err_term = Term::stderr();
 
     let res = match opt.cmd {
-        DcCmdCommand::Download { source, target, velocity, recursive } => download(source, target, velocity, recursive).await,
-        DcCmdCommand::Upload { source, target, overwrite, classification } => upload(source.try_into().expect("Invalid path"), target, overwrite, classification).await,
+        DcCmdCommand::Download {
+            source,
+            target,
+            velocity,
+            recursive,
+        } => download(source, target, velocity, recursive).await,
+        DcCmdCommand::Upload {
+            source,
+            target,
+            overwrite,
+            classification,
+            velocity,
+            recursive,
+        } => {
+            upload(
+                source.try_into().expect("Invalid path"),
+                target,
+                overwrite,
+                classification,
+                velocity,
+                recursive,
+            )
+            .await
+        }
         DcCmdCommand::Ls {
             source,
             long,
@@ -42,7 +65,7 @@ async fn main() {
             managed,
             all,
             offset,
-            limit
+            limit,
         } => {
             list_nodes(
                 term,
@@ -61,7 +84,10 @@ async fn main() {
             classification,
             notes,
         } => create_folder(term, source, classification, notes).await,
-        DcCmdCommand::Mkroom { source, classification } => create_room(term, source, classification).await,
+        DcCmdCommand::Mkroom {
+            source,
+            classification,
+        } => create_room(term, source, classification).await,
         DcCmdCommand::Rm { source, recursive } => delete_node(term, source, Some(recursive)).await,
     };
 
