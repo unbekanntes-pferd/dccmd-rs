@@ -204,6 +204,9 @@ async fn upload_container(
 
     // create HashMap of path and created node id
     let mut created_nodes = HashMap::new();
+    let root_folder_path = format!("/{}", root_folder.name);
+
+    created_nodes.insert(root_folder_path, root_folder.id);
 
     let root_depth_level = if folders.is_empty() {
         0
@@ -219,6 +222,7 @@ async fn upload_container(
     // create folders
     let mut prev_depth = 0;
     let mut folder_reqs = Vec::new();
+    debug!("{:?}", folders);
 
     for (folder, depth) in folders {
         if depth >= prev_depth {
@@ -286,9 +290,24 @@ async fn upload_container(
 
     // execute all previous requests
     let created_folders = join_all(folder_reqs).await;
-    // return error if any of the folders failed to create
-    if let Some(folder) = created_folders.into_iter().find(|folder| folder.is_err()) {
-        return Err(folder.unwrap_err().into());
+
+    for folder in created_folders {
+        let folder: Node = folder?;
+        let folder_path = format!(
+            "{}{}",
+            folder.parent_path.unwrap_or("/".into()),
+            folder.name
+        );
+
+        let target_parent = folder_path.trim_start_matches(target_parent);
+        // ensure target parent starts with a slash
+        let target_parent = if target_parent.starts_with('/') {
+            target_parent.to_string()
+        } else {
+            format!("/{}", target_parent)
+        };
+
+        created_nodes.insert(target_parent, folder.id);
     }
 
     let mut file_map = HashMap::new();
@@ -296,7 +315,14 @@ async fn upload_container(
     for file in files {
         let file_rel_path = file
             .strip_prefix(root_path)
-            .unwrap_or_else(|_| file.as_ref());
+            .unwrap_or(file.as_ref())
+            .parent()
+            .unwrap_or(Path::new("/"));
+        let file_rel_path = if file_rel_path.is_absolute() {
+            file_rel_path.to_path_buf()
+        } else {
+            Path::new("/").join(file_rel_path)
+        };
         let file_rel_path = file_rel_path.to_string_lossy().to_string();
         let node_id = *created_nodes
             .get(&file_rel_path)
@@ -311,7 +337,6 @@ async fn upload_container(
     }
 
     // upload files
-
     upload_files(dracoon, target, file_map, overwrite, classification, velocity).await?;
 
     Ok(())
@@ -358,6 +383,8 @@ async fn upload_files(
                     .await
                     .or(Err(DcCmdError::IoError))?;
 
+                let parent_node = client.get_node(*node_id).await?;
+
                 let file_meta = file.metadata().await.or(Err(DcCmdError::IoError))?;
                 let file_meta = get_file_meta(&file_meta, source.to_owned())?;
 
@@ -383,7 +410,7 @@ async fn upload_files(
                 client
                     .upload(
                         file_meta,
-                        parent_node,
+                        &parent_node,
                         upload_options,
                         reader,
                         Some(Box::new(move |progress: u64, _total: u64| {
