@@ -2,12 +2,13 @@ use std::{
     collections::HashMap,
     fs::Metadata,
     path::{Path, PathBuf},
-    time::SystemTime,
+    sync::atomic::{AtomicU64, Ordering},
+    time::{Duration, SystemTime},
 };
 
 use async_recursion::async_recursion;
 use futures_util::future::join_all;
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 use tracing::{debug, error};
 
@@ -22,7 +23,7 @@ use dco3::{
         models::{FileMeta, ResolutionStrategy, UploadOptions},
         CreateFolderRequest, Node, Nodes, Upload,
     },
-    Dracoon, Folders,
+    Dracoon, DracoonClientError, Folders,
 };
 
 // this is currently set low to display progress
@@ -64,26 +65,22 @@ pub async fn upload(
         )
         .await?;
     } else if source.is_dir() {
-
         if recursive {
-                     upload_container(
-            &mut dracoon,
-            source.clone(),
-            &parent_node,
-            &node_path,
-            overwrite,
-            classification,
-            velocity
-        )
-        .await?;
+            upload_container(
+                &mut dracoon,
+                source.clone(),
+                &parent_node,
+                &node_path,
+                overwrite,
+                classification,
+                velocity,
+            )
+            .await?;
         } else {
             return Err(DcCmdError::InvalidArgument(
                 "Container upload requires recursive flag".to_string(),
             ));
         }
-
-
-
     } else {
         return Err(DcCmdError::InvalidPath(
             source.to_string_lossy().to_string(),
@@ -182,6 +179,20 @@ async fn upload_container(
         ))?
         .to_string();
 
+    if source.is_relative() {
+        error!("Only absolute paths are supported");
+        return Err(DcCmdError::InvalidPath(
+            source.to_string_lossy().to_string(),
+        ));
+    }
+
+    let progress = MultiProgress::new();
+
+    let progress_spinner = ProgressBar::new_spinner();
+    progress_spinner.set_message("Creating folder structure...");
+    progress_spinner.enable_steady_tick(Duration::from_millis(100));
+    progress.add(progress_spinner);
+
     let root_folder = CreateFolderRequest::builder(name, target.id).build();
     let root_folder = dracoon.create_folder(root_folder).await?;
 
@@ -190,6 +201,15 @@ async fn upload_container(
 
     let files = files?;
     let folders = folders?;
+
+    let progress_bar = ProgressBar::new(folders.len() as u64);
+    progress_bar.set_style(
+        ProgressStyle::default_bar()
+        .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{human_len} ({per_sec}) {msg}").unwrap()
+        .progress_chars("=>-"),
+    );
+
+    progress.add(progress_bar.clone());
 
     // sort the folders by depth
     let mut folders = folders
@@ -228,25 +248,11 @@ async fn upload_container(
         if depth >= prev_depth {
             // execute all previous requests
             let created_folders = join_all(folder_reqs).await;
+            let processed = created_folders.len();
             // return error if any of the folders failed to create
-            for folder in created_folders {
-                let folder: Node = folder?;
-                let folder_path = format!(
-                    "{}{}",
-                    folder.parent_path.unwrap_or("/".into()),
-                    folder.name
-                );
+            update_folder_map(created_folders, &mut created_nodes, target_parent).await?;
 
-                let target_parent = folder_path.trim_start_matches(target_parent);
-                // ensure target parent starts with a slash
-                let target_parent = if target_parent.starts_with('/') {
-                    target_parent.to_string()
-                } else {
-                    format!("/{}", target_parent)
-                };
-
-                created_nodes.insert(target_parent, folder.id);
-            }
+            progress_bar.inc(processed as u64);
 
             prev_depth = depth;
             // reset folder_reqs
@@ -290,8 +296,34 @@ async fn upload_container(
 
     // execute all previous requests
     let created_folders = join_all(folder_reqs).await;
+    let processed = created_folders.len();
 
-    for folder in created_folders {
+    update_folder_map(created_folders, &mut created_nodes, target_parent).await?;
+
+    progress_bar.inc(processed as u64);
+
+    let file_map = create_file_map(files, created_nodes, root_path)?;
+
+    // upload files
+    upload_files(
+        dracoon,
+        target,
+        file_map,
+        overwrite,
+        classification,
+        velocity,
+    )
+    .await?;
+
+    Ok(())
+}
+
+async fn update_folder_map(
+    folder_results: Vec<Result<Node, DracoonClientError>>,
+    created_nodes: &mut HashMap<String, u64>,
+    target_parent: &str,
+) -> Result<(), DcCmdError> {
+    for folder in folder_results {
         let folder: Node = folder?;
         let folder_path = format!(
             "{}{}",
@@ -310,36 +342,45 @@ async fn upload_container(
         created_nodes.insert(target_parent, folder.id);
     }
 
-    let mut file_map = HashMap::new();
-
-    for file in files {
-        let file_rel_path = file
-            .strip_prefix(root_path)
-            .unwrap_or(file.as_ref())
-            .parent()
-            .unwrap_or(Path::new("/"));
-        let file_rel_path = if file_rel_path.is_absolute() {
-            file_rel_path.to_path_buf()
-        } else {
-            Path::new("/").join(file_rel_path)
-        };
-        let file_rel_path = file_rel_path.to_string_lossy().to_string();
-        let node_id = *created_nodes
-            .get(&file_rel_path)
-            .ok_or(DcCmdError::IoError)?;
-
-        let file_meta = tokio::fs::metadata(&file)
-            .await
-            .map_err(|_| DcCmdError::IoError)?;
-        let file_size = file_meta.len();
-
-        file_map.insert(file, (node_id, file_size));
-    }
-
-    // upload files
-    upload_files(dracoon, target, file_map, overwrite, classification, velocity).await?;
-
     Ok(())
+}
+
+fn create_file_map(
+    files: Vec<PathBuf>,
+    created_nodes: HashMap<String, u64>,
+    root_path: &Path,
+) -> Result<HashMap<PathBuf, (u64, u64)>, DcCmdError> {
+    Ok(files
+        .into_iter()
+        .map(|file| {
+            // get relative path of file
+            let file_rel_path = file
+                .strip_prefix(root_path)
+                .unwrap_or(file.as_ref())
+                .parent()
+                .unwrap_or(Path::new("/"));
+
+            // ensure path starts with "/"
+            let file_rel_path = if file_rel_path.is_absolute() {
+                file_rel_path.to_path_buf()
+            } else {
+                Path::new("/").join(file_rel_path)
+            };
+
+            let file_rel_path = file_rel_path.to_string_lossy().to_string();
+
+            // get node id of parent folder
+            let node_id = *created_nodes
+                .get(&file_rel_path)
+                .ok_or(DcCmdError::IoError)?;
+
+            // get file size
+            let file_meta = std::fs::metadata(&file).map_err(|_| DcCmdError::IoError)?;
+            let file_size = file_meta.len();
+
+            Ok((file, (node_id, file_size)))
+        })
+        .collect::<Result<HashMap<PathBuf, (u64, u64)>, DcCmdError>>()?)
 }
 
 async fn upload_files(
@@ -366,7 +407,7 @@ async fn upload_files(
     progress_bar.set_length(total_size);
     let message = format!("Uploading {} files", files.len());
     progress_bar.set_message(message.clone());
-    let mut remaining_files = files.len();
+    let remaining_files = AtomicU64::new(files.len() as u64);
 
     let files_iter: Vec<_> = files.into_iter().collect();
 
@@ -374,6 +415,7 @@ async fn upload_files(
         let mut file_reqs = Vec::new();
 
         for (source, (node_id, file_size)) in batch {
+            let rm_files = &remaining_files;
             let progress_bar_mv = progress_bar.clone();
             let progress_bar_inc = progress_bar.clone();
             let client = dracoon.clone();
@@ -420,8 +462,8 @@ async fn upload_files(
                     )
                     .await?;
 
-                remaining_files -= 1;
-                let message = format!("Uploading {remaining_files} files");
+                let _ = &rm_files.fetch_sub(1, Ordering::Relaxed);
+                let message = format!("Uploading {} files", &rm_files.load(Ordering::Relaxed));
                 progress_bar_inc.set_message(message);
 
                 Ok::<(), DcCmdError>(())
