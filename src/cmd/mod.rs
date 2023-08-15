@@ -2,51 +2,44 @@ use console::Term;
 use keyring::Entry;
 use tracing::{debug, error};
 
-
 use crate::cmd::credentials::get_client_credentials;
 
 use self::{
     credentials::{get_dracoon_env, set_dracoon_env},
-    models::DcCmdError, utils::{ strings::{format_error_message}},
-   
+    models::DcCmdError,
+    utils::strings::format_error_message,
 };
 use dco3::{
-        auth::{Connected, OAuth2Flow, Disconnected},
-        Dracoon, DracoonBuilder,
-    };
+    auth::{Connected, Disconnected, OAuth2Flow},
+    Dracoon, DracoonBuilder,
+};
 
 pub mod credentials;
 pub mod models;
-pub mod utils;
 pub mod nodes;
-
+pub mod utils;
 
 // service name to store
 const SERVICE_NAME: &str = env!("CARGO_PKG_NAME");
 
 /// initializes a dracoon client with encryption enabled (plain keypair ready to use)
-async fn init_encryption(
-    mut dracoon: Dracoon<Connected>,
-) -> Result<Dracoon<Connected>, DcCmdError> {
-
+async fn init_encryption(dracoon: Dracoon<Connected>) -> Result<Dracoon<Connected>, DcCmdError> {
     let account = format!("{}-crypto", dracoon.get_base_url());
 
-    let entry = Entry::new(SERVICE_NAME, &account).map_err(|_|
-    DcCmdError::CredentialStorageFailed)?;
+    let entry =
+        Entry::new(SERVICE_NAME, &account).map_err(|_| DcCmdError::CredentialStorageFailed)?;
 
+    let (secret, store) = if let Ok(secret) = get_dracoon_env(&entry) {
+        (secret, false)
+    } else {
+        let secret = dialoguer::Password::new()
+            .with_prompt("Please enter your encryption secret")
+            .interact()
+            .or(Err(DcCmdError::IoError))?;
+        (secret, true)
+    };
 
-    let (secret, store) =
-        if let Ok(secret) = get_dracoon_env(&entry) {
-            (secret, false)
-        } else {
-            let secret = dialoguer::Password::new()
-                .with_prompt("Please enter your encryption secret")
-                .interact()
-                .or(Err(DcCmdError::IoError))?;
-            (secret, true)
-        };
-
-    let keypair = dracoon.get_keypair(Some(&secret)).await?;
+    let keypair = dracoon.get_keypair(Some(secret.clone())).await?;
 
     if store {
         set_dracoon_env(&entry, &secret)?;
@@ -54,8 +47,6 @@ async fn init_encryption(
 
     Ok(dracoon)
 }
-
-
 
 async fn init_dracoon(url_path: &str) -> Result<Dracoon<Connected>, DcCmdError> {
     let (client_id, client_secret) = get_client_credentials();
@@ -73,27 +64,31 @@ async fn init_dracoon(url_path: &str) -> Result<Dracoon<Connected>, DcCmdError> 
     })?;
 
     let dracoon = if let Ok(refresh_token) = get_dracoon_env(&entry) {
-                 // TODO: fcheck if possible without cloning client
-                if let Ok(dracoon) = dracoon.clone().connect(OAuth2Flow::RefreshToken(refresh_token)).await {
-                    dracoon
-                } else {
-                    error!("Failed to authenticate to {}.", base_url);
-                    authenticate(dracoon, entry).await?
-               }
-            } else {
-                 debug!("No refresh token stored for {}", base_url);
-               authenticate(dracoon, entry).await?
-             };
+        // TODO: fcheck if possible without cloning client
+        if let Ok(dracoon) = dracoon
+            .clone()
+            .connect(OAuth2Flow::RefreshToken(refresh_token))
+            .await
+        {
+            dracoon
+        } else {
+            error!("Failed to authenticate to {}.", base_url);
+            authenticate(dracoon, entry).await?
+        }
+    } else {
+        debug!("No refresh token stored for {}", base_url);
+        authenticate(dracoon, entry).await?
+    };
 
     debug!("Successfully authenticated to {}", base_url);
-    
-    Ok(dracoon)
 
+    Ok(dracoon)
 }
 
-async fn authenticate(mut dracoon: Dracoon<Disconnected>, entry: Entry) -> Result<Dracoon<Connected>, DcCmdError> {
-
-
+async fn authenticate(
+    mut dracoon: Dracoon<Disconnected>,
+    entry: Entry,
+) -> Result<Dracoon<Connected>, DcCmdError> {
     println!("Please log in via browser (open url): ");
     println!("{}", dracoon.get_authorize_url());
 
@@ -106,7 +101,7 @@ async fn authenticate(mut dracoon: Dracoon<Disconnected>, entry: Entry) -> Resul
         .connect(OAuth2Flow::AuthCodeFlow(auth_code.trim_end().into()))
         .await?;
 
-    set_dracoon_env(&entry, dracoon.get_refresh_token())?;
+    set_dracoon_env(&entry, &dracoon.get_refresh_token())?;
 
     Ok(dracoon)
 }
@@ -152,10 +147,9 @@ fn get_error_message(err: &DcCmdError) -> String {
         DcCmdError::Unknown => "Unknown error.".into(),
         DcCmdError::DracoonS3Error(e) => format!("{e}"),
         DcCmdError::DracoonAuthError(e) => format!("{e}"),
-        DcCmdError::InvalidArgument(msg) => msg.to_string()
+        DcCmdError::InvalidArgument(msg) => msg.to_string(),
     }
 }
-
 
 #[cfg(test)]
 mod tests {
