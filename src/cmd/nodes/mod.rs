@@ -3,11 +3,9 @@ use dialoguer::Confirm;
 use futures_util::future::join_all;
 use tracing::debug;
 
-use crate::{
-    cmd::{
-        init_dracoon,
-        utils::strings::{build_node_path, parse_path, print_node},
-    },
+use crate::cmd::{
+    init_dracoon,
+    utils::strings::{build_node_path, parse_path, print_node},
 };
 
 use dco3::{

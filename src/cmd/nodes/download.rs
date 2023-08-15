@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf, time::Duration};
+use std::{collections::HashMap, path::Path, time::Duration};
 
 use futures_util::future::join_all;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -215,7 +215,6 @@ async fn download_container(
     target: &str,
     velocity: Option<u8>,
 ) -> Result<(), DcCmdError> {
-
     // indicate listing files and folders
     let progress_spinner = ProgressBar::new_spinner();
     progress_spinner.set_message("Listing files and folders...");
@@ -237,7 +236,7 @@ async fn download_container(
         .to_string();
 
     // create all sub folders
-    create_folders(target.clone(), node, &base_path, folders)?;
+    create_folders(&target, node, &base_path, folders)?;
 
     // get all files
     let files = get_files(dracoon, node).await?;
@@ -426,14 +425,14 @@ async fn get_folders(
 }
 
 fn create_folders(
-    target: PathBuf,
+    target: &Path,
     parent_node: &Node,
     base_path: &str,
     folders: Vec<Node>,
 ) -> Result<(), DcCmdError> {
     // create all sub directories
     for folder in folders {
-        let curr_target = target.clone();
+        let curr_target = target;
 
         let folder_base_path = folder
             .clone()

@@ -30,6 +30,7 @@ pub fn delete_dracoon_env(entry: &Entry, dracoon_url: &str) -> Result<(), DcCmdE
     }
 }
 
+#[allow(clippy::module_name_repetitions)]
 pub fn get_client_credentials() -> (String, String) {
     let client_id = include_str!("../../.env")
         .split('\n')

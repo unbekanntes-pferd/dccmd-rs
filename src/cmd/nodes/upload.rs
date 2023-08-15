@@ -109,7 +109,7 @@ async fn upload_file(
         ));
     }
 
-    let file_meta = get_file_meta(&file_meta, source.clone())?;
+    let file_meta = get_file_meta(&file_meta, &source)?;
     let file_name = file_meta.0.clone();
 
     let progress_bar = ProgressBar::new(target_node.size.unwrap_or(0));
@@ -158,6 +158,7 @@ async fn upload_file(
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 async fn upload_container(
     dracoon: &mut Dracoon<Connected>,
     source: PathBuf,
@@ -187,12 +188,10 @@ async fn upload_container(
     }
 
     let progress = MultiProgress::new();
-
     let progress_spinner = ProgressBar::new_spinner();
     progress_spinner.set_message("Creating folder structure...");
     progress_spinner.enable_steady_tick(Duration::from_millis(100));
     progress.add(progress_spinner);
-
     let root_folder = CreateFolderRequest::builder(name, target.id).build();
     let root_folder = dracoon.create_folder(root_folder).await?;
 
@@ -201,7 +200,6 @@ async fn upload_container(
 
     let files = files?;
     let folders = folders?;
-
     let progress_bar = ProgressBar::new(folders.len() as u64);
     progress_bar.set_style(
         ProgressStyle::default_bar()
@@ -210,7 +208,6 @@ async fn upload_container(
     );
 
     progress.add(progress_bar.clone());
-
     // sort the folders by depth
     let mut folders = folders
         .iter()
@@ -225,7 +222,6 @@ async fn upload_container(
     // create HashMap of path and created node id
     let mut created_nodes = HashMap::new();
     let root_folder_path = format!("/{}", root_folder.name);
-
     created_nodes.insert(root_folder_path, root_folder.id);
 
     let root_depth_level = if folders.is_empty() {
@@ -250,10 +246,8 @@ async fn upload_container(
             let created_folders = join_all(folder_reqs).await;
             let processed = created_folders.len();
             // return error if any of the folders failed to create
-            update_folder_map(created_folders, &mut created_nodes, target_parent).await?;
-
+            update_folder_map(created_folders, &mut created_nodes, target_parent)?;
             progress_bar.inc(processed as u64);
-
             prev_depth = depth;
             // reset folder_reqs
             folder_reqs = Vec::new();
@@ -298,11 +292,11 @@ async fn upload_container(
     let created_folders = join_all(folder_reqs).await;
     let processed = created_folders.len();
 
-    update_folder_map(created_folders, &mut created_nodes, target_parent).await?;
+    update_folder_map(created_folders, &mut created_nodes, target_parent)?;
 
     progress_bar.inc(processed as u64);
 
-    let file_map = create_file_map(files, created_nodes, root_path)?;
+    let file_map = create_file_map(files, &created_nodes, root_path)?;
 
     // upload files
     upload_files(
@@ -318,7 +312,7 @@ async fn upload_container(
     Ok(())
 }
 
-async fn update_folder_map(
+fn update_folder_map(
     folder_results: Vec<Result<Node, DracoonClientError>>,
     created_nodes: &mut HashMap<String, u64>,
     target_parent: &str,
@@ -336,7 +330,7 @@ async fn update_folder_map(
         let target_parent = if target_parent.starts_with('/') {
             target_parent.to_string()
         } else {
-            format!("/{}", target_parent)
+            format!("/{target_parent}")
         };
 
         created_nodes.insert(target_parent, folder.id);
@@ -347,10 +341,10 @@ async fn update_folder_map(
 
 fn create_file_map(
     files: Vec<PathBuf>,
-    created_nodes: HashMap<String, u64>,
+    created_nodes: &HashMap<String, u64>,
     root_path: &Path,
 ) -> Result<HashMap<PathBuf, (u64, u64)>, DcCmdError> {
-    Ok(files
+    files
         .into_iter()
         .map(|file| {
             // get relative path of file
@@ -380,7 +374,7 @@ fn create_file_map(
 
             Ok((file, (node_id, file_size)))
         })
-        .collect::<Result<HashMap<PathBuf, (u64, u64)>, DcCmdError>>()?)
+        .collect::<Result<HashMap<PathBuf, (u64, u64)>, DcCmdError>>()
 }
 
 async fn upload_files(
@@ -428,7 +422,7 @@ async fn upload_files(
                 let parent_node = client.get_node(*node_id).await?;
 
                 let file_meta = file.metadata().await.or(Err(DcCmdError::IoError))?;
-                let file_meta = get_file_meta(&file_meta, source.to_owned())?;
+                let file_meta = get_file_meta(&file_meta, source)?;
 
                 let file_name = file_meta.0.clone();
 
@@ -456,13 +450,13 @@ async fn upload_files(
                         upload_options,
                         reader,
                         Some(Box::new(move |progress: u64, _total: u64| {
-                            progress_bar_mv.inc(progress)
+                            progress_bar_mv.inc(progress);
                         })),
                         None,
                     )
                     .await?;
 
-                let _ = &rm_files.fetch_sub(1, Ordering::Relaxed);
+                _ = &rm_files.fetch_sub(1, Ordering::Relaxed);
                 let message = format!("Uploading {} files", &rm_files.load(Ordering::Relaxed));
                 progress_bar_inc.set_message(message);
 
@@ -528,7 +522,7 @@ async fn list_files(root_path: PathBuf) -> Result<Vec<PathBuf>, DcCmdError> {
     Ok(file_paths)
 }
 
-fn get_file_meta(file_meta: &Metadata, file_path: PathBuf) -> Result<FileMeta, DcCmdError> {
+fn get_file_meta(file_meta: &Metadata, file_path: &Path) -> Result<FileMeta, DcCmdError> {
     let file_name = file_path
         .file_name()
         .ok_or(DcCmdError::InvalidPath(
@@ -570,7 +564,6 @@ mod tests {
     async fn test_list_directories() {
         let root_path = PathBuf::from("./src");
         let folders = list_directories(root_path).await.unwrap();
-        println!("{:?}", folders);
         assert_eq!(folders.len(), 3);
     }
 
@@ -578,7 +571,6 @@ mod tests {
     async fn test_list_files() {
         let root_path = PathBuf::from("./src/cmd/nodes");
         let files = list_files(root_path).await.unwrap();
-        println!("{:?}", files);
         assert_eq!(files.len(), 3);
     }
 }
