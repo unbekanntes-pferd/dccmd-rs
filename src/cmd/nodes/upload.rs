@@ -239,7 +239,6 @@ async fn upload_container(
     // create folders
     let mut prev_depth = 0;
     let mut folder_reqs = Vec::new();
-    debug!("{:?}", folders);
 
     for (folder, depth) in folders {
         if depth >= prev_depth {

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::Path, time::Duration};
+use std::{collections::HashMap, path::Path, time::Duration, sync::atomic::{AtomicU64, Ordering}};
 
 use futures_util::future::join_all;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -153,7 +153,7 @@ async fn download_files(
     progress_bar.set_length(total_size);
     let message = format!("Downloading {} files", files.len());
     progress_bar.set_message(message.clone());
-    let mut remaining_files = files.len();
+    let remaining_files = AtomicU64::new(files.len() as u64);
 
     for batch in files.chunks(concurrent_reqs.into()) {
         let mut download_reqs = vec![];
@@ -165,6 +165,7 @@ async fn download_files(
 
             let progress_bar_mv = progress_bar.clone();
             let progress_bar_inc = progress_bar.clone();
+            let rm_files = &remaining_files;
             let download_task = async move {
                 let target = if let Some(targets) = targets {
                     let target = targets.get(&file.id).expect("Target not found").clone();
@@ -188,8 +189,8 @@ async fn download_files(
                     )
                     .await?;
 
-                remaining_files -= 1;
-                let message = format!("Downloading {remaining_files} files");
+                _ = &rm_files.fetch_sub(1, Ordering::Relaxed);
+                let message = format!("Downloading {} files", &rm_files.load(Ordering::Relaxed));
                 progress_bar_inc.set_message(message);
                 Ok(())
             };
