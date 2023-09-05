@@ -6,7 +6,7 @@ use tracing::{debug, error};
 
 use crate::cmd::{
     init_dracoon, init_encryption,
-    models::DcCmdError,
+    models::{DcCmdError, PasswordAuth},
     nodes::{is_search_query, search_nodes},
     utils::strings::parse_path,
 };
@@ -25,11 +25,12 @@ pub async fn download(
     target: String,
     velocity: Option<u8>,
     recursive: bool,
+    auth: Option<PasswordAuth>
 ) -> Result<(), DcCmdError> {
     debug!("Downloading {} to {}", source, target);
     debug!("Velocity: {}", velocity.unwrap_or(1));
 
-    let mut dracoon = init_dracoon(&source).await?;
+    let mut dracoon = init_dracoon(&source, auth).await?;
 
     let (parent_path, node_name, _) = parse_path(&source, dracoon.get_base_url().as_ref())
         .or(Err(DcCmdError::InvalidPath(source.clone())))?;

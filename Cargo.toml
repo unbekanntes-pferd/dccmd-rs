@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 # DRACOON API
-dco3 = "0.4.1"
+dco3 = "0.5.1"
 
 # CLI helpers
 clap = { version = "4.1.8", features = ["derive"] }

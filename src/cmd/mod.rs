@@ -6,7 +6,7 @@ use crate::cmd::credentials::get_client_credentials;
 
 use self::{
     credentials::{get_dracoon_env, set_dracoon_env},
-    models::DcCmdError,
+    models::{DcCmdError, PasswordAuth},
     utils::strings::format_error_message,
 };
 use dco3::{
@@ -48,7 +48,7 @@ async fn init_encryption(dracoon: Dracoon<Connected>) -> Result<Dracoon<Connecte
     Ok(dracoon)
 }
 
-async fn init_dracoon(url_path: &str) -> Result<Dracoon<Connected>, DcCmdError> {
+async fn init_dracoon(url_path: &str, password_auth: Option<PasswordAuth>) -> Result<Dracoon<Connected>, DcCmdError> {
     let (client_id, client_secret) = get_client_credentials();
     let base_url = parse_base_url(url_path.to_string())?;
 
@@ -59,11 +59,15 @@ async fn init_dracoon(url_path: &str) -> Result<Dracoon<Connected>, DcCmdError> 
         .build()?;
 
     let entry = Entry::new(SERVICE_NAME, base_url.as_str()).map_err(|_| {
+        // TODO: check if can be opened via local config path
         error!("Failed to open keyring entry for {}", base_url);
         DcCmdError::CredentialStorageFailed
-    })?;
+    });
 
-    let dracoon = if let Ok(refresh_token) = get_dracoon_env(&entry) {
+    let dracoon = if let Some(password_auth) = password_auth {
+        authenticate_password_flow(dracoon, password_auth).await?
+    } else if let Ok(entry) = entry {
+        let refresh_token = get_dracoon_env(&entry)?;
         // TODO: fcheck if possible without cloning client
         if let Ok(dracoon) = dracoon
             .clone()
@@ -73,11 +77,11 @@ async fn init_dracoon(url_path: &str) -> Result<Dracoon<Connected>, DcCmdError> 
             dracoon
         } else {
             error!("Failed to authenticate to {}.", base_url);
-            authenticate(dracoon, entry).await?
+            authenticate_refresh_token(dracoon, entry).await?
         }
     } else {
-        debug!("No refresh token stored for {}", base_url);
-        authenticate(dracoon, entry).await?
+        error!("Failed to open keyring entry for {}", base_url);
+        return Err(DcCmdError::CredentialStorageFailed)
     };
 
     debug!("Successfully authenticated to {}", base_url);
@@ -85,7 +89,7 @@ async fn init_dracoon(url_path: &str) -> Result<Dracoon<Connected>, DcCmdError> 
     Ok(dracoon)
 }
 
-async fn authenticate(
+async fn authenticate_refresh_token(
     mut dracoon: Dracoon<Disconnected>,
     entry: Entry,
 ) -> Result<Dracoon<Connected>, DcCmdError> {
@@ -101,7 +105,19 @@ async fn authenticate(
         .connect(OAuth2Flow::AuthCodeFlow(auth_code.trim_end().into()))
         .await?;
 
+    // TODO: if this fails, offer to store in plain
     set_dracoon_env(&entry, &dracoon.get_refresh_token())?;
+
+    Ok(dracoon)
+}
+
+async fn authenticate_password_flow(
+    dracoon: Dracoon<Disconnected>,
+    password_auth: PasswordAuth,
+) -> Result<Dracoon<Connected>, DcCmdError> {
+    let dracoon = dracoon
+        .connect(OAuth2Flow::password_flow(password_auth.0, password_auth.1))
+        .await?;
 
     Ok(dracoon)
 }

@@ -20,7 +20,7 @@ use dco3::{
 };
 
 use super::{
-    models::DcCmdError,
+    models::{DcCmdError, PasswordAuth},
     utils::strings::{format_error_message, format_success_message},
 };
 
@@ -37,11 +37,12 @@ pub async fn list_nodes(
     all: Option<bool>,
     offset: Option<u32>,
     limit: Option<u32>,
+    auth: Option<PasswordAuth>
 ) -> Result<(), DcCmdError> {
     let offset = offset.unwrap_or(0);
     let limit = limit.unwrap_or(500);
 
-    let dracoon = init_dracoon(&source).await?;
+    let dracoon = init_dracoon(&source, auth).await?;
 
     let (parent_path, node_name, depth) = parse_path(&source, dracoon.get_base_url().as_ref())?;
     let node_path = build_node_path((parent_path.clone(), node_name.clone(), depth));
@@ -208,8 +209,9 @@ pub async fn delete_node(
     term: Term,
     source: String,
     recursive: Option<bool>,
+    auth: Option<PasswordAuth>
 ) -> Result<(), DcCmdError> {
-    let dracoon = init_dracoon(&source).await?;
+    let dracoon = init_dracoon(&source, auth).await?;
     let (parent_path, node_name, depth) = parse_path(&source, dracoon.get_base_url().as_ref())?;
     let node_path = build_node_path((parent_path.clone(), node_name.clone(), depth));
     let node = dracoon
@@ -265,8 +267,9 @@ pub async fn create_folder(
     source: String,
     classification: Option<u8>,
     notes: Option<String>,
+    auth: Option<PasswordAuth>
 ) -> Result<(), DcCmdError> {
-    let dracoon = init_dracoon(&source).await?;
+    let dracoon = init_dracoon(&source, auth).await?;
     let (parent_path, node_name, _) = parse_path(&source, dracoon.get_base_url().as_ref())?;
 
     debug!("parent_path: {}", parent_path);
@@ -305,8 +308,9 @@ pub async fn create_room(
     term: Term,
     source: String,
     classification: Option<u8>,
+    auth: Option<PasswordAuth>
 ) -> Result<(), DcCmdError> {
-    let dracoon = init_dracoon(&source).await?;
+    let dracoon = init_dracoon(&source, auth).await?;
     let (parent_path, node_name, _) = parse_path(&source, dracoon.get_base_url().as_ref())?;
 
     let parent_node = dracoon

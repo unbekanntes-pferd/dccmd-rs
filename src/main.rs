@@ -4,7 +4,7 @@
 use clap::Parser;
 use cmd::{
     handle_error,
-    models::{DcCmd, DcCmdCommand},
+    models::{DcCmd, DcCmdCommand, PasswordAuth},
     nodes::{
         create_folder, create_room, delete_node, download::download, list_nodes, upload::upload,
     },
@@ -33,13 +33,18 @@ async fn main() {
     let term = Term::stdout();
     let err_term = Term::stderr();
 
+    let password_auth = match (opt.username, opt.password) {
+        (Some(username), Some(password)) => Some(PasswordAuth(username, password)),
+        _ => None
+    };
+
     let res = match opt.cmd {
         DcCmdCommand::Download {
             source,
             target,
             velocity,
             recursive,
-        } => download(source, target, velocity, recursive).await,
+        } => download(source, target, velocity, recursive, password_auth).await,
         DcCmdCommand::Upload {
             source,
             target,
@@ -55,6 +60,7 @@ async fn main() {
                 classification,
                 velocity,
                 recursive,
+                password_auth,
             )
             .await
         }
@@ -76,6 +82,7 @@ async fn main() {
                 Some(all),
                 offset,
                 limit,
+                password_auth,
             )
             .await
         }
@@ -83,12 +90,12 @@ async fn main() {
             source,
             classification,
             notes,
-        } => create_folder(term, source, classification, notes).await,
+        } => create_folder(term, source, classification, notes, password_auth).await,
         DcCmdCommand::Mkroom {
             source,
             classification,
-        } => create_room(term, source, classification).await,
-        DcCmdCommand::Rm { source, recursive } => delete_node(term, source, Some(recursive)).await,
+        } => create_room(term, source, classification, password_auth).await,
+        DcCmdCommand::Rm { source, recursive } => delete_node(term, source, Some(recursive), password_auth).await,
     };
 
     if let Err(e) = res {

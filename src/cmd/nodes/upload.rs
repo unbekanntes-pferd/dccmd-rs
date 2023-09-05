@@ -14,7 +14,7 @@ use tracing::{debug, error};
 
 use crate::cmd::{
     init_dracoon, init_encryption,
-    models::DcCmdError,
+    models::{DcCmdError, PasswordAuth},
     utils::{dates::to_datetime_utc, strings::parse_path},
 };
 use dco3::{
@@ -37,8 +37,9 @@ pub async fn upload(
     classification: Option<u8>,
     velocity: Option<u8>,
     recursive: bool,
+    auth: Option<PasswordAuth>
 ) -> Result<(), DcCmdError> {
-    let mut dracoon = init_dracoon(&target).await?;
+    let mut dracoon = init_dracoon(&target, auth).await?;
 
     let (parent_path, node_name, _) = parse_path(&target, dracoon.get_base_url().as_str())
         .or(Err(DcCmdError::InvalidPath(target.clone())))?;
