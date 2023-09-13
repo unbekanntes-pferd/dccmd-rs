@@ -44,7 +44,7 @@ async fn main() {
             target,
             velocity,
             recursive,
-        } => download(source, target, velocity, recursive, password_auth).await,
+        } => download(source, target, velocity, recursive, password_auth, opt.encryption_password).await,
         DcCmdCommand::Upload {
             source,
             target,
@@ -61,6 +61,7 @@ async fn main() {
                 velocity,
                 recursive,
                 password_auth,
+                opt.encryption_password
             )
             .await
         }

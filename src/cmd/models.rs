@@ -9,8 +9,9 @@ use dco3::{
     nodes::models::S3ErrorResponse,
 };
 
-
+// represents password flow
 pub struct PasswordAuth(pub String, pub String);
+
 
 #[derive(Debug, PartialEq, Error)]
 pub enum DcCmdError {
@@ -76,6 +77,10 @@ pub struct DcCmd {
     /// optional password
     #[clap(long)]
     pub password: Option<String>,
+
+    /// optional encryption password
+    #[clap(long)]
+    pub encryption_password: Option<String>,
 }
 
 #[derive(Parser)]

@@ -23,13 +23,19 @@ pub mod utils;
 const SERVICE_NAME: &str = env!("CARGO_PKG_NAME");
 
 /// initializes a dracoon client with encryption enabled (plain keypair ready to use)
-async fn init_encryption(dracoon: Dracoon<Connected>) -> Result<Dracoon<Connected>, DcCmdError> {
+async fn init_encryption(
+    dracoon: Dracoon<Connected>,
+    encryption_password: Option<String>,
+) -> Result<Dracoon<Connected>, DcCmdError> {
     let account = format!("{}-crypto", dracoon.get_base_url());
 
     let entry =
-        Entry::new(SERVICE_NAME, &account).map_err(|_| DcCmdError::CredentialStorageFailed)?;
+        Entry::new(SERVICE_NAME, &account).map_err(|_| DcCmdError::CredentialStorageFailed);
 
-    let (secret, store) = if let Ok(secret) = get_dracoon_env(&entry) {
+    let (secret, store) = if encryption_password.is_some() {
+        (encryption_password.unwrap(), false)
+    } else if let Ok(entry) = entry {
+        let secret = get_dracoon_env(&entry)?;
         (secret, false)
     } else {
         let secret = dialoguer::Password::new()
@@ -42,13 +48,18 @@ async fn init_encryption(dracoon: Dracoon<Connected>) -> Result<Dracoon<Connecte
     let keypair = dracoon.get_keypair(Some(secret.clone())).await?;
 
     if store {
+        let entry =
+        Entry::new(SERVICE_NAME, &account).map_err(|_| DcCmdError::CredentialStorageFailed)?;
         set_dracoon_env(&entry, &secret)?;
     }
 
     Ok(dracoon)
 }
 
-async fn init_dracoon(url_path: &str, password_auth: Option<PasswordAuth>) -> Result<Dracoon<Connected>, DcCmdError> {
+async fn init_dracoon(
+    url_path: &str,
+    password_auth: Option<PasswordAuth>,
+) -> Result<Dracoon<Connected>, DcCmdError> {
     let (client_id, client_secret) = get_client_credentials();
     let base_url = parse_base_url(url_path.to_string())?;
 
@@ -68,7 +79,7 @@ async fn init_dracoon(url_path: &str, password_auth: Option<PasswordAuth>) -> Re
         authenticate_password_flow(dracoon, password_auth).await?
     } else if let Ok(entry) = entry {
         let refresh_token = get_dracoon_env(&entry)?;
-        // TODO: fcheck if possible without cloning client
+        // TODO: check if possible without cloning client
         if let Ok(dracoon) = dracoon
             .clone()
             .connect(OAuth2Flow::RefreshToken(refresh_token))
@@ -81,7 +92,7 @@ async fn init_dracoon(url_path: &str, password_auth: Option<PasswordAuth>) -> Re
         }
     } else {
         error!("Failed to open keyring entry for {}", base_url);
-        return Err(DcCmdError::CredentialStorageFailed)
+        return Err(DcCmdError::CredentialStorageFailed);
     };
 
     debug!("Successfully authenticated to {}", base_url);

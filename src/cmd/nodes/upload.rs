@@ -37,7 +37,8 @@ pub async fn upload(
     classification: Option<u8>,
     velocity: Option<u8>,
     recursive: bool,
-    auth: Option<PasswordAuth>
+    auth: Option<PasswordAuth>, 
+    encryption_password: Option<String>,
 ) -> Result<(), DcCmdError> {
     let mut dracoon = init_dracoon(&target, auth).await?;
 
@@ -53,7 +54,7 @@ pub async fn upload(
     };
 
     if parent_node.is_encrypted == Some(true) {
-        dracoon = init_encryption(dracoon).await?;
+        dracoon = init_encryption(dracoon, encryption_password).await?;
     }
 
     if source.is_file() {

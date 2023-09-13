@@ -25,7 +25,8 @@ pub async fn download(
     target: String,
     velocity: Option<u8>,
     recursive: bool,
-    auth: Option<PasswordAuth>
+    auth: Option<PasswordAuth>,
+    encryption_password: Option<String>,
 ) -> Result<(), DcCmdError> {
     debug!("Downloading {} to {}", source, target);
     debug!("Velocity: {}", velocity.unwrap_or(1));
@@ -50,7 +51,7 @@ pub async fn download(
     };
 
     if node.is_encrypted == Some(true) {
-        dracoon = init_encryption(dracoon).await?;
+        dracoon = init_encryption(dracoon, encryption_password).await?;
     }
 
     if is_search_query(&node_name) {
