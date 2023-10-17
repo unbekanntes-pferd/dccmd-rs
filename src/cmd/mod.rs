@@ -101,7 +101,7 @@ async fn init_dracoon(
 }
 
 async fn authenticate_refresh_token(
-    mut dracoon: Dracoon<Disconnected>,
+    dracoon: Dracoon<Disconnected>,
     entry: Entry,
 ) -> Result<Dracoon<Connected>, DcCmdError> {
     println!("Please log in via browser (open url): ");

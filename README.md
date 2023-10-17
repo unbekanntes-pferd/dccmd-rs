@@ -42,56 +42,59 @@ Currently, the following commands are working:
 - `mkroom` - creates a room (inherits permissions) in given path in DRACOON
 - `rm` - removes a node by given path in DRACOON
 
-## What is not working?
-
-- Recursive upload is not implemented
-
 ## Example usage
 
-For the sake of clarity, the usage of the binary is called `dccmd`, regardless of the use via `cargo` or a compiled executable.
+For the sake of clarity, the usage of the binary is called `dccmd-rs`, regardless of the use via `cargo` or a compiled executable.
 
 ### Downloads
 
 To download a file, use the download command:
 
 ```bash
-dccmd download your.dracoon.domain/some/room/some-file.pdf ./your/path/your-name.pdf
+dccmd-rs download your.dracoon.domain/some/room/some-file.pdf ./your/path/your-name.pdf
 ```
 
 To download a container (room or folder), use the download command with recursive flag:
 
 ```bash
-dccmd download -r your.dracoon.domain/some/room ./your/path
+dccmd-rs download -r your.dracoon.domain/some/room ./your/path
 ```
 **Note**: This will create a directory with same name as your container. Sub rooms are **not** included.
 
 To download a list search result, use the download command with a search string:
 
 ```bash
-dccmd download your.dracoon.domain/some/*.pdf ./your/path
+dccmd-rs download your.dracoon.domain/some/*.pdf ./your/path
 ```
 
 ### Uploads
 
-To upload a file, use the download command:
+To upload a file, use the upload command:
 
 ```bash
-dccmd upload ./your/path/your-name.pdf your.dracoon.domain/some/room
+dccmd-rs upload ./your/path/your-name.pdf your.dracoon.domain/some/room
 ```
 
 **Note:** Currently, providing a custom name is not implemented.
+
+To upload a folder, use the `--recursive` flag:
+
+```bash
+dccmd-rs upload /your/path your.dracoon.domain/some/room
+```
+**Note:** Currently only absolute paths are supported for recursive uploads.
 
 ### Listing nodes
 To list nodes, use the `ls` command:
 
 ```
-dccmd ls your.dracoon.domain/some/path
+dccmd-rs ls your.dracoon.domain/some/path
 
 // for root node use a trailing slash
-dccmd ls your.dracoon.domain/
+dccmd-rs ls your.dracoon.domain/
 
 // for searches within the room
-dccmd ls your.dracoon.domain/*.pdf 
+dccmd-rs ls your.dracoon.domain/*.pdf 
 ```
 
 Options:
@@ -106,8 +109,8 @@ Options:
 To delete nodes, use the `rm` command:
 
 ```
-dccmd rm your.dracoon.domain/some/path/some_file.pdf
-dccmd rm -r your.dracoon.domain/some/path/some/room
+dccmd-rs rm your.dracoon.domain/some/path/some_file.pdf
+dccmd-rs rm -r your.dracoon.domain/some/path/some/room
 ```
 *Note*: If you intend to delete a container (room or folder), use the recursive flag.
 *Note*: Room deletion always requires additional confirmation.
@@ -117,7 +120,7 @@ dccmd rm -r your.dracoon.domain/some/path/some/room
 To create folders, use the `mkdir` command:
 
 ```
-dccmd mkdir your.dracoon.domain/some/path/newfolder
+dccmd-rs mkdir your.dracoon.domain/some/path/newfolder
 
 ```
 
@@ -129,3 +132,16 @@ dccmd mkroom your.dracoon.domain/some/path/newfolder
 
 ```
 *Note*: Rooms can currently only be created as inheriting permissions from parent.
+
+### CLI mode
+
+Currently dccmd-rs will fail to store credentials if you are running a headless Linux or are trying to run in Windows with WSL.
+In such cases you can pass the username and password as arguments like so:
+
+```
+dccmd-rs --username your_username --password your_secure_password ls your.dracoon.domain/some/path
+
+```
+
+Use this at your own risk and be aware that the password is stored in plain in your shell history.
+*Note*: This only works for the password flow - this means you **must** use a local user. 
