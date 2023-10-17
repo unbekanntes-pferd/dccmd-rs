@@ -145,3 +145,10 @@ dccmd-rs --username your_username --password your_secure_password ls your.dracoo
 
 Use this at your own risk and be aware that the password is stored in plain in your shell history.
 *Note*: This only works for the password flow - this means you **must** use a local user. 
+
+This also works for the encryption password like so: 
+
+```
+dccmd-rs --username your_username --password your_secure_password --encryption-password your_secure_encryption_password ls your.dracoon.domain/some/path
+
+```
