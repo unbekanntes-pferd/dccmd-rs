@@ -9,6 +9,10 @@ use dco3::{
     nodes::models::S3ErrorResponse,
 };
 
+// represents password flow
+pub struct PasswordAuth(pub String, pub String);
+
+
 #[derive(Debug, PartialEq, Error)]
 pub enum DcCmdError {
     #[error("Connection to DRACOON failed")]
@@ -40,7 +44,7 @@ pub enum DcCmdError {
 impl From<DracoonClientError> for DcCmdError {
     fn from(value: DracoonClientError) -> Self {
         match value {
-            DracoonClientError::ConnectionFailed => DcCmdError::ConnectionFailed,
+            DracoonClientError::ConnectionFailed(_) => DcCmdError::ConnectionFailed,
             DracoonClientError::Http(err) => DcCmdError::DracoonError(err),
             DracoonClientError::Auth(err) => DcCmdError::DracoonAuthError(err),
             DracoonClientError::InvalidUrl(url) => DcCmdError::InvalidUrl(url),
@@ -65,6 +69,18 @@ pub struct DcCmd {
 
     #[clap(long)]
     pub log_file_path: Option<String>,
+
+    /// optional username
+    #[clap(long)]
+    pub username: Option<String>,
+    
+    /// optional password
+    #[clap(long)]
+    pub password: Option<String>,
+
+    /// optional encryption password
+    #[clap(long)]
+    pub encryption_password: Option<String>,
 }
 
 #[derive(Parser)]
@@ -91,6 +107,7 @@ pub enum DcCmdCommand {
         /// recursive upload
         #[clap(short, long)]
         recursive: bool,
+
     },
     /// download a file from DRACOON to target
     Download {

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::Path, time::Duration};
+use std::{collections::HashMap, path::Path, time::Duration, sync::atomic::{AtomicU64, Ordering}};
 
 use futures_util::future::join_all;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -6,7 +6,7 @@ use tracing::{debug, error};
 
 use crate::cmd::{
     init_dracoon, init_encryption,
-    models::DcCmdError,
+    models::{DcCmdError, PasswordAuth},
     nodes::{is_search_query, search_nodes},
     utils::strings::parse_path,
 };
@@ -25,11 +25,13 @@ pub async fn download(
     target: String,
     velocity: Option<u8>,
     recursive: bool,
+    auth: Option<PasswordAuth>,
+    encryption_password: Option<String>,
 ) -> Result<(), DcCmdError> {
     debug!("Downloading {} to {}", source, target);
     debug!("Velocity: {}", velocity.unwrap_or(1));
 
-    let mut dracoon = init_dracoon(&source).await?;
+    let mut dracoon = init_dracoon(&source, auth).await?;
 
     let (parent_path, node_name, _) = parse_path(&source, dracoon.get_base_url().as_ref())
         .or(Err(DcCmdError::InvalidPath(source.clone())))?;
@@ -49,7 +51,7 @@ pub async fn download(
     };
 
     if node.is_encrypted == Some(true) {
-        dracoon = init_encryption(dracoon).await?;
+        dracoon = init_encryption(dracoon, encryption_password).await?;
     }
 
     if is_search_query(&node_name) {
@@ -152,7 +154,7 @@ async fn download_files(
     progress_bar.set_length(total_size);
     let message = format!("Downloading {} files", files.len());
     progress_bar.set_message(message.clone());
-    let mut remaining_files = files.len();
+    let remaining_files = AtomicU64::new(files.len() as u64);
 
     for batch in files.chunks(concurrent_reqs.into()) {
         let mut download_reqs = vec![];
@@ -164,6 +166,7 @@ async fn download_files(
 
             let progress_bar_mv = progress_bar.clone();
             let progress_bar_inc = progress_bar.clone();
+            let rm_files = &remaining_files;
             let download_task = async move {
                 let target = if let Some(targets) = targets {
                     let target = targets.get(&file.id).expect("Target not found").clone();
@@ -187,8 +190,8 @@ async fn download_files(
                     )
                     .await?;
 
-                remaining_files -= 1;
-                let message = format!("Downloading {remaining_files} files");
+                _ = &rm_files.fetch_sub(1, Ordering::Relaxed);
+                let message = format!("Downloading {} files", &rm_files.load(Ordering::Relaxed));
                 progress_bar_inc.set_message(message);
                 Ok(())
             };

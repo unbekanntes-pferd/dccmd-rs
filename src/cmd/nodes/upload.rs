@@ -14,7 +14,7 @@ use tracing::{debug, error};
 
 use crate::cmd::{
     init_dracoon, init_encryption,
-    models::DcCmdError,
+    models::{DcCmdError, PasswordAuth},
     utils::{dates::to_datetime_utc, strings::parse_path},
 };
 use dco3::{
@@ -30,6 +30,7 @@ use dco3::{
 // TODO: fix dco3 chunk progress for uploads
 const DEFAULT_CHUNK_SIZE: usize = 1024 * 1024 * 5; // 5 MB
 
+#[allow(clippy::too_many_arguments)]
 pub async fn upload(
     source: PathBuf,
     target: String,
@@ -37,8 +38,10 @@ pub async fn upload(
     classification: Option<u8>,
     velocity: Option<u8>,
     recursive: bool,
+    auth: Option<PasswordAuth>, 
+    encryption_password: Option<String>,
 ) -> Result<(), DcCmdError> {
-    let mut dracoon = init_dracoon(&target).await?;
+    let mut dracoon = init_dracoon(&target, auth).await?;
 
     let (parent_path, node_name, _) = parse_path(&target, dracoon.get_base_url().as_str())
         .or(Err(DcCmdError::InvalidPath(target.clone())))?;
@@ -52,7 +55,7 @@ pub async fn upload(
     };
 
     if parent_node.is_encrypted == Some(true) {
-        dracoon = init_encryption(dracoon).await?;
+        dracoon = init_encryption(dracoon, encryption_password).await?;
     }
 
     if source.is_file() {
@@ -238,7 +241,6 @@ async fn upload_container(
     // create folders
     let mut prev_depth = 0;
     let mut folder_reqs = Vec::new();
-    debug!("{:?}", folders);
 
     for (folder, depth) in folders {
         if depth >= prev_depth {
