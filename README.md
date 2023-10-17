@@ -21,9 +21,18 @@ For all DRACOON operations `dco3` is used.
 
 ## Installation
 
-Currently, only builds from source are supported (no official version, therefore no pre-compiled builds).
+You can install this using cargo like so:
 
-To get this running, clone the repository and either use `cargo run` or build your own executable with `cargo build`:
+```bash
+cargo install dccmd-rs
+```
+
+You can also download precompiled binaries on the Github releases page: 
+[Releases](https://github.com/unbekanntes-pferd/dccmd-rs/releases)
+
+If you like it rough, feel free to compile from source:
+
+Clone the repository and either use `cargo run` or build your own executable with `cargo build`:
 
 ```bash
 git clone https://github.com/unbekanntes-pferd/dccmd-rs.git
@@ -35,8 +44,8 @@ cargo build
 
 Currently, the following commands are working:
 
-- `download` - downloads a file from DRACOON to a desired file on disk (encrypted, unencrypted)
-- `upload` - uploads a file to a parent in DRACOON (encrypted, unencrypted)
+- `download` - downloads a file or folder / room from DRACOON to a desired location on disk (encrypted, unencrypted)
+- `upload` - uploads a file or folder to a parent in DRACOON (encrypted, unencrypted)
 - `ls` - lists all nodes for a given path in DRACOON
 - `mkdir` - creates a folder in given path in DRACOON
 - `mkroom` - creates a room (inherits permissions) in given path in DRACOON
