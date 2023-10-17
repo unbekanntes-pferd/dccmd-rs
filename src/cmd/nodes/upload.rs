@@ -30,6 +30,7 @@ use dco3::{
 // TODO: fix dco3 chunk progress for uploads
 const DEFAULT_CHUNK_SIZE: usize = 1024 * 1024 * 5; // 5 MB
 
+#[allow(clippy::too_many_arguments)]
 pub async fn upload(
     source: PathBuf,
     target: String,
