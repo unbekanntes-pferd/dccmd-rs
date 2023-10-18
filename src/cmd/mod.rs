@@ -31,12 +31,12 @@ async fn init_encryption(
 
     let entry = Entry::new(SERVICE_NAME, &account).map_err(|_| DcCmdError::CredentialStorageFailed);
 
-    let (secret, store) = if encryption_password.is_some() {
-        (encryption_password.unwrap(), false)
+    let (secret, store) = if let Some(encryption_password) = encryption_password {
+        (encryption_password, false)
     } else if let Ok(entry) = entry {
         let secret = get_dracoon_env(&entry);
-        if secret.is_ok() {
-            (secret.unwrap(), false)
+        if let Ok(secret) = secret {
+            (secret, false)
         } else {
             let secret = dialoguer::Password::new()
                 .with_prompt("Please enter your encryption secret")
