@@ -34,14 +34,22 @@ async fn init_encryption(
     let (secret, store) = if encryption_password.is_some() {
         (encryption_password.unwrap(), false)
     } else if let Ok(entry) = entry {
-        let secret = get_dracoon_env(&entry)?;
-        (secret, false)
+        let secret = get_dracoon_env(&entry);
+        if secret.is_ok() {
+            (secret.unwrap(), false)
+        } else {
+            let secret = dialoguer::Password::new()
+                .with_prompt("Please enter your encryption secret")
+                .interact()
+                .or(Err(DcCmdError::IoError))?;
+            (secret, true)
+        }
     } else {
         let secret = dialoguer::Password::new()
             .with_prompt("Please enter your encryption secret")
             .interact()
             .or(Err(DcCmdError::IoError))?;
-        (secret, true)
+        (secret, false)
     };
 
     let keypair = dracoon.get_keypair(Some(secret.clone())).await?;

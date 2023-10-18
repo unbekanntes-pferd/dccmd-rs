@@ -15,7 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 # DRACOON API
-dco3 = "0.6.0"
+dco3 = "0.6.1"
 
 # CLI helpers
 clap = { version = "4.4.0", features = ["derive"] }
