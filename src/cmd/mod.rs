@@ -29,27 +29,34 @@ async fn init_encryption(
 ) -> Result<Dracoon<Connected>, DcCmdError> {
     let account = format!("{}-crypto", dracoon.get_base_url());
 
-    let entry =
-        Entry::new(SERVICE_NAME, &account).map_err(|_| DcCmdError::CredentialStorageFailed);
+    let entry = Entry::new(SERVICE_NAME, &account).map_err(|_| DcCmdError::CredentialStorageFailed);
 
-    let (secret, store) = if encryption_password.is_some() {
-        (encryption_password.unwrap(), false)
+    let (secret, store) = if let Some(encryption_password) = encryption_password {
+        (encryption_password, false)
     } else if let Ok(entry) = entry {
-        let secret = get_dracoon_env(&entry)?;
-        (secret, false)
+        let secret = get_dracoon_env(&entry);
+        if let Ok(secret) = secret {
+            (secret, false)
+        } else {
+            let secret = dialoguer::Password::new()
+                .with_prompt("Please enter your encryption secret")
+                .interact()
+                .or(Err(DcCmdError::IoError))?;
+            (secret, true)
+        }
     } else {
         let secret = dialoguer::Password::new()
             .with_prompt("Please enter your encryption secret")
             .interact()
             .or(Err(DcCmdError::IoError))?;
-        (secret, true)
+        (secret, false)
     };
 
     let keypair = dracoon.get_keypair(Some(secret.clone())).await?;
 
     if store {
         let entry =
-        Entry::new(SERVICE_NAME, &account).map_err(|_| DcCmdError::CredentialStorageFailed)?;
+            Entry::new(SERVICE_NAME, &account).map_err(|_| DcCmdError::CredentialStorageFailed)?;
         set_dracoon_env(&entry, &secret)?;
     }
 
@@ -78,14 +85,13 @@ async fn init_dracoon(
     let dracoon = if let Some(password_auth) = password_auth {
         authenticate_password_flow(dracoon, password_auth).await?
     } else if let Ok(entry) = entry {
-        let refresh_token = get_dracoon_env(&entry)?;
-        // TODO: check if possible without cloning client
-        if let Ok(dracoon) = dracoon
-            .clone()
-            .connect(OAuth2Flow::RefreshToken(refresh_token))
-            .await
-        {
+        let refresh_token = get_dracoon_env(&entry);
+
+        if refresh_token.is_ok() {
             dracoon
+                .clone()
+                .connect(OAuth2Flow::RefreshToken(refresh_token.unwrap()))
+                .await?
         } else {
             error!("Failed to authenticate to {}.", base_url);
             authenticate_refresh_token(dracoon, entry).await?
@@ -175,6 +181,7 @@ fn get_error_message(err: &DcCmdError) -> String {
         DcCmdError::DracoonS3Error(e) => format!("{e}"),
         DcCmdError::DracoonAuthError(e) => format!("{e}"),
         DcCmdError::InvalidArgument(msg) => msg.to_string(),
+        DcCmdError::LogFileCreationFailed => "Log file creation failed.".into(),
     }
 }
 
