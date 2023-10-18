@@ -38,7 +38,9 @@ pub enum DcCmdError {
     #[error("IO error")]
     IoError,
     #[error("Invalid argument")]
-    InvalidArgument(String)
+    InvalidArgument(String),
+    #[error("Log file creation failed")]
+    LogFileCreationFailed,
 }
 
 impl From<DracoonClientError> for DcCmdError {

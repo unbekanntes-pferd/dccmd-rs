@@ -29,8 +29,7 @@ async fn init_encryption(
 ) -> Result<Dracoon<Connected>, DcCmdError> {
     let account = format!("{}-crypto", dracoon.get_base_url());
 
-    let entry =
-        Entry::new(SERVICE_NAME, &account).map_err(|_| DcCmdError::CredentialStorageFailed);
+    let entry = Entry::new(SERVICE_NAME, &account).map_err(|_| DcCmdError::CredentialStorageFailed);
 
     let (secret, store) = if encryption_password.is_some() {
         (encryption_password.unwrap(), false)
@@ -49,7 +48,7 @@ async fn init_encryption(
 
     if store {
         let entry =
-        Entry::new(SERVICE_NAME, &account).map_err(|_| DcCmdError::CredentialStorageFailed)?;
+            Entry::new(SERVICE_NAME, &account).map_err(|_| DcCmdError::CredentialStorageFailed)?;
         set_dracoon_env(&entry, &secret)?;
     }
 
@@ -78,14 +77,13 @@ async fn init_dracoon(
     let dracoon = if let Some(password_auth) = password_auth {
         authenticate_password_flow(dracoon, password_auth).await?
     } else if let Ok(entry) = entry {
-        let refresh_token = get_dracoon_env(&entry)?;
-        // TODO: check if possible without cloning client
-        if let Ok(dracoon) = dracoon
-            .clone()
-            .connect(OAuth2Flow::RefreshToken(refresh_token))
-            .await
-        {
+        let refresh_token = get_dracoon_env(&entry);
+
+        if refresh_token.is_ok() {
             dracoon
+                .clone()
+                .connect(OAuth2Flow::RefreshToken(refresh_token.unwrap()))
+                .await?
         } else {
             error!("Failed to authenticate to {}.", base_url);
             authenticate_refresh_token(dracoon, entry).await?
@@ -175,6 +173,7 @@ fn get_error_message(err: &DcCmdError) -> String {
         DcCmdError::DracoonS3Error(e) => format!("{e}"),
         DcCmdError::DracoonAuthError(e) => format!("{e}"),
         DcCmdError::InvalidArgument(msg) => msg.to_string(),
+        DcCmdError::LogFileCreationFailed => "Log file creation failed.".into(),
     }
 }
 

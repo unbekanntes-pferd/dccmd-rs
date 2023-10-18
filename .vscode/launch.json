@@ -19,7 +19,7 @@
                     "kind": "bin"
                 }
             },
-            "args": ["--debug", "upload", "-r", "/home/oc/dev/dccmd-rs/src", "demo-os.dracoon.com/DEMO_UBPF"],
+            "args": ["--debug", "ls", "staging.dracoon.com/"],
             "cwd": "${workspaceFolder}"
         },
         {
