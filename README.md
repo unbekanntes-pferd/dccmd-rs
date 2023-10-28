@@ -8,10 +8,10 @@ The project serves as a demo client implementation using `dco3` - an API wrapper
 This project makes use of several awesome crates and uses async Rust throughout the project.
 Crates used:
 - [reqwest](https://crates.io/crates/reqwest)
-- [clap](https://crates.io/crates/reqwest)
+- [clap](https://crates.io/crates/clap)
 - [console](https://crates.io/crates/console)
-- [dialoguer](https://crates.io/crates/console)
-- [indicatif](https://crates.io/crates/console)
+- [dialoguer](https://crates.io/crates/dialoguer)
+- [indicatif](https://crates.io/crates/indicatif)
 
 Full dependency list: [Cargo.toml](Cargo.toml)
 
