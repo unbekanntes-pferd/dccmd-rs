@@ -175,6 +175,8 @@ pub fn handle_error(term: &Term, err: &DcCmdError) {
     let err_msg = get_error_message(err);
     let err_msg = format_error_message(&err_msg);
 
+    error!("{}", err_msg);
+
     term.write_line(&err_msg)
         .expect("Error writing error message to terminal.");
 }

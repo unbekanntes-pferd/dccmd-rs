@@ -87,7 +87,7 @@ pub struct DcCmd {
 
 #[derive(Parser)]
 pub enum DcCmdCommand {
-    /// Upload a file to DRACOON
+    /// Upload a file or folder to DRACOON
     Upload {
         /// Source file path
         source: String,
@@ -111,7 +111,7 @@ pub enum DcCmdCommand {
         recursive: bool,
 
     },
-    /// download a file from DRACOON to target
+    /// Download a file or container from DRACOON to target
     Download {
         /// Source file path in DRACOON
         source: String,
@@ -125,6 +125,7 @@ pub enum DcCmdCommand {
         #[clap(short, long)]
         recursive: bool,
     },
+    /// List nodes in DRACOON
     Ls {
         /// Source file path in DRACOON
         source: String,
@@ -187,6 +188,9 @@ pub enum DcCmdCommand {
         #[clap(short, long)]
         recursive: bool,
     },
+
+    /// Print current dccmd-rs version
+    Version
 }
 
 #[derive(Clone, Copy)]
