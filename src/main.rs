@@ -141,6 +141,10 @@ async fn main() {
         } => create_room(term, source, classification, password_auth).await,
         DcCmdCommand::Rm { source, recursive } => {
             delete_node(term, source, Some(recursive), password_auth).await
+        },
+        DcCmdCommand::Version => {
+            println!("dccmd-rs {}", env!("CARGO_PKG_VERSION"));
+            Ok(())
         }
     };
 

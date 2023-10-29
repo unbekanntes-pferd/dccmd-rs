@@ -1,7 +1,7 @@
 use console::Term;
 use dialoguer::Confirm;
 use futures_util::future::join_all;
-use tracing::debug;
+use tracing::{debug, info, error};
 
 use crate::cmd::{
     init_dracoon,
@@ -77,6 +77,11 @@ pub async fn list_nodes(
         .items
         .iter()
         .for_each(|node| print_node(&term, node, long, human_readable));
+
+    info!("Listed nodes in: {}", node_path.unwrap_or("/"));
+    info!("Total nodes: {}", node_list.range.total);
+    info!("Offset: {}", node_list.range.offset);
+    info!("Limit: {}", node_list.range.limit);
 
     Ok(())
 }
@@ -225,6 +230,7 @@ pub async fn delete_node(
     // if node type is folder or room and not recursive, abort
     if !recursive && (node.node_type == NodeType::Folder || node.node_type == NodeType::Room) {
         let msg = format_error_message("Deleting non-empty folder or room not allowed. Use --recursive flag to delete recursively.");
+        error!("{}", msg);
         term.write_line(&msg)
             .expect("Error writing message to terminal.");
         return Ok(());
@@ -234,6 +240,7 @@ pub async fn delete_node(
     let delete_node = async {
         dracoon.delete_node(node.id).await?;
         let msg = format!("Node {node_name} deleted.");
+        info!("{}", msg);
         let msg = format_success_message(&msg);
         term.write_line(&msg)
             .expect("Error writing message to terminal.");
@@ -253,6 +260,7 @@ pub async fn delete_node(
                 delete_node.await
             } else {
                 let msg = format_error_message("Deleting room not confirmed.");
+                error!("{}", msg);
                 term.write_line(&msg)
                     .expect("Error writing message to terminal.");
                 Ok(())
@@ -297,6 +305,7 @@ pub async fn create_folder(
     let folder = dracoon.create_folder(req).await?;
 
     let msg = format!("Folder {node_name} created.");
+    info!("{}", msg);
     let msg = format_success_message(&msg);
     term.write_line(&msg)
         .expect("Error writing message to terminal.");
@@ -333,6 +342,7 @@ pub async fn create_room(
     let room = dracoon.create_room(req).await?;
 
     let msg = format!("Room {node_name} created.");
+    info!("{}", msg);
     let msg = format_success_message(&msg);
     term.write_line(&msg)
         .expect("Error writing message to terminal.");

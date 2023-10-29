@@ -10,7 +10,7 @@ use async_recursion::async_recursion;
 use futures_util::future::join_all;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 
 use crate::cmd::{
     init_dracoon, init_encryption,
@@ -38,7 +38,7 @@ pub async fn upload(
     classification: Option<u8>,
     velocity: Option<u8>,
     recursive: bool,
-    auth: Option<PasswordAuth>, 
+    auth: Option<PasswordAuth>,
     encryption_password: Option<String>,
 ) -> Result<(), DcCmdError> {
     let mut dracoon = init_dracoon(&target, auth).await?;
@@ -51,7 +51,7 @@ pub async fn upload(
 
     let Some(parent_node) = parent_node else {
         error!("Target path not found: {}", target);
-        return Err(DcCmdError::InvalidPath(target.clone()))
+        return Err(DcCmdError::InvalidPath(target.clone()));
     };
 
     if parent_node.is_encrypted == Some(true) {
@@ -100,6 +100,8 @@ async fn upload_file(
     overwrite: bool,
     classification: Option<u8>,
 ) -> Result<(), DcCmdError> {
+    info!("Attempting upload of file: {}.", source.to_string_lossy());
+    info!("Target node: {}.", target_node.name);
     let file = tokio::fs::File::open(&source)
         .await
         .or(Err(DcCmdError::IoError))?;
@@ -158,6 +160,8 @@ async fn upload_file(
 
     progress_bar.finish_with_message(format!("Upload of {file_name} complete"));
 
+    info!("Upload of {} complete.", source.to_string_lossy());
+
     Ok(())
 }
 
@@ -171,6 +175,9 @@ async fn upload_container(
     classification: Option<u8>,
     velocity: Option<u8>,
 ) -> Result<(), DcCmdError> {
+    info!("Attempting upload of folder: {}.", source.to_string_lossy());
+    info!("Target node: {}.", target.name);
+
     // create folder first
     let name = source
         .file_name()
@@ -184,7 +191,7 @@ async fn upload_container(
         .to_string();
 
     if source.is_relative() {
-        error!("Only absolute paths are supported");
+        error!("Only absolute paths are supported.");
         return Err(DcCmdError::InvalidPath(
             source.to_string_lossy().to_string(),
         ));
@@ -203,6 +210,10 @@ async fn upload_container(
 
     let files = files?;
     let folders = folders?;
+
+    info!("Found {} files.", files.len());
+    info!("Found {} folders.", folders.len());
+
     let progress_bar = ProgressBar::new(folders.len() as u64);
     progress_bar.set_style(
         ProgressStyle::default_bar()
@@ -298,6 +309,9 @@ async fn upload_container(
 
     progress_bar.inc(processed as u64);
 
+    progress_bar.finish_with_message("Created folder structure.");
+    info!("Created folder structure.");
+
     let file_map = create_file_map(files, &created_nodes, root_path)?;
 
     // upload files
@@ -310,6 +324,8 @@ async fn upload_container(
         velocity,
     )
     .await?;
+
+    info!("Upload of {} complete.", source.to_string_lossy());
 
     Ok(())
 }
@@ -387,6 +403,8 @@ async fn upload_files(
     classification: Option<u8>,
     velocity: Option<u8>,
 ) -> Result<(), DcCmdError> {
+    info!("Attempting upload of {} files.", files.len());
+
     let velocity = velocity.unwrap_or(1).clamp(1, 10);
 
     let concurrent_reqs = velocity * 5;
@@ -479,6 +497,12 @@ async fn upload_files(
     let target = parent_node.name.clone();
 
     progress_bar.finish_with_message(format!("Upload to {target} complete"));
+
+    info!(
+        "Upload of {} files to {} complete.",
+        files_iter.len(),
+        target
+    );
 
     Ok(())
 }
