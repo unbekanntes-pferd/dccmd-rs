@@ -2,7 +2,7 @@ use std::{collections::HashMap, path::Path, time::Duration, sync::atomic::{Atomi
 
 use futures_util::future::join_all;
 use indicatif::{ProgressBar, ProgressStyle};
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 
 use crate::cmd::{
     init_dracoon, init_encryption,
@@ -55,9 +55,12 @@ pub async fn download(
     }
 
     if is_search_query(&node_name) {
+        info!("Attempting download of search query {}.", node_name);
         let files =
             search_nodes(&dracoon, &node_name, Some(&parent_path), None, true, 0, 500).await?;
         let files = files.get_files();
+
+        info!("Found {} files.", files.len());
 
         download_files(&mut dracoon, files, &target, None, velocity).await
     } else {
@@ -81,6 +84,10 @@ async fn download_file(
     node: &Node,
     target: &str,
 ) -> Result<(), DcCmdError> {
+
+    info!("Attempting download of node {}.", node.name);
+    info!("Target: {}", target);
+
     let original_target = target.to_string();
 
     // if own name provided - use it - otherwise use node name
@@ -126,6 +133,8 @@ async fn download_file(
 
     progress_bar.finish_with_message(format!("{} complete", node_name.clone()));
 
+    info!("Download of node {} complete.", node_name.clone());
+
     Ok(())
 }
 
@@ -136,6 +145,10 @@ async fn download_files(
     targets: Option<HashMap<u64, String>>,
     velocity: Option<u8>,
 ) -> Result<(), DcCmdError> {
+
+    info!("Attempting download of {} files.", files.len());
+    info!("Target: {}", target);
+
     let velocity = velocity.unwrap_or(1).clamp(1, 10);
 
     let concurrent_reqs = velocity * 5;
@@ -209,6 +222,8 @@ async fn download_files(
 
     progress_bar.finish_with_message(format!("Download to {target} complete"));
 
+    info!("Download of {} files complete.", files.len());
+
     Ok(())
 }
 
@@ -218,6 +233,10 @@ async fn download_container(
     target: &str,
     velocity: Option<u8>,
 ) -> Result<(), DcCmdError> {
+
+    info!("Attempting download of container {}.", node.name);
+    info!("Target: {}", target);
+
     // indicate listing files and folders
     let progress_spinner = ProgressBar::new_spinner();
     progress_spinner.set_message("Listing files and folders...");
@@ -280,6 +299,8 @@ async fn download_container(
         velocity,
     )
     .await?;
+
+    info!("Download of container {} complete.", node.name);
 
     Ok(())
 }

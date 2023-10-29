@@ -59,7 +59,7 @@ async fn init_encryption(
         }
     };
 
-    let _keypair = dracoon.get_keypair(Some(secret.clone())).await?;
+    let _ = dracoon.get_keypair(Some(secret.clone())).await?;
 
     // If necessary, create a new entry to store the secret
     if store {
