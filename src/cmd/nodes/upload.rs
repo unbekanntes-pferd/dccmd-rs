@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::BTreeMap,
     fs::Metadata,
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
@@ -144,7 +144,8 @@ async fn upload_file(
         .build();
 
     let reader = tokio::io::BufReader::new(file);
-
+    
+    #[cfg(not(feature = "nfs-upload"))]
     dracoon
         .upload(
             file_meta,
@@ -155,6 +156,20 @@ async fn upload_file(
                 progress_bar_mv.set_position(progress);
             })),
             Some(DEFAULT_CHUNK_SIZE),
+        )
+        .await?;
+
+    #[cfg(feature = "nfs-upload")]
+    dracoon
+        .upload_nfs(
+            file_meta,
+            target_node,
+            upload_options,
+            reader,
+            Some(Box::new(move |progress, total| {
+                progress_bar_mv.set_position(progress);
+            })),
+            None,
         )
         .await?;
 
@@ -234,7 +249,7 @@ async fn upload_container(
     folders.sort_by(|a, b| a.1.cmp(&b.1));
 
     // create HashMap of path and created node id
-    let mut created_nodes = HashMap::new();
+    let mut created_nodes = BTreeMap::new();
     let root_folder_path = format!("/{}", root_folder.name);
     created_nodes.insert(root_folder_path, root_folder.id);
 
@@ -332,7 +347,7 @@ async fn upload_container(
 
 fn update_folder_map(
     folder_results: Vec<Result<Node, DracoonClientError>>,
-    created_nodes: &mut HashMap<String, u64>,
+    created_nodes: &mut BTreeMap<String, u64>,
     target_parent: &str,
 ) -> Result<(), DcCmdError> {
     for folder in folder_results {
@@ -359,9 +374,9 @@ fn update_folder_map(
 
 fn create_file_map(
     files: Vec<PathBuf>,
-    created_nodes: &HashMap<String, u64>,
+    created_nodes: &BTreeMap<String, u64>,
     root_path: &Path,
-) -> Result<HashMap<PathBuf, (u64, u64)>, DcCmdError> {
+) -> Result<BTreeMap<PathBuf, (u64, u64)>, DcCmdError> {
     files
         .into_iter()
         .map(|file| {
@@ -392,13 +407,13 @@ fn create_file_map(
 
             Ok((file, (node_id, file_size)))
         })
-        .collect::<Result<HashMap<PathBuf, (u64, u64)>, DcCmdError>>()
+        .collect::<Result<BTreeMap<PathBuf, (u64, u64)>, DcCmdError>>()
 }
 
 async fn upload_files(
     dracoon: &mut Dracoon<Connected>,
     parent_node: &Node,
-    files: HashMap<PathBuf, (u64, u64)>,
+    files: BTreeMap<PathBuf, (u64, u64)>,
     overwrite: bool,
     classification: Option<u8>,
     velocity: Option<u8>,
@@ -463,8 +478,23 @@ async fn upload_files(
 
                 let reader = tokio::io::BufReader::new(file);
 
+                #[cfg(not(feature = "nfs-upload"))]
                 client
                     .upload(
+                        file_meta,
+                        &parent_node,
+                        upload_options,
+                        reader,
+                        Some(Box::new(move |progress: u64, _total: u64| {
+                            progress_bar_mv.inc(progress);
+                        })),
+                        None,
+                    )
+                    .await?;
+
+                #[cfg(feature = "nfs-upload")]
+                client
+                    .upload_nfs(
                         file_meta,
                         &parent_node,
                         upload_options,

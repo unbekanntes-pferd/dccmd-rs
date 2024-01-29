@@ -1,6 +1,6 @@
 [package]
 name = "dccmd-rs"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2021"
 description = "A command line client for DRACOON"
 author = "Octavio Simone"
@@ -13,24 +13,27 @@ path = "src/main.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+"nfs-upload" = ["dco3/nfs-upload"]
+
 [dependencies]
 # DRACOON API
-dco3 = "0.6.1"
+dco3 = { git = "https://github.com/unbekanntes-pferd/dco3.git", branch = "feature/nfs-upload" }
 
 # CLI helpers
-clap = { version = "4.4.7", features = ["derive"] }
+clap = { version = "4.4.11", features = ["derive"] }
 indicatif = "0.17.7"
 console = "0.15.7"
 dialoguer = "0.11.0"
 
 # async runtime and utils
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { version = "1.35.1", features = ["full"] }
 futures-util = "0.3.29"
 async-recursion = "1.0.5"
 
 # logging and tracing
 tracing = "0.1.40"
-tracing-subscriber = {version = "0.3.17", features = ["env-filter"]}
+tracing-subscriber = {version = "0.3.18", features = ["env-filter"]}
 
 # utils
 chrono = "0.4.31"
@@ -38,5 +41,5 @@ thiserror = "1.0.50"
 dotenv = "0.15.0"
 
 # credentials
-keyring = "2.0.5"
+keyring = "2.1.0"
 
