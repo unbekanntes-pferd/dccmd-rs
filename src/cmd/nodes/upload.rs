@@ -205,10 +205,11 @@ async fn upload_container(
     progress_spinner.set_message("Creating folder structure...");
     progress_spinner.enable_steady_tick(Duration::from_millis(100));
     progress.add(progress_spinner);
-    if skip_root {
+    let parent_id = if skip_root {
         info!("Skipping root folder.");
-    }
-    let root_folder = CreateFolderRequest::builder(&name, target.id).build();
+        target.id
+    } else {
+        let root_folder = CreateFolderRequest::builder(&name, target.id).build();
 
         let root_folder = match dracoon.create_folder(root_folder).await {
             Ok(folder) => folder,
@@ -225,6 +226,9 @@ async fn upload_container(
                 return Err(e.into());
             }
         };
+
+        root_folder.id
+    };
 
     let (files, folders) =
         tokio::join!(list_files(source.clone()), list_directories(source.clone()));
@@ -256,8 +260,8 @@ async fn upload_container(
 
     // create HashMap of path and created node id
     let mut created_nodes = BTreeMap::new();
-    let root_folder_path = format!("/{}", root_folder.name);
-    created_nodes.insert(root_folder_path, root_folder.id);
+    let root_folder_path = format!("/{}", &name);
+    created_nodes.insert(root_folder_path, parent_id);
 
     let root_depth_level = if folders.is_empty() {
         0
@@ -286,7 +290,8 @@ async fn upload_container(
                 &mut created_nodes,
                 target_parent,
                 &name,
-                folder
+                folder,
+                skip_root
             )
             .await?;
             progress_bar.inc(processed as u64);
@@ -307,7 +312,7 @@ async fn upload_container(
             .to_string();
 
         let parent_id = if depth == root_depth_level {
-            root_folder.id
+            parent_id
         } else {
             // we need to find the parent id from the created_nodes map
             // we assume that the parent folder has already been created and is present in the map
@@ -318,12 +323,23 @@ async fn upload_container(
             let parent_path = parent_path.trim_start_matches('.');
 
             let root_path_str = root_path.to_string_lossy().to_string();
+            debug!("Root path: {}", root_path_str);
 
             let parent_path = parent_path
                 .strip_prefix(&root_path_str)
                 .ok_or(DcCmdError::IoError)?;
 
-            *created_nodes.get(parent_path).ok_or(DcCmdError::IoError)?
+            debug!("Parent path: {}", parent_path);
+            debug!("{:?}", created_nodes);
+
+            if overwrite {
+                //TODO: broken - does not work, entry not present
+                let path = format!("{}{}", target_parent, parent_path);
+                let node = dracoon.get_node_from_path(&path).await?;
+                node.ok_or(DcCmdError::Unknown)?.id
+            } else {
+                *created_nodes.get(parent_path).ok_or(DcCmdError::IoError)?
+            }
         };
 
         let folder_req = CreateFolderRequest::builder(name, parent_id).build();
@@ -341,6 +357,7 @@ async fn upload_container(
         target_parent,
         &name,
         &source,
+        skip_root
     )
     .await?;
 
@@ -374,14 +391,14 @@ async fn update_folder_map(
     target_parent: &str,
     parent_name: &str,
     folder: &Path,
+    skip_root: bool,
 ) -> Result<(), DcCmdError> {
-
     let folder_path = folder;
 
     debug!("Folder path: {}", folder_path.to_string_lossy());
     debug!("Target parent: {}", target_parent);
     debug!("Parent name: {}", parent_name);
-   
+
     for folder in folder_results {
         let folder = match folder {
             Ok(folder) => folder,
@@ -393,7 +410,7 @@ async fn update_folder_map(
 
                 let mut found_start = false;
                 let mut result_path = PathBuf::new();
-            
+
                 let name = error_details.debug_info().ok_or(DcCmdError::IoError)?;
                 let name = name
                     .split('\'')
@@ -401,25 +418,28 @@ async fn update_folder_map(
                     .map(|s| s.to_string())
                     .ok_or(DcCmdError::IoError)?;
 
+                debug!("Name: {}", name);
+
                 for component in folder_path.components() {
-                        if let Some(segment) = component.as_os_str().to_str() {
-                            if segment == parent_name {
-                                found_start = true;
-                            }
-                            if found_start {
-                                result_path.push(segment);
-                            }
-                            if segment == "sub4" {
-                                break;
-                            }
+                    if let Some(segment) = component.as_os_str().to_str() {
+                        if segment == parent_name {
+                            found_start = true;
+                        }
+                        if found_start {
+                            result_path.push(segment);
+                        }
+                        if segment == name {
+                            break;
                         }
                     }
-                
+                }
+
                 if found_start && result_path.ends_with(&name) {
-                        result_path.pop(); 
-                    }
+                    result_path.pop();
+                }
 
                 let path = result_path.to_str().ok_or(DcCmdError::IoError)?;
+                let path = format!("{}{}", target_parent, path);
                 debug!("Path: {}", path);
                 dracoon.get_node_from_path(&path).await?.ok_or_else(|| {
                     error!("Error creating root folder: {}", e);
@@ -438,6 +458,9 @@ async fn update_folder_map(
             folder.name
         );
 
+        debug!("{}, {}", folder_path, folder.id);
+        debug!("{}", target_parent);
+
         let target_parent = folder_path.trim_start_matches(target_parent);
         // ensure target parent starts with a slash
         let target_parent = if target_parent.starts_with('/') {
@@ -445,6 +468,14 @@ async fn update_folder_map(
         } else {
             format!("/{target_parent}")
         };
+
+        let target_parent = if skip_root {
+            format!("/{}{}", parent_name, target_parent)
+        } else {
+            target_parent
+        };
+
+        debug!("Target parent: {}", target_parent);
 
         created_nodes.insert(target_parent, folder.id);
     }
