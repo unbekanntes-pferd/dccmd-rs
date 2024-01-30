@@ -95,6 +95,7 @@ async fn main() {
             classification,
             velocity,
             recursive,
+            skip_root,
         } => {
             upload(
                 source.try_into().expect("Invalid path"),
@@ -103,6 +104,7 @@ async fn main() {
                 classification,
                 velocity,
                 recursive,
+                skip_root,
                 password_auth,
                 opt.encryption_password,
             )

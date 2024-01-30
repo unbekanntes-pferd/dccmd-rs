@@ -511,7 +511,7 @@ dependencies = [
 [[package]]
 name = "dco3"
 version = "0.6.1"
-source = "git+https://github.com/unbekanntes-pferd/dco3.git?branch=feature/nfs-upload#5b43e22d5810b456b8bf793a3d16172cf2e18869"
+source = "git+https://github.com/unbekanntes-pferd/dco3.git?branch=feature/nfs-upload#4ff4cc855706ba330614045184a77431d75cb623"
 dependencies = [
  "async-stream",
  "async-trait",
@@ -550,7 +550,7 @@ dependencies = [
 [[package]]
 name = "dco3_derive"
 version = "0.1.0"
-source = "git+https://github.com/unbekanntes-pferd/dco3.git?branch=feature/nfs-upload#5b43e22d5810b456b8bf793a3d16172cf2e18869"
+source = "git+https://github.com/unbekanntes-pferd/dco3.git?branch=feature/nfs-upload#4ff4cc855706ba330614045184a77431d75cb623"
 dependencies = [
  "quote",
  "syn 2.0.38",

@@ -3,7 +3,7 @@ name = "dccmd-rs"
 version = "0.2.0"
 edition = "2021"
 description = "A command line client for DRACOON"
-author = "Octavio Simone"
+authors = ["Octavio Simone"]
 license = "MIT"
 readme = "README.md"
 

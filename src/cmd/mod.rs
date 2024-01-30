@@ -179,6 +179,9 @@ pub fn handle_error(term: &Term, err: &DcCmdError) {
 
     term.write_line(&err_msg)
         .expect("Error writing error message to terminal.");
+
+    // exit with error code
+    std::process::exit(1);
 }
 
 fn get_error_message(err: &DcCmdError) -> String {
