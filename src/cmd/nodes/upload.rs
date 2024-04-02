@@ -63,7 +63,7 @@ pub async fn upload(
         // is a file
         (true, _, _) => {
             upload_file(
-                &mut dracoon,
+                &dracoon,
                 source,
                 &parent_node,
                 overwrite,
@@ -74,7 +74,7 @@ pub async fn upload(
         // is a directory and recursive flag is set
         (_, true, true) => {
             upload_container(
-                &mut dracoon,
+                &dracoon,
                 source,
                 &parent_node,
                 &node_path,
@@ -103,7 +103,7 @@ pub async fn upload(
 }
 
 async fn upload_file(
-    dracoon: &mut Dracoon<Connected>,
+    dracoon: &Dracoon<Connected>,
     source: PathBuf,
     target_node: &Node,
     overwrite: bool,
@@ -174,7 +174,7 @@ async fn upload_file(
     Ok(())
 }
 
-#[allow(clippy::too_many_lines)]
+#[allow(clippy::too_many_lines, clippy::too_many_arguments)]
 async fn upload_container(
     dracoon: &Dracoon<Connected>,
     source: PathBuf,
@@ -292,7 +292,7 @@ async fn upload_container(
             let processed = created_folders.len();
             // return error if any of the folders failed to create
             update_folder_map(
-                &dracoon,
+                dracoon,
                 created_folders,
                 &mut created_nodes,
                 target_parent,
@@ -358,7 +358,7 @@ async fn upload_container(
     let processed = created_folders.len();
 
     update_folder_map(
-        &dracoon,
+        dracoon,
         created_folders,
         &mut created_nodes,
         target_parent,
