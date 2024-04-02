@@ -1,9 +1,9 @@
 [package]
 name = "dccmd-rs"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2021"
 description = "A command line client for DRACOON"
-author = "Octavio Simone"
+authors = ["Octavio Simone"]
 license = "MIT"
 readme = "README.md"
 
@@ -15,28 +15,27 @@ path = "src/main.rs"
 
 [dependencies]
 # DRACOON API
-dco3 = "0.6.1"
+dco3 = "0.9.0"
 
 # CLI helpers
-clap = { version = "4.4.7", features = ["derive"] }
-indicatif = "0.17.7"
-console = "0.15.7"
-dialoguer = "0.11.0"
+clap = { version = "4", features = ["derive"] }
+indicatif = "0.17"
+console = "0.15"
+dialoguer = "0.11"
 
 # async runtime and utils
-tokio = { version = "1.32.0", features = ["full"] }
-futures-util = "0.3.29"
-async-recursion = "1.0.5"
+tokio = { version = "1", features = ["full"] }
+futures-util = "0.3"
+async-recursion = "1"
 
 # logging and tracing
-tracing = "0.1.40"
-tracing-subscriber = {version = "0.3.17", features = ["env-filter"]}
+tracing = "0.1"
+tracing-subscriber = {version = "0.3", features = ["env-filter"]}
 
 # utils
-chrono = "0.4.31"
-thiserror = "1.0.50"
-dotenv = "0.15.0"
+chrono = "0.4"
+thiserror = "1"
+dotenv = "0.15"
 
 # credentials
-keyring = "2.0.5"
-
+keyring = "2"

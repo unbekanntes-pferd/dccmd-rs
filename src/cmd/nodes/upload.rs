@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::BTreeMap,
     fs::Metadata,
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
@@ -38,10 +38,11 @@ pub async fn upload(
     classification: Option<u8>,
     velocity: Option<u8>,
     recursive: bool,
+    skip_root: bool,
     auth: Option<PasswordAuth>,
     encryption_password: Option<String>,
 ) -> Result<(), DcCmdError> {
-    let mut dracoon = init_dracoon(&target, auth).await?;
+    let mut dracoon = init_dracoon(&target, auth, true).await?;
 
     let (parent_path, node_name, _) = parse_path(&target, dracoon.get_base_url().as_str())
         .or(Err(DcCmdError::InvalidPath(target.clone())))?;
@@ -58,43 +59,51 @@ pub async fn upload(
         dracoon = init_encryption(dracoon, encryption_password).await?;
     }
 
-    if source.is_file() {
-        upload_file(
-            &mut dracoon,
-            source.clone(),
-            &parent_node,
-            overwrite,
-            classification,
-        )
-        .await?;
-    } else if source.is_dir() {
-        if recursive {
+    match (source.is_file(), source.is_dir(), recursive) {
+        // is a file
+        (true, _, _) => {
+            upload_file(
+                &dracoon,
+                source,
+                &parent_node,
+                overwrite,
+                classification,
+            )
+            .await?
+        }
+        // is a directory and recursive flag is set
+        (_, true, true) => {
             upload_container(
-                &mut dracoon,
-                source.clone(),
+                &dracoon,
+                source,
                 &parent_node,
                 &node_path,
                 overwrite,
+                skip_root,
                 classification,
                 velocity,
             )
-            .await?;
-        } else {
+            .await?
+        }
+        // is a directory and recursive flag is not set
+        (_, true, false) => {
             return Err(DcCmdError::InvalidArgument(
                 "Container upload requires recursive flag".to_string(),
             ));
         }
-    } else {
-        return Err(DcCmdError::InvalidPath(
-            source.to_string_lossy().to_string(),
-        ));
+        // is neither a file nor a directory
+        _ => {
+            return Err(DcCmdError::InvalidPath(
+                source.to_string_lossy().to_string(),
+            ));
+        }
     }
 
     Ok(())
 }
 
 async fn upload_file(
-    dracoon: &mut Dracoon<Connected>,
+    dracoon: &Dracoon<Connected>,
     source: PathBuf,
     target_node: &Node,
     overwrite: bool,
@@ -165,13 +174,14 @@ async fn upload_file(
     Ok(())
 }
 
-#[allow(clippy::too_many_lines)]
+#[allow(clippy::too_many_lines, clippy::too_many_arguments)]
 async fn upload_container(
-    dracoon: &mut Dracoon<Connected>,
+    dracoon: &Dracoon<Connected>,
     source: PathBuf,
     target: &Node,
     target_parent: &str,
     overwrite: bool,
+    skip_root: bool,
     classification: Option<u8>,
     velocity: Option<u8>,
 ) -> Result<(), DcCmdError> {
@@ -202,8 +212,30 @@ async fn upload_container(
     progress_spinner.set_message("Creating folder structure...");
     progress_spinner.enable_steady_tick(Duration::from_millis(100));
     progress.add(progress_spinner);
-    let root_folder = CreateFolderRequest::builder(name, target.id).build();
-    let root_folder = dracoon.create_folder(root_folder).await?;
+    let parent_id = if skip_root {
+        info!("Skipping root folder.");
+        target.id
+    } else {
+        let root_folder = CreateFolderRequest::builder(&name, target.id).build();
+
+        let root_folder = match dracoon.create_folder(root_folder).await {
+            Ok(folder) => folder,
+            Err(e) if e.is_conflict() => {
+                let path = format!("{}{}", target_parent, name);
+                debug!("Path: {}", path);
+                dracoon.get_node_from_path(&path).await?.ok_or_else(|| {
+                    error!("Error creating root folder: {}", e);
+                    e
+                })?
+            }
+            Err(e) => {
+                error!("Error creating root folder: {}", e);
+                return Err(e.into());
+            }
+        };
+
+        root_folder.id
+    };
 
     let (files, folders) =
         tokio::join!(list_files(source.clone()), list_directories(source.clone()));
@@ -234,14 +266,14 @@ async fn upload_container(
     folders.sort_by(|a, b| a.1.cmp(&b.1));
 
     // create HashMap of path and created node id
-    let mut created_nodes = HashMap::new();
-    let root_folder_path = format!("/{}", root_folder.name);
-    created_nodes.insert(root_folder_path, root_folder.id);
+    let mut created_nodes = BTreeMap::new();
+    let root_folder_path = format!("/{}", &name);
+    created_nodes.insert(root_folder_path, parent_id);
 
     let root_depth_level = if folders.is_empty() {
         0
     } else {
-        folders.get(0).expect("No folders found").1
+        folders.first().expect("No folders found").1
     };
 
     let root_path = source.parent().unwrap_or_else(|| Path::new("/"));
@@ -259,7 +291,16 @@ async fn upload_container(
             let created_folders = join_all(folder_reqs).await;
             let processed = created_folders.len();
             // return error if any of the folders failed to create
-            update_folder_map(created_folders, &mut created_nodes, target_parent)?;
+            update_folder_map(
+                dracoon,
+                created_folders,
+                &mut created_nodes,
+                target_parent,
+                &name,
+                folder,
+                skip_root
+            )
+            .await?;
             progress_bar.inc(processed as u64);
             prev_depth = depth;
             // reset folder_reqs
@@ -278,7 +319,7 @@ async fn upload_container(
             .to_string();
 
         let parent_id = if depth == root_depth_level {
-            root_folder.id
+            parent_id
         } else {
             // we need to find the parent id from the created_nodes map
             // we assume that the parent folder has already been created and is present in the map
@@ -289,12 +330,23 @@ async fn upload_container(
             let parent_path = parent_path.trim_start_matches('.');
 
             let root_path_str = root_path.to_string_lossy().to_string();
+            debug!("Root path: {}", root_path_str);
 
             let parent_path = parent_path
                 .strip_prefix(&root_path_str)
                 .ok_or(DcCmdError::IoError)?;
 
-            *created_nodes.get(parent_path).ok_or(DcCmdError::IoError)?
+            debug!("Parent path: {}", parent_path);
+            debug!("{:?}", created_nodes);
+
+            if overwrite {
+                //TODO: broken - does not work, entry not present
+                let path = format!("{}{}", target_parent, parent_path);
+                let node = dracoon.get_node_from_path(&path).await?;
+                node.ok_or(DcCmdError::Unknown)?.id
+            } else {
+                *created_nodes.get(parent_path).ok_or(DcCmdError::IoError)?
+            }
         };
 
         let folder_req = CreateFolderRequest::builder(name, parent_id).build();
@@ -305,7 +357,16 @@ async fn upload_container(
     let created_folders = join_all(folder_reqs).await;
     let processed = created_folders.len();
 
-    update_folder_map(created_folders, &mut created_nodes, target_parent)?;
+    update_folder_map(
+        dracoon,
+        created_folders,
+        &mut created_nodes,
+        target_parent,
+        &name,
+        &source,
+        skip_root
+    )
+    .await?;
 
     progress_bar.inc(processed as u64);
 
@@ -330,18 +391,82 @@ async fn upload_container(
     Ok(())
 }
 
-fn update_folder_map(
+async fn update_folder_map(
+    dracoon: &Dracoon<Connected>,
     folder_results: Vec<Result<Node, DracoonClientError>>,
-    created_nodes: &mut HashMap<String, u64>,
+    created_nodes: &mut BTreeMap<String, u64>,
     target_parent: &str,
+    parent_name: &str,
+    folder: &Path,
+    skip_root: bool,
 ) -> Result<(), DcCmdError> {
+    let folder_path = folder;
+
+    debug!("Folder path: {}", folder_path.to_string_lossy());
+    debug!("Target parent: {}", target_parent);
+    debug!("Parent name: {}", parent_name);
+
     for folder in folder_results {
-        let folder: Node = folder?;
+        let folder = match folder {
+            Ok(folder) => folder,
+            Err(e) if e.is_conflict() => {
+                let error_details = match &e {
+                    DracoonClientError::Http(e) => e,
+                    _ => unreachable!("Error is http - checked and is conflict"),
+                };
+
+                let mut found_start = false;
+                let mut result_path = PathBuf::new();
+
+                let name = error_details.debug_info().ok_or(DcCmdError::IoError)?;
+                let name = name
+                    .split('\'')
+                    .nth(1)
+                    .map(|s| s.to_string())
+                    .ok_or(DcCmdError::IoError)?;
+
+                debug!("Name: {}", name);
+
+                for component in folder_path.components() {
+                    if let Some(segment) = component.as_os_str().to_str() {
+                        if segment == parent_name {
+                            found_start = true;
+                        }
+                        if found_start {
+                            result_path.push(segment);
+                        }
+                        if segment == name {
+                            break;
+                        }
+                    }
+                }
+
+                if found_start && result_path.ends_with(&name) {
+                    result_path.pop();
+                }
+
+                let path = result_path.to_str().ok_or(DcCmdError::IoError)?;
+                let path = format!("{}{}", target_parent, path);
+                debug!("Path: {}", path);
+                dracoon.get_node_from_path(&path).await?.ok_or_else(|| {
+                    error!("Error creating root folder: {}", e);
+                    e
+                })?
+            }
+            Err(e) => {
+                error!("Error creating root folder: {}", e);
+                return Err(e.into());
+            }
+        };
+
         let folder_path = format!(
             "{}{}",
             folder.parent_path.unwrap_or("/".into()),
             folder.name
         );
+
+        debug!("{}, {}", folder_path, folder.id);
+        debug!("{}", target_parent);
 
         let target_parent = folder_path.trim_start_matches(target_parent);
         // ensure target parent starts with a slash
@@ -351,6 +476,14 @@ fn update_folder_map(
             format!("/{target_parent}")
         };
 
+        let target_parent = if skip_root {
+            format!("/{}{}", parent_name, target_parent)
+        } else {
+            target_parent
+        };
+
+        debug!("Target parent: {}", target_parent);
+
         created_nodes.insert(target_parent, folder.id);
     }
 
@@ -359,9 +492,9 @@ fn update_folder_map(
 
 fn create_file_map(
     files: Vec<PathBuf>,
-    created_nodes: &HashMap<String, u64>,
+    created_nodes: &BTreeMap<String, u64>,
     root_path: &Path,
-) -> Result<HashMap<PathBuf, (u64, u64)>, DcCmdError> {
+) -> Result<BTreeMap<PathBuf, (u64, u64)>, DcCmdError> {
     files
         .into_iter()
         .map(|file| {
@@ -392,13 +525,13 @@ fn create_file_map(
 
             Ok((file, (node_id, file_size)))
         })
-        .collect::<Result<HashMap<PathBuf, (u64, u64)>, DcCmdError>>()
+        .collect::<Result<BTreeMap<PathBuf, (u64, u64)>, DcCmdError>>()
 }
 
 async fn upload_files(
-    dracoon: &mut Dracoon<Connected>,
+    dracoon: &Dracoon<Connected>,
     parent_node: &Node,
-    files: HashMap<PathBuf, (u64, u64)>,
+    files: BTreeMap<PathBuf, (u64, u64)>,
     overwrite: bool,
     classification: Option<u8>,
     velocity: Option<u8>,

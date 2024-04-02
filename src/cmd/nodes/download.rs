@@ -31,7 +31,7 @@ pub async fn download(
     debug!("Downloading {} to {}", source, target);
     debug!("Velocity: {}", velocity.unwrap_or(1));
 
-    let mut dracoon = init_dracoon(&source, auth).await?;
+    let mut dracoon = init_dracoon(&source, auth, true).await?;
 
     let (parent_path, node_name, _) = parse_path(&source, dracoon.get_base_url().as_ref())
         .or(Err(DcCmdError::InvalidPath(source.clone())))?;
@@ -104,7 +104,7 @@ async fn download_file(
         target.to_string()
     };
 
-    let mut out_file = std::fs::File::create(target).or(Err(DcCmdError::IoError))?;
+    let mut out_file = tokio::fs::File::create(target).await.or(Err(DcCmdError::IoError))?;
 
     let progress_bar = ProgressBar::new(node.size.unwrap_or(0));
     progress_bar.set_style(
@@ -189,7 +189,7 @@ async fn download_files(
                     target.join(&file.name)
                 };
 
-                let mut out_file = std::fs::File::create(&target).or(Err(DcCmdError::IoError))?;
+                let mut out_file = tokio::fs::File::create(&target).await.or(Err(DcCmdError::IoError))?;
 
                 let node_name = file.name.clone();
 

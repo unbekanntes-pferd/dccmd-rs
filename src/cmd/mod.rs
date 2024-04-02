@@ -74,14 +74,19 @@ async fn init_encryption(
 async fn init_dracoon(
     url_path: &str,
     password_auth: Option<PasswordAuth>,
+    is_transfer: bool,
 ) -> Result<Dracoon<Connected>, DcCmdError> {
     let (client_id, client_secret) = get_client_credentials();
     let base_url = parse_base_url(url_path.to_string())?;
+
+    // use multiple access tokens for transfers
+    let token_rotation = if is_transfer { 5 } else { 1 };
 
     let dracoon = DracoonBuilder::new()
         .with_base_url(base_url.clone())
         .with_client_id(client_id)
         .with_client_secret(client_secret)
+        .with_token_rotation(token_rotation)
         .build()?;
 
     let entry =
@@ -135,7 +140,7 @@ async fn authenticate_auth_code_flow(
         .await?;
 
     // TODO: if this fails, offer to store in plain
-    set_dracoon_env(&entry, &dracoon.get_refresh_token())?;
+    set_dracoon_env(&entry, &dracoon.get_refresh_token().await)?;
 
     Ok(dracoon)
 }
@@ -179,6 +184,9 @@ pub fn handle_error(term: &Term, err: &DcCmdError) {
 
     term.write_line(&err_msg)
         .expect("Error writing error message to terminal.");
+
+    // exit with error code
+    std::process::exit(1);
 }
 
 fn get_error_message(err: &DcCmdError) -> String {

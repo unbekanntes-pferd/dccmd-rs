@@ -110,6 +110,10 @@ pub enum DcCmdCommand {
         #[clap(short, long)]
         recursive: bool,
 
+        /// skip root
+        #[clap(long)]
+        skip_root: bool,
+
     },
     /// Download a file or container from DRACOON to target
     Download {

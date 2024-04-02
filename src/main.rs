@@ -35,7 +35,6 @@ async fn main() {
     let log_file_path = opt.log_file_path.unwrap_or("dccmd-rs.log".to_string());
 
     let log_file = OpenOptions::new()
-        .write(true)
         .create(true)
         .append(true)
         .open(log_file_path)
@@ -95,14 +94,16 @@ async fn main() {
             classification,
             velocity,
             recursive,
+            skip_root,
         } => {
             upload(
-                source.try_into().expect("Invalid path"),
+                source.into(),
                 target,
                 overwrite,
                 classification,
                 velocity,
                 recursive,
+                skip_root,
                 password_auth,
                 opt.encryption_password,
             )

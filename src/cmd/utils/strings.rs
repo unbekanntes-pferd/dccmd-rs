@@ -1,12 +1,9 @@
-use crate::{
-    cmd::models::DcCmdError,
-};
+use crate::cmd::models::DcCmdError;
 
 use dco3::nodes::models::{Node, NodeType};
 
-use chrono::{DateTime, Utc};
 use console::{style, Term};
-use tracing::{debug};
+use tracing::debug;
 
 const ERROR_PREFIX: &str = "Error: ";
 const SUCCESS_PREFIX: &str = "Success: ";
@@ -26,12 +23,7 @@ pub fn format_success_message(message: &str) -> String {
     format!("{succ_prefix_green} {message}")
 }
 
-pub fn print_node(
-    term: &Term,
-    node: &Node,
-    long: Option<bool>,
-    human_readable: Option<bool>,
-) {
+pub fn print_node(term: &Term, node: &Node, long: Option<bool>, human_readable: Option<bool>) {
     let mut node_str = String::new();
 
     let long = long.unwrap_or(false);
@@ -50,8 +42,14 @@ pub fn print_node(
         match &node.updated_by {
             Some(user_info) => node_str.push_str(&format!(
                 "{:<15} {:<15} ",
-                user_info.first_name.clone().unwrap_or_else(|| "n/a".to_string()),
-                user_info.last_name.clone().unwrap_or_else(|| "n/a".to_string())
+                user_info
+                    .first_name
+                    .clone()
+                    .unwrap_or_else(|| "n/a".to_string()),
+                user_info
+                    .last_name
+                    .clone()
+                    .unwrap_or_else(|| "n/a".to_string())
             )),
             None => node_str.push_str("n/a n/a"),
         }
@@ -65,10 +63,7 @@ pub fn print_node(
 
         match &node.timestamp_modification {
             Some(timestamp) => {
-                let dt: DateTime<Utc> = DateTime::parse_from_rfc3339(timestamp)
-                    .expect("Malformed date")
-                    .into();
-                node_str.push_str(&format!("{:<16} ", dt.format("%Y %b %e %H:%M")));
+                node_str.push_str(&format!("{:<16} ", timestamp.format("%Y %b %e %H:%M")));
             }
             None => node_str.push_str("n/a"),
         }
@@ -77,7 +72,10 @@ pub fn print_node(
     // add node name
     match node.node_type {
         NodeType::File => node_str.push_str(&format!("{} ", node.name)),
-        _ => node_str.push_str(&format!("{:<45} ", style(node.name.clone()).bold().yellow())),
+        _ => node_str.push_str(&format!(
+            "{:<45} ",
+            style(node.name.clone()).bold().yellow()
+        )),
     }
 
     term.write_line(&node_str)
@@ -113,7 +111,11 @@ fn to_printable_permissions(node: &Node) -> String {
     out_str
 }
 
-#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)]
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss
+)]
 fn to_readable_size(size: u64) -> String {
     let units = ["B", "KB", "MB", "GB", "TB", "PB"];
 
@@ -130,8 +132,8 @@ fn to_readable_size(size: u64) -> String {
 
     // precision loss is ok here because we are only interested in the integer part
     let res = size as f64 / pot;
-    
-    // exp is always positive, so this is safe 
+
+    // exp is always positive, so this is safe
     format!("{res:.0} {}", units[exp as usize])
 }
 
@@ -146,12 +148,16 @@ pub fn parse_path(path: &str, base_url: &str) -> Result<ParsedPath, DcCmdError> 
     if path == "/" {
         return Ok((String::from("/"), String::new(), 0));
     }
-    
+
     let path_parts: Vec<&str> = path.trim_end_matches('/').split('/').collect();
     debug!("path_parts: {:?}", path_parts);
-    let name = String::from(*path_parts.last().ok_or(DcCmdError::InvalidPath(path.to_string()))?);
+    let name = String::from(
+        *path_parts
+            .last()
+            .ok_or(DcCmdError::InvalidPath(path.to_string()))?,
+    );
     let mut parent_path = format!("/{}/", path_parts[..path_parts.len() - 1].join("/"));
-    let depth = path_parts.len().saturating_sub(1) as u64; 
+    let depth = path_parts.len().saturating_sub(1) as u64;
 
     debug!("parent_path: {}", parent_path);
     debug!("name: {}", name);
@@ -159,16 +165,14 @@ pub fn parse_path(path: &str, base_url: &str) -> Result<ParsedPath, DcCmdError> 
 
     if parent_path == *"//" {
         if let Some((prefix, _)) = parent_path.rsplit_once('/') {
-        parent_path = prefix.to_owned();
+            parent_path = prefix.to_owned();
+        }
     }
-}
 
     Ok((parent_path, name, depth))
 }
 
-
 pub fn parse_niode_path(path: &str, base_url: &str) -> Result<ParsedPath, DcCmdError> {
-    
     let base_url = base_url.trim_start_matches("https://");
     let path = path.trim_start_matches(base_url);
 
@@ -180,35 +184,39 @@ pub fn parse_niode_path(path: &str, base_url: &str) -> Result<ParsedPath, DcCmdE
 
     let (parent_path, name, depth) = if path.ends_with('/') {
         // this is a container (folder or room)
-         
-     
-            debug!("path: {}", path);
-            let path = path.split('/').collect::<Vec<&str>>();
-            debug!("path: {:?}", path);
-            let name = (*path.last().ok_or(DcCmdError::InvalidPath(path.clone().join("/")))?).to_string();
-            debug!("name: {}", name);
-            let parent_path = path[..path.len() - 1].join("/");
-            debug!("parent_path: {}", parent_path);
-            let parent_path = format!("{parent_path}/");
-            debug!("parent_path: {}", parent_path);
-            let parent_path = parent_path.trim_start_matches(base_url).to_string();
-            debug!("parent_path: {}", parent_path);
-            let depth = path.len() as u64 - 2;
 
-            (parent_path, name, depth)
-        }
-        // this is a file
-        else {
-            let path = path.split('/').collect::<Vec<&str>>();
-            let name = (*path.last().ok_or(DcCmdError::InvalidPath(path.clone().join("/")))?).to_string();
-            let parent_path = path[..path.len() - 1].join("/");
-            let parent_path = format!("{parent_path}/");
-            let parent_path = parent_path.trim_start_matches(base_url).to_string();
-            let depth = path.len() as u64 - 2;
+        debug!("path: {}", path);
+        let path = path.split('/').collect::<Vec<&str>>();
+        debug!("path: {:?}", path);
+        let name = (*path
+            .last()
+            .ok_or(DcCmdError::InvalidPath(path.clone().join("/")))?)
+        .to_string();
+        debug!("name: {}", name);
+        let parent_path = path[..path.len() - 1].join("/");
+        debug!("parent_path: {}", parent_path);
+        let parent_path = format!("{parent_path}/");
+        debug!("parent_path: {}", parent_path);
+        let parent_path = parent_path.trim_start_matches(base_url).to_string();
+        debug!("parent_path: {}", parent_path);
+        let depth = path.len() as u64 - 2;
 
-            (parent_path, name, depth)
-        }
-    ;
+        (parent_path, name, depth)
+    }
+    // this is a file
+    else {
+        let path = path.split('/').collect::<Vec<&str>>();
+        let name = (*path
+            .last()
+            .ok_or(DcCmdError::InvalidPath(path.clone().join("/")))?)
+        .to_string();
+        let parent_path = path[..path.len() - 1].join("/");
+        let parent_path = format!("{parent_path}/");
+        let parent_path = parent_path.trim_start_matches(base_url).to_string();
+        let depth = path.len() as u64 - 2;
+
+        (parent_path, name, depth)
+    };
 
     debug!("parent_path: {}", parent_path);
     debug!("name: {}", name);
