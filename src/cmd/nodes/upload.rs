@@ -42,7 +42,7 @@ pub async fn upload(
     auth: Option<PasswordAuth>,
     encryption_password: Option<String>,
 ) -> Result<(), DcCmdError> {
-    let mut dracoon = init_dracoon(&target, auth).await?;
+    let mut dracoon = init_dracoon(&target, auth, true).await?;
 
     let (parent_path, node_name, _) = parse_path(&target, dracoon.get_base_url().as_str())
         .or(Err(DcCmdError::InvalidPath(target.clone())))?;
@@ -59,20 +59,23 @@ pub async fn upload(
         dracoon = init_encryption(dracoon, encryption_password).await?;
     }
 
-    if source.is_file() {
-        upload_file(
-            &mut dracoon,
-            source.clone(),
-            &parent_node,
-            overwrite,
-            classification,
-        )
-        .await?;
-    } else if source.is_dir() {
-        if recursive {
+    match (source.is_file(), source.is_dir(), recursive) {
+        // is a file
+        (true, _, _) => {
+            upload_file(
+                &mut dracoon,
+                source,
+                &parent_node,
+                overwrite,
+                classification,
+            )
+            .await?
+        }
+        // is a directory and recursive flag is set
+        (_, true, true) => {
             upload_container(
                 &mut dracoon,
-                source.clone(),
+                source,
                 &parent_node,
                 &node_path,
                 overwrite,
@@ -80,16 +83,20 @@ pub async fn upload(
                 classification,
                 velocity,
             )
-            .await?;
-        } else {
+            .await?
+        }
+        // is a directory and recursive flag is not set
+        (_, true, false) => {
             return Err(DcCmdError::InvalidArgument(
                 "Container upload requires recursive flag".to_string(),
             ));
         }
-    } else {
-        return Err(DcCmdError::InvalidPath(
-            source.to_string_lossy().to_string(),
-        ));
+        // is neither a file nor a directory
+        _ => {
+            return Err(DcCmdError::InvalidPath(
+                source.to_string_lossy().to_string(),
+            ));
+        }
     }
 
     Ok(())
@@ -266,7 +273,7 @@ async fn upload_container(
     let root_depth_level = if folders.is_empty() {
         0
     } else {
-        folders.get(0).expect("No folders found").1
+        folders.first().expect("No folders found").1
     };
 
     let root_path = source.parent().unwrap_or_else(|| Path::new("/"));

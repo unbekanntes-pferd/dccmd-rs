@@ -42,7 +42,7 @@ pub async fn list_nodes(
     let offset = offset.unwrap_or(0);
     let limit = limit.unwrap_or(500);
 
-    let dracoon = init_dracoon(&source, auth).await?;
+    let dracoon = init_dracoon(&source, auth, false).await?;
 
     let (parent_path, node_name, depth) = parse_path(&source, dracoon.get_base_url().as_ref())?;
     let node_path = build_node_path((parent_path.clone(), node_name.clone(), depth));
@@ -216,7 +216,7 @@ pub async fn delete_node(
     recursive: Option<bool>,
     auth: Option<PasswordAuth>
 ) -> Result<(), DcCmdError> {
-    let dracoon = init_dracoon(&source, auth).await?;
+    let dracoon = init_dracoon(&source, auth, false).await?;
     let (parent_path, node_name, depth) = parse_path(&source, dracoon.get_base_url().as_ref())?;
     let node_path = build_node_path((parent_path.clone(), node_name.clone(), depth));
     let node = dracoon
@@ -277,7 +277,7 @@ pub async fn create_folder(
     notes: Option<String>,
     auth: Option<PasswordAuth>
 ) -> Result<(), DcCmdError> {
-    let dracoon = init_dracoon(&source, auth).await?;
+    let dracoon = init_dracoon(&source, auth, false).await?;
     let (parent_path, node_name, _) = parse_path(&source, dracoon.get_base_url().as_ref())?;
 
     debug!("parent_path: {}", parent_path);
@@ -319,7 +319,7 @@ pub async fn create_room(
     classification: Option<u8>,
     auth: Option<PasswordAuth>
 ) -> Result<(), DcCmdError> {
-    let dracoon = init_dracoon(&source, auth).await?;
+    let dracoon = init_dracoon(&source, auth, false).await?;
     let (parent_path, node_name, _) = parse_path(&source, dracoon.get_base_url().as_ref())?;
 
     let parent_node = dracoon
