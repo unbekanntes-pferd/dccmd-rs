@@ -26,6 +26,8 @@ use super::{
 
 pub mod download;
 pub mod upload;
+pub mod models;
+mod share;
 
 #[allow(clippy::too_many_arguments, clippy::module_name_repetitions)]
 pub async fn list_nodes(

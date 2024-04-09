@@ -7,15 +7,14 @@ use std::{
 };
 
 use async_recursion::async_recursion;
+use console::Term;
 use futures_util::future::join_all;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 use tracing::{debug, error, info};
 
 use crate::cmd::{
-    init_dracoon, init_encryption,
-    models::{DcCmdError, PasswordAuth},
-    utils::{dates::to_datetime_utc, strings::parse_path},
+    init_dracoon, init_encryption, models::{DcCmdError, PasswordAuth}, nodes::share::share_node, utils::{dates::to_datetime_utc, strings::{format_success_message, parse_path}}
 };
 use dco3::{
     auth::Connected,
@@ -26,19 +25,18 @@ use dco3::{
     Dracoon, DracoonClientError, Folders,
 };
 
+
+
 // this is currently set low to display progress
 // TODO: fix dco3 chunk progress for uploads
 const DEFAULT_CHUNK_SIZE: usize = 1024 * 1024 * 5; // 5 MB
 
-#[allow(clippy::too_many_arguments)]
+
 pub async fn upload(
+    term: Term,
     source: PathBuf,
     target: String,
-    overwrite: bool,
-    classification: Option<u8>,
-    velocity: Option<u8>,
-    recursive: bool,
-    skip_root: bool,
+    options: super::models::UploadOptions,
     auth: Option<PasswordAuth>,
     encryption_password: Option<String>,
 ) -> Result<(), DcCmdError> {
@@ -59,15 +57,24 @@ pub async fn upload(
         dracoon = init_encryption(dracoon, encryption_password).await?;
     }
 
-    match (source.is_file(), source.is_dir(), recursive) {
+    if parent_node.is_encrypted.unwrap_or(false) && options.share {
+        error!("Parent node is encrypted. Cannot upload to encrypted nodes.");
+        return Err(DcCmdError::InvalidArgument(
+            "Sharing encrypted files currently not supported (remove --share flag).".to_string(),
+        ));
+    }
+
+    match (source.is_file(), source.is_dir(), options.recursive) {
         // is a file
         (true, _, _) => {
             upload_file(
+                term,
                 &dracoon,
                 source,
                 &parent_node,
-                overwrite,
-                classification,
+                options.overwrite,
+                options.classification,
+                options.share,
             )
             .await?
         }
@@ -78,10 +85,10 @@ pub async fn upload(
                 source,
                 &parent_node,
                 &node_path,
-                overwrite,
-                skip_root,
-                classification,
-                velocity,
+                options.overwrite,
+                options.skip_root,
+                options.classification,
+                options.velocity,
             )
             .await?
         }
@@ -103,11 +110,13 @@ pub async fn upload(
 }
 
 async fn upload_file(
+    term: Term,
     dracoon: &Dracoon<Connected>,
     source: PathBuf,
     target_node: &Node,
     overwrite: bool,
     classification: Option<u8>,
+    share: bool,
 ) -> Result<(), DcCmdError> {
     info!("Attempting upload of file: {}.", source.to_string_lossy());
     info!("Target node: {}.", target_node.name);
@@ -154,7 +163,7 @@ async fn upload_file(
 
     let reader = tokio::io::BufReader::new(file);
 
-    dracoon
+    let node = dracoon
         .upload(
             file_meta,
             target_node,
@@ -168,8 +177,19 @@ async fn upload_file(
         .await?;
 
     progress_bar.finish_with_message(format!("Upload of {file_name} complete"));
-
     info!("Upload of {} complete.", source.to_string_lossy());
+
+    let is_encrypted = node.is_encrypted.unwrap_or(false);
+
+    if !is_encrypted && share {
+        let link = share_node(dracoon, &node).await?;
+        let success_msg = format_success_message(format!("Shared {}.\n▶︎▶︎ {}", file_name, link).as_str());
+        let success_msg = format!("\n{}", success_msg);
+
+        term.write_line(&success_msg)
+        .expect("Error writing message to terminal.");
+    }
+
 
     Ok(())
 }

@@ -17,6 +17,7 @@ use dco3::{
 pub mod credentials;
 pub mod models;
 pub mod nodes;
+pub mod users;
 pub mod utils;
 
 // service name to store

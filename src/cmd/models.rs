@@ -114,6 +114,10 @@ pub enum DcCmdCommand {
         #[clap(long)]
         skip_root: bool,
 
+        /// share upload
+        #[clap(long)]
+        share: bool,
+
     },
     /// Download a file or container from DRACOON to target
     Download {
@@ -193,8 +197,97 @@ pub enum DcCmdCommand {
         recursive: bool,
     },
 
+    /// Manage users in DRACOON
+    Users {
+        #[clap(subcommand)]
+        cmd: UserCommand,
+
+        target: String
+    },
+
     /// Print current dccmd-rs version
     Version
+}
+
+#[derive(Parser)]
+pub enum UserCommand {
+    /// List users in DRACOON
+    Ls {
+        /// search filter (username, first name, last name)
+        #[clap(long)]
+        search: Option<String>,
+
+        /// skip n users (default offset: 0)
+        #[clap(short, long)]
+        offset: Option<u32>,
+
+        /// limit n users (default limit: 500)
+        #[clap(long)]
+        limit: Option<u32>,
+
+        /// fetch all users (default: 500)
+        #[clap(long)]
+        all: bool,
+
+        /// print user information in CSV format
+        #[clap(long)]
+        csv: bool,
+    },
+
+    /// Create a user in DRACOON
+    Create {
+
+        /// User first name
+        #[clap(long, short)]
+        first_name: String,
+
+        /// User last name
+        #[clap(long, short)]
+        last_name: String,
+
+        /// User email
+        #[clap(long, short)]
+        email: String,
+
+        /// Login (for OIDC)
+        #[clap(long)]
+        login: Option<String>,
+
+        /// OIDC config id
+        #[clap(long)]
+        oidc_id: Option<u32>,
+
+    },
+
+    /// delete a user in DRACOON
+    Rm {
+        /// User login
+        #[clap(long, short)]
+        user_name: Option<String>,
+
+        #[clap(long)]
+        user_id: Option<u64>,
+    },
+
+    /// import users from CSV file into DRACOON
+    Import {
+        /// Source file path
+        source: String,
+
+        /// OIDC config id
+        #[clap(long)]
+        oidc_id: Option<u32>,
+    },
+
+    /// print user information in DRACOON
+    Info {
+        /// User login
+        #[clap(long, short)]
+        user_name: Option<String>,
+
+        #[clap(long)]
+        user_id: Option<u64>,
+    },
 }
 
 #[derive(Clone, Copy)]
