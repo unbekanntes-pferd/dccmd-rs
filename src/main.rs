@@ -8,7 +8,8 @@ use cmd::{
     nodes::{
         create_folder, create_room, delete_node, download::download, list_nodes,
         models::UploadOptions, upload::upload,
-    }, users::handle_users_cmd,
+    },
+    users::handle_users_cmd,
 };
 use console::Term;
 use std::fs::OpenOptions;
@@ -147,10 +148,8 @@ async fn main() {
         } => create_room(term, source, classification, password_auth).await,
         DcCmdCommand::Rm { source, recursive } => {
             delete_node(term, source, Some(recursive), password_auth).await
-        },
-        DcCmdCommand::Users { cmd, target } => {
-            handle_users_cmd(cmd, term, target).await
         }
+        DcCmdCommand::Users { cmd, target } => handle_users_cmd(cmd, term, target).await,
 
         DcCmdCommand::Version => {
             println!("dccmd-rs {}", env!("CARGO_PKG_VERSION"));

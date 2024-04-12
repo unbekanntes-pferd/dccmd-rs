@@ -13,7 +13,14 @@ pub struct UploadOptions {
 }
 
 impl UploadOptions {
-    pub fn new(overwrite: bool, classification: Option<u8>, velocity: Option<u8>, recursive: bool, skip_root: bool, share: bool) -> Self {
+    pub fn new(
+        overwrite: bool,
+        classification: Option<u8>,
+        velocity: Option<u8>,
+        recursive: bool,
+        skip_root: bool,
+        share: bool,
+    ) -> Self {
         Self {
             overwrite,
             classification,

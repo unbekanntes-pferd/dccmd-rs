@@ -17,10 +17,6 @@ pub struct UserInfo {
     pub expire_at: Option<DateTime<Utc>>,
     pub is_locked: bool,
     #[tabled(display_with = "display_option")]
-    pub is_encryption_enabled: Option<bool>,
-    #[tabled(display_with = "display_option")]
-    pub has_manageable_rooms: Option<bool>,
-    #[tabled(display_with = "display_option")]
     pub last_login_at: Option<DateTime<Utc>>,
 }
 
@@ -36,7 +32,11 @@ impl From<UserItem> for UserInfo {
         let last_login = if user.last_login_success_at.is_none() {
             None
         } else {
-            Some(DateTime::parse_from_rfc3339(&user.last_login_success_at.unwrap()).expect("Failed to parse last login date").into())
+            Some(
+                DateTime::parse_from_rfc3339(&user.last_login_success_at.unwrap())
+                    .expect("Failed to parse last login date")
+                    .into(),
+            )
         };
 
         Self {
@@ -47,8 +47,6 @@ impl From<UserItem> for UserInfo {
             email: user.email,
             expire_at: user.expire_at,
             is_locked: user.is_locked,
-            is_encryption_enabled: user.is_encryption_enabled,
-            has_manageable_rooms: user.has_manageable_rooms,
             last_login_at: last_login,
         }
     }
@@ -59,13 +57,21 @@ impl From<UserData> for UserInfo {
         let last_login = if user.last_login_success_at.is_none() {
             None
         } else {
-            Some(DateTime::parse_from_rfc3339(&user.last_login_success_at.unwrap()).expect("Failed to parse last login date").into())
+            Some(
+                DateTime::parse_from_rfc3339(&user.last_login_success_at.unwrap())
+                    .expect("Failed to parse last login date")
+                    .into(),
+            )
         };
 
         let expire_at = if user.expire_at.is_none() {
             None
         } else {
-            Some(DateTime::parse_from_rfc3339(&user.expire_at.unwrap()).expect("Failed to parse expire date").into())
+            Some(
+                DateTime::parse_from_rfc3339(&user.expire_at.unwrap())
+                    .expect("Failed to parse expire date")
+                    .into(),
+            )
         };
 
         Self {
@@ -76,8 +82,6 @@ impl From<UserData> for UserInfo {
             email: user.email,
             expire_at,
             is_locked: user.is_locked,
-            is_encryption_enabled: user.is_encryption_enabled,
-            has_manageable_rooms: user.has_manageable_rooms,
             last_login_at: last_login,
         }
     }
@@ -89,5 +93,5 @@ pub struct UserImport {
     pub last_name: String,
     pub email: String,
     pub login: Option<String>,
-    pub oidc_id: Option<u32>,
+    pub mfa_enabled: Option<bool>,
 }

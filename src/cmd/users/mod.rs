@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use console::Term;
 use dco3::{
     auth::Connected,
@@ -6,10 +8,17 @@ use dco3::{
     Dracoon, ListAllParams, Users,
 };
 use futures_util::{future::join_all, stream, StreamExt};
-use tracing::error;
+use tokio::sync::Mutex;
+use tracing::{error, info};
 
 mod models;
 mod print;
+
+use super::{
+    init_dracoon,
+    models::{DcCmdError, UserCommand},
+    utils::strings::format_success_message,
+};
 
 use crate::cmd::users::models::UserImport;
 
@@ -26,36 +35,27 @@ impl UserCommandHandler {
         Ok(Self { client, term })
     }
 
-    async fn import_users(&self, source: String) -> Result<(), DcCmdError> {
+    pub async fn new_from_client(client: Dracoon<Connected>, term: Term) -> Self {
+        Self { client, term }
+    }
 
-        // read file from CSV and serialize to UserImport struct
-        //let mut rdr = csv::Reader::from_reader(data);
-
+    async fn import_users(&self, source: String, oidc_id: Option<u32>) -> Result<(), DcCmdError> {
         let mut rdr = csv::ReaderBuilder::new()
-        .flexible(true)
-        .trim(csv::Trim::All)
-        .from_path(source).map_err(
-            |e| {
+            .flexible(true)
+            .trim(csv::Trim::All)
+            .from_path(&source)
+            .map_err(|e| {
                 error!("Error reading file: {}", e);
-                DcCmdError::IoError
-            }
-        )?;
-        
+                DcCmdError::InvalidArgument(format!("File not found: {}", source))
+            })?;
 
-        let imports: Vec<_> = rdr
-            .records()
-            .flat_map(|r| {
-                
-                if let Err(ref e) = r {
-                    error!("Error reading record: {}", e);
-                }
-
-            let record = r?;
-            record.deserialize::<UserImport>(None)
-            })
-            .collect();
-
-        eprintln!("{}", imports.len());
+        let imports = rdr
+            .deserialize::<UserImport>()
+            .collect::<Result<Vec<_>, csv::Error>>()
+            .map_err(|e| {
+                error!("Error reading record: {}", e);
+                DcCmdError::InvalidArgument(format!("Invalid CSV format. Expected fields: first_name, last_name, email, login (optional), mfa_enabled (optional).\n{})", e))
+            })?;
 
         // build requests per import
         let reqs = imports
@@ -66,17 +66,19 @@ impl UserCommandHandler {
                     &import.last_name,
                     &import.email,
                     import.login.as_deref(),
-                    import.oidc_id,
+                    oidc_id,
                     true,
+                    import.mfa_enabled.unwrap_or(false),
                 )
             })
             .collect::<Vec<_>>();
 
         stream::iter(reqs)
-           .chunks(5)
-           .for_each_concurrent(None, |f| async move {
-               join_all(f).await;
-           }).await;
+            .chunks(5)
+            .for_each_concurrent(None, |f| async move {
+                join_all(f).await;
+            })
+            .await;
 
         let msg = format!("{} users imported", imports.len());
 
@@ -85,9 +87,9 @@ impl UserCommandHandler {
             .map_err(|_| DcCmdError::IoError)?;
 
         Ok(())
-
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn create_user(
         &self,
         first_name: &str,
@@ -95,6 +97,7 @@ impl UserCommandHandler {
         email: &str,
         login: Option<&str>,
         oidc_id: Option<u32>,
+        mfa_enforced: bool,
         is_import: bool,
     ) -> Result<(), DcCmdError> {
         let payload = if let (Some(login), Some(oidc_id)) = (login, oidc_id) {
@@ -102,12 +105,14 @@ impl UserCommandHandler {
             CreateUserRequest::builder(first_name, last_name)
                 .with_auth_data(user_auth_data)
                 .with_email(email)
+                .with_mfa_enforced(mfa_enforced)
                 .build()
         } else if let (None, Some(oidc_id)) = (login, oidc_id) {
             let user_auth_data = UserAuthData::new_oidc(email, oidc_id.into());
             CreateUserRequest::builder(first_name, last_name)
                 .with_auth_data(user_auth_data)
                 .with_email(email)
+                .with_mfa_enforced(mfa_enforced)
                 .build()
         } else {
             let user_auth_data = UserAuthData::builder(dco3::users::AuthMethod::Basic)
@@ -118,10 +123,16 @@ impl UserCommandHandler {
                 .with_user_name(login.unwrap_or(email))
                 .with_email(email)
                 .with_notify_user(true)
+                .with_mfa_enforced(mfa_enforced)
                 .build()
         };
 
-        let user = self.client.create_user(payload).await?;
+        let user = self.client.users.create_user(payload).await?;
+
+        info!(
+            "User {} created (id: {} | auth: {})",
+            user.user_name, user.id, user.auth_data.method
+        );
 
         if !is_import {
             self.term
@@ -169,9 +180,50 @@ impl UserCommandHandler {
                 .build()
         };
 
-        let results = self.client.get_users(Some(params), None, None).await?;
+        let results = self
+            .client
+            .users
+            .get_users(Some(params), None, None)
+            .await?;
 
-        self.print_users(results, csv)?;
+        if all {
+            let total = results.range.total;
+            let shared_results = Arc::new(Mutex::new(results.clone()));
+
+            let reqs = (500..=total)
+                .step_by(500)
+                .map(|offset| {
+                    let params = ListAllParams::builder()
+                        .with_offset(offset)
+                        .with_limit(500)
+                        .build();
+                    self.client.users.get_users(Some(params), None, None)
+                })
+                .collect::<Vec<_>>();
+
+            stream::iter(reqs)
+                .for_each_concurrent(5, |f| {
+                    let shared_results_clone = Arc::clone(&shared_results);
+                    async move {
+                        match f.await {
+                            Ok(mut users) => {
+                                let mut shared_results = shared_results_clone.lock().await;
+                                shared_results.items.append(&mut users.items);
+                            }
+                            Err(e) => {
+                                error!("Failed to fetch users: {}", e);
+                            }
+                        }
+                    }
+                })
+                .await;
+
+            let results = shared_results.lock().await.clone();
+
+            self.print_users(results, csv)?;
+        } else {
+            self.print_users(results, csv)?;
+        }
 
         Ok(())
     }
@@ -183,10 +235,10 @@ impl UserCommandHandler {
     ) -> Result<(), DcCmdError> {
         let confirm_msg = if let Some(user_name) = user_name {
             let user = self.find_user_by_username(&user_name).await?;
-            self.client.delete_user(user.id).await?;
+            self.client.users.delete_user(user.id).await?;
             format!("User {} deleted", user_name)
         } else if let Some(user_id) = user_id {
-            self.client.delete_user(user_id).await?;
+            self.client.users.delete_user(user_id).await?;
             format!("User {} (id) deleted", user_id)
         } else {
             error!("User name or user id must be provided");
@@ -210,8 +262,7 @@ impl UserCommandHandler {
         let user: UserInfo = if let Some(user_name) = user_name {
             self.find_user_by_username(&user_name).await?.into()
         } else if let Some(user_id) = user_id {
-            let user_id = user_id;
-            self.client.get_user(user_id, None).await?.into()
+            self.client.users.get_user(user_id, None).await?.into()
         } else {
             error!("User name or user id must be provided");
             return Err(DcCmdError::InvalidArgument(
@@ -228,7 +279,11 @@ impl UserCommandHandler {
         let user_filter = UsersFilter::username_contains(user_name);
         let params = ListAllParams::builder().with_filter(user_filter).build();
 
-        let results = self.client.get_users(Some(params), None, None).await?;
+        let results = self
+            .client
+            .users
+            .get_users(Some(params), None, None)
+            .await?;
 
         if results.items.is_empty() {
             error!("No user found with username: {}", user_name);
@@ -239,12 +294,6 @@ impl UserCommandHandler {
         Ok(results.items.first().expect("No user found").clone())
     }
 }
-
-use super::{
-    init_dracoon,
-    models::{DcCmdError, UserCommand},
-    utils::strings::format_success_message,
-};
 
 pub async fn handle_users_cmd(
     cmd: UserCommand,
@@ -262,6 +311,7 @@ pub async fn handle_users_cmd(
             email,
             login,
             oidc_id,
+            mfa_enforced,
         } => {
             handler
                 .create_user(
@@ -270,6 +320,7 @@ pub async fn handle_users_cmd(
                     &email,
                     login.as_deref(),
                     oidc_id,
+                    mfa_enforced,
                     false,
                 )
                 .await?;
@@ -287,7 +338,7 @@ pub async fn handle_users_cmd(
             handler.delete_user(user_name, user_id).await?;
         }
         UserCommand::Import { source, oidc_id } => {
-            handler.import_users(source).await?;
+            handler.import_users(source, oidc_id).await?;
         }
         UserCommand::Info { user_name, user_id } => {
             handler.get_user_info(user_name, user_id).await?;

@@ -1,6 +1,6 @@
 use dco3::{users::UserItem, RangedItems};
 use tabled::{
-    settings::{Panel, Style},
+    settings::{object::Segment, Modify, Panel, Style, Width},
     Table,
 };
 
@@ -48,18 +48,6 @@ impl UserCommandHandler {
             .map_err(|_| DcCmdError::IoError)?;
         self.term
             .write_line(&format!("► locked: {}", user_info.is_locked))
-            .map_err(|_| DcCmdError::IoError)?;
-        self.term
-            .write_line(&format!(
-                "► encryption enabled: {}",
-                user_info.is_encryption_enabled.unwrap_or(false)
-            ))
-            .map_err(|_| DcCmdError::IoError)?;
-        self.term
-            .write_line(&format!(
-                "► has manageable rooms: {}",
-                user_info.has_manageable_rooms.unwrap_or(false)
-            ))
             .map_err(|_| DcCmdError::IoError)?;
 
         Ok(())
@@ -115,7 +103,8 @@ impl UserCommandHandler {
                         "{} users ({} total)",
                         displayed, total
                     )))
-                    .with(Style::modern());
+                    .with(Style::modern())
+                    .with(Modify::new(Segment::all()).with(Width::wrap(16)));
 
                 println!("{}", user_table);
             }

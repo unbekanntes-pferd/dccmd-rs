@@ -14,7 +14,13 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use tracing::{debug, error, info};
 
 use crate::cmd::{
-    init_dracoon, init_encryption, models::{DcCmdError, PasswordAuth}, nodes::share::share_node, utils::{dates::to_datetime_utc, strings::{format_success_message, parse_path}}
+    init_dracoon, init_encryption,
+    models::{DcCmdError, PasswordAuth},
+    nodes::share::share_node,
+    utils::{
+        dates::to_datetime_utc,
+        strings::{format_success_message, parse_path},
+    },
 };
 use dco3::{
     auth::Connected,
@@ -25,12 +31,9 @@ use dco3::{
     Dracoon, DracoonClientError, Folders,
 };
 
-
-
 // this is currently set low to display progress
 // TODO: fix dco3 chunk progress for uploads
 const DEFAULT_CHUNK_SIZE: usize = 1024 * 1024 * 5; // 5 MB
-
 
 pub async fn upload(
     term: Term,
@@ -46,7 +49,7 @@ pub async fn upload(
         .or(Err(DcCmdError::InvalidPath(target.clone())))?;
     let node_path = format!("{parent_path}{node_name}/");
 
-    let parent_node = dracoon.get_node_from_path(&node_path).await?;
+    let parent_node = dracoon.nodes.get_node_from_path(&node_path).await?;
 
     let Some(parent_node) = parent_node else {
         error!("Target path not found: {}", target);
@@ -183,13 +186,13 @@ async fn upload_file(
 
     if !is_encrypted && share {
         let link = share_node(dracoon, &node).await?;
-        let success_msg = format_success_message(format!("Shared {}.\n▶︎▶︎ {}", file_name, link).as_str());
+        let success_msg =
+            format_success_message(format!("Shared {}.\n▶︎▶︎ {}", file_name, link).as_str());
         let success_msg = format!("\n{}", success_msg);
 
         term.write_line(&success_msg)
-        .expect("Error writing message to terminal.");
+            .expect("Error writing message to terminal.");
     }
-
 
     Ok(())
 }
@@ -238,15 +241,19 @@ async fn upload_container(
     } else {
         let root_folder = CreateFolderRequest::builder(&name, target.id).build();
 
-        let root_folder = match dracoon.create_folder(root_folder).await {
+        let root_folder = match dracoon.nodes.create_folder(root_folder).await {
             Ok(folder) => folder,
             Err(e) if e.is_conflict() => {
                 let path = format!("{}{}", target_parent, name);
                 debug!("Path: {}", path);
-                dracoon.get_node_from_path(&path).await?.ok_or_else(|| {
-                    error!("Error creating root folder: {}", e);
-                    e
-                })?
+                dracoon
+                    .nodes
+                    .get_node_from_path(&path)
+                    .await?
+                    .ok_or_else(|| {
+                        error!("Error creating root folder: {}", e);
+                        e
+                    })?
             }
             Err(e) => {
                 error!("Error creating root folder: {}", e);
@@ -318,7 +325,7 @@ async fn upload_container(
                 target_parent,
                 &name,
                 folder,
-                skip_root
+                skip_root,
             )
             .await?;
             progress_bar.inc(processed as u64);
@@ -362,7 +369,7 @@ async fn upload_container(
             if overwrite {
                 //TODO: broken - does not work, entry not present
                 let path = format!("{}{}", target_parent, parent_path);
-                let node = dracoon.get_node_from_path(&path).await?;
+                let node = dracoon.nodes.get_node_from_path(&path).await?;
                 node.ok_or(DcCmdError::Unknown)?.id
             } else {
                 *created_nodes.get(parent_path).ok_or(DcCmdError::IoError)?
@@ -370,10 +377,9 @@ async fn upload_container(
         };
 
         let folder_req = CreateFolderRequest::builder(name, parent_id).build();
-        folder_reqs.push(dracoon.create_folder(folder_req));
+        folder_reqs.push(dracoon.nodes.create_folder(folder_req));
     }
 
-    // execute all previous requests
     let created_folders = join_all(folder_reqs).await;
     let processed = created_folders.len();
 
@@ -384,7 +390,7 @@ async fn upload_container(
         target_parent,
         &name,
         &source,
-        skip_root
+        skip_root,
     )
     .await?;
 
@@ -468,10 +474,14 @@ async fn update_folder_map(
                 let path = result_path.to_str().ok_or(DcCmdError::IoError)?;
                 let path = format!("{}{}", target_parent, path);
                 debug!("Path: {}", path);
-                dracoon.get_node_from_path(&path).await?.ok_or_else(|| {
-                    error!("Error creating root folder: {}", e);
-                    e
-                })?
+                dracoon
+                    .nodes
+                    .get_node_from_path(&path)
+                    .await?
+                    .ok_or_else(|| {
+                        error!("Error creating root folder: {}", e);
+                        e
+                    })?
             }
             Err(e) => {
                 error!("Error creating root folder: {}", e);
@@ -562,7 +572,7 @@ async fn upload_files(
 
     let concurrent_reqs = velocity * 5;
 
-    let total_size = files.values().fold(0, |acc, (_, val)| acc + val);
+    let total_size = files.values().fold(0, |acc, (_, size)| acc + size);
 
     let progress_bar = ProgressBar::new(total_size);
     progress_bar.set_style(
@@ -592,7 +602,7 @@ async fn upload_files(
                     .await
                     .or(Err(DcCmdError::IoError))?;
 
-                let parent_node = client.get_node(*node_id).await?;
+                let parent_node = client.nodes.get_node(*node_id).await?;
 
                 let file_meta = file.metadata().await.or(Err(DcCmdError::IoError))?;
                 let file_meta = get_file_meta(&file_meta, source)?;
@@ -627,7 +637,11 @@ async fn upload_files(
                         })),
                         None,
                     )
-                    .await?;
+                    .await
+                    .map_err(|e| {
+                        error!("Error uploading file: {}", file_name);
+                        e
+                    })?;
 
                 _ = &rm_files.fetch_sub(1, Ordering::Relaxed);
                 let message = format!("Uploading {} files", &rm_files.load(Ordering::Relaxed));
@@ -642,7 +656,7 @@ async fn upload_files(
         let results: Vec<Result<(), DcCmdError>> = join_all(file_reqs).await;
         for result in results {
             if let Err(e) = result {
-                error!("Error downloading file: {}", e);
+                error!("Error uploading file: {}", e);
             }
         }
     }
@@ -743,13 +757,13 @@ mod tests {
     async fn test_list_directories() {
         let root_path = PathBuf::from("./src");
         let folders = list_directories(root_path).await.unwrap();
-        assert_eq!(folders.len(), 3);
+        assert_eq!(folders.len(), 4);
     }
 
     #[tokio::test]
     async fn test_list_files() {
         let root_path = PathBuf::from("./src/cmd/nodes");
         let files = list_files(root_path).await.unwrap();
-        assert_eq!(files.len(), 3);
+        assert_eq!(files.len(), 5);
     }
 }

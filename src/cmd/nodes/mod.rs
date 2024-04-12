@@ -1,7 +1,7 @@
 use console::Term;
 use dialoguer::Confirm;
 use futures_util::future::join_all;
-use tracing::{debug, info, error};
+use tracing::{debug, error, info};
 
 use crate::cmd::{
     init_dracoon,
@@ -25,9 +25,9 @@ use super::{
 };
 
 pub mod download;
-pub mod upload;
 pub mod models;
 mod share;
+pub mod upload;
 
 #[allow(clippy::too_many_arguments, clippy::module_name_repetitions)]
 pub async fn list_nodes(
@@ -39,7 +39,7 @@ pub async fn list_nodes(
     all: Option<bool>,
     offset: Option<u32>,
     limit: Option<u32>,
-    auth: Option<PasswordAuth>
+    auth: Option<PasswordAuth>,
 ) -> Result<(), DcCmdError> {
     let offset = offset.unwrap_or(0);
     let limit = limit.unwrap_or(500);
@@ -101,11 +101,11 @@ async fn get_nodes(
     limit: u32,
 ) -> Result<NodeList, DcCmdError> {
     let parent_id = if let Some(node_path) = node_path {
-        let node = dracoon.get_node_from_path(node_path).await?;
+        let node = dracoon.nodes.get_node_from_path(node_path).await?;
 
         let Some(node) = node else {
-                return Err(DcCmdError::InvalidPath(node_path.to_string()))
-            };
+            return Err(DcCmdError::InvalidPath(node_path.to_string()));
+        };
 
         Some(node.id)
     } else {
@@ -117,7 +117,10 @@ async fn get_nodes(
         .with_limit(limit.into())
         .build();
 
-    let mut node_list = dracoon.get_nodes(parent_id, managed, Some(params)).await?;
+    let mut node_list = dracoon
+        .nodes
+        .get_nodes(parent_id, managed, Some(params))
+        .await?;
 
     if all && node_list.range.total > 500 {
         let mut offset = 500;
@@ -132,7 +135,7 @@ async fn get_nodes(
                     .with_limit(limit)
                     .build();
 
-                let next_node_list_req = dracoon.get_nodes(parent_id, managed, Some(params));
+                let next_node_list_req = dracoon.nodes.get_nodes(parent_id, managed, Some(params));
                 futures.push(next_node_list_req);
                 offset += limit;
             }
@@ -160,11 +163,11 @@ async fn search_nodes(
     limit: u32,
 ) -> Result<NodeList, DcCmdError> {
     let parent_id = if let Some(node_path) = node_path {
-        let node = dracoon.get_node_from_path(node_path).await?;
+        let node = dracoon.nodes.get_node_from_path(node_path).await?;
 
         let Some(node) = node else {
-                    return Err(DcCmdError::InvalidPath(node_path.to_string()))
-                };
+            return Err(DcCmdError::InvalidPath(node_path.to_string()));
+        };
 
         Some(node.id)
     } else {
@@ -177,6 +180,7 @@ async fn search_nodes(
         .build();
 
     let mut node_list = dracoon
+        .nodes
         .search_nodes(search_string, parent_id, Some(0), Some(params))
         .await?;
 
@@ -194,7 +198,9 @@ async fn search_nodes(
                     .build();
 
                 let next_node_list_req =
-                    dracoon.search_nodes(search_string, parent_id, Some(0), Some(params));
+                    dracoon
+                        .nodes
+                        .search_nodes(search_string, parent_id, Some(0), Some(params));
                 futures.push(next_node_list_req);
                 offset += limit;
             }
@@ -216,12 +222,13 @@ pub async fn delete_node(
     term: Term,
     source: String,
     recursive: Option<bool>,
-    auth: Option<PasswordAuth>
+    auth: Option<PasswordAuth>,
 ) -> Result<(), DcCmdError> {
     let dracoon = init_dracoon(&source, auth, false).await?;
     let (parent_path, node_name, depth) = parse_path(&source, dracoon.get_base_url().as_ref())?;
     let node_path = build_node_path((parent_path.clone(), node_name.clone(), depth));
     let node = dracoon
+        .nodes
         .get_node_from_path(&node_path)
         .await?
         .ok_or(DcCmdError::InvalidPath(source.clone()))?;
@@ -240,7 +247,7 @@ pub async fn delete_node(
 
     // define async block to delete node
     let delete_node = async {
-        dracoon.delete_node(node.id).await?;
+        dracoon.nodes.delete_node(node.id).await?;
         let msg = format!("Node {node_name} deleted.");
         info!("{}", msg);
         let msg = format_success_message(&msg);
@@ -277,7 +284,7 @@ pub async fn create_folder(
     source: String,
     classification: Option<u8>,
     notes: Option<String>,
-    auth: Option<PasswordAuth>
+    auth: Option<PasswordAuth>,
 ) -> Result<(), DcCmdError> {
     let dracoon = init_dracoon(&source, auth, false).await?;
     let (parent_path, node_name, _) = parse_path(&source, dracoon.get_base_url().as_ref())?;
@@ -286,6 +293,7 @@ pub async fn create_folder(
     debug!("base_url: {}", dracoon.get_base_url().as_ref());
 
     let parent_node = dracoon
+        .nodes
         .get_node_from_path(&parent_path)
         .await?
         .ok_or(DcCmdError::InvalidPath(source.clone()))?;
@@ -304,7 +312,7 @@ pub async fn create_folder(
 
     let req = req.build();
 
-    let folder = dracoon.create_folder(req).await?;
+    let folder = dracoon.nodes.create_folder(req).await?;
 
     let msg = format!("Folder {node_name} created.");
     info!("{}", msg);
@@ -319,12 +327,13 @@ pub async fn create_room(
     term: Term,
     source: String,
     classification: Option<u8>,
-    auth: Option<PasswordAuth>
+    auth: Option<PasswordAuth>,
 ) -> Result<(), DcCmdError> {
     let dracoon = init_dracoon(&source, auth, false).await?;
     let (parent_path, node_name, _) = parse_path(&source, dracoon.get_base_url().as_ref())?;
 
     let parent_node = dracoon
+        .nodes
         .get_node_from_path(&parent_path)
         .await?
         .ok_or(DcCmdError::InvalidPath(source.clone()))?;
@@ -341,7 +350,7 @@ pub async fn create_room(
         .with_inherit_permissions(true)
         .build();
 
-    let room = dracoon.create_room(req).await?;
+    let room = dracoon.nodes.create_room(req).await?;
 
     let msg = format!("Room {node_name} created.");
     info!("{}", msg);

@@ -12,7 +12,6 @@ use dco3::{
 // represents password flow
 pub struct PasswordAuth(pub String, pub String);
 
-
 #[derive(Debug, PartialEq, Error)]
 pub enum DcCmdError {
     #[error("Connection to DRACOON failed")]
@@ -75,7 +74,7 @@ pub struct DcCmd {
     /// optional username
     #[clap(long)]
     pub username: Option<String>,
-    
+
     /// optional password
     #[clap(long)]
     pub password: Option<String>,
@@ -117,7 +116,6 @@ pub enum DcCmdCommand {
         /// share upload
         #[clap(long)]
         share: bool,
-
     },
     /// Download a file or container from DRACOON to target
     Download {
@@ -202,11 +200,11 @@ pub enum DcCmdCommand {
         #[clap(subcommand)]
         cmd: UserCommand,
 
-        target: String
+        target: String,
     },
 
     /// Print current dccmd-rs version
-    Version
+    Version,
 }
 
 #[derive(Parser)]
@@ -236,7 +234,6 @@ pub enum UserCommand {
 
     /// Create a user in DRACOON
     Create {
-
         /// User first name
         #[clap(long, short)]
         first_name: String,
@@ -257,6 +254,9 @@ pub enum UserCommand {
         #[clap(long)]
         oidc_id: Option<u32>,
 
+        /// OIDC config id
+        #[clap(long)]
+        mfa_enforced: bool,
     },
 
     /// delete a user in DRACOON
@@ -295,5 +295,3 @@ pub enum PrintFormat {
     Pretty,
     Csv,
 }
-
-
