@@ -86,6 +86,12 @@ dccmd-rs upload ./your/path/your-name.pdf your.dracoon.domain/some/room
 
 **Note:** Currently, providing a custom name is not implemented.
 
+You can share the file directly and create a share link (default settings) by passing the `--share` flag:
+
+```bash
+dccmd-rs upload ./your/path/your-name.pdf your.dracoon.domain/some/room --share
+```
+
 To upload a folder, use the `--recursive` flag:
 
 ```bash
@@ -117,7 +123,7 @@ Options:
 
 To delete nodes, use the `rm` command:
 
-```
+```bash
 dccmd-rs rm your.dracoon.domain/some/path/some_file.pdf
 dccmd-rs rm -r your.dracoon.domain/some/path/some/room
 ```
@@ -141,6 +147,52 @@ dccmd mkroom your.dracoon.domain/some/path/newfolder
 
 ```
 *Note*: Rooms can currently only be created as inheriting permissions from parent.
+
+### Managing users
+
+To import users, you can use the `users some.dracoon.domain.com import` command:
+
+```bash
+# csv header must be 'first_name,last_name,email,login,oidc_id,mfa_enforced'
+# the order of these fields does not matter
+# login, oidc_id and mfa_enforced are optional but must be present as field
+dccmd-rs users your.dracoon.domain/ import /path/to/users.csv
+dccmd-rs users your.dracoon.domain/ import /path/to/users.csv --oidc-id 2 # import as OIDC users
+```
+
+To list users, you can use the `users some.dracoon.domain.com ls` command:
+
+```bash
+# optional flags: --all (lists all users, default: 500, paging) --csv (csv format)
+# optional flags: --search (by username)
+dccmd-rs users your.dracoon.domain/ ls
+dccmd-rs users your.dracoon.domain/ ls --csv --all > userlist.csv
+dccmd-rs users your.dracoon.domain/ ls --search foo
+```
+
+To create users, you can use the `users some.dracoon.domain.com create` command:
+
+```bash
+# params: --first-name, --last-name, --email, --login, --oidc-id 
+dccmd-rs users your.dracoon.domain/ create -f foo -l bar -e foo@bar.com # local user
+dccmd-rs users your.dracoon.domain/ create -f foo -l bar -e foo@bar.com --oidc-id 2 # OIDC user
+```
+
+To delete users, you can use the `users some.dracoon.domain.com rm` command:
+
+```bash
+# supported: user id, user login / username
+dccmd-rs users your.dracoon.domain/ rm --user-id 2
+dccmd-rs users your.dracoon.domain/ rm --user-name foo # short: -u
+```
+
+To fetch specific user info, you can use the `users some.dracoon.domain.com info` command:
+
+```bash
+# supported: user id, user login / username
+dccmd-rs users your.dracoon.domain/ info --user-id 2
+dccmd-rs users your.dracoon.domain/ info --user-name foo # short: -u
+```
 
 ### CLI mode
 
