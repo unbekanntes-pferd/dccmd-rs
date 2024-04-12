@@ -6,8 +6,10 @@ use cmd::{
     handle_error,
     models::{DcCmd, DcCmdCommand, PasswordAuth},
     nodes::{
-        create_folder, create_room, delete_node, download::download, list_nodes, upload::upload,
+        create_folder, create_room, delete_node, download::download, list_nodes,
+        models::UploadOptions, upload::upload,
     },
+    users::handle_users_cmd,
 };
 use console::Term;
 use std::fs::OpenOptions;
@@ -64,7 +66,6 @@ async fn main() {
         .with_writer(std::sync::Mutex::new(log_file))
         .init();
 
-
     let password_auth = match (opt.username, opt.password) {
         (Some(username), Some(password)) => Some(PasswordAuth(username, password)),
         _ => None,
@@ -95,15 +96,20 @@ async fn main() {
             velocity,
             recursive,
             skip_root,
+            share,
         } => {
             upload(
+                term,
                 source.into(),
                 target,
-                overwrite,
-                classification,
-                velocity,
-                recursive,
-                skip_root,
+                UploadOptions::new(
+                    overwrite,
+                    classification,
+                    velocity,
+                    recursive,
+                    skip_root,
+                    share,
+                ),
                 password_auth,
                 opt.encryption_password,
             )
@@ -142,7 +148,9 @@ async fn main() {
         } => create_room(term, source, classification, password_auth).await,
         DcCmdCommand::Rm { source, recursive } => {
             delete_node(term, source, Some(recursive), password_auth).await
-        },
+        }
+        DcCmdCommand::Users { cmd, target } => handle_users_cmd(cmd, term, target).await,
+
         DcCmdCommand::Version => {
             println!("dccmd-rs {}", env!("CARGO_PKG_VERSION"));
             Ok(())

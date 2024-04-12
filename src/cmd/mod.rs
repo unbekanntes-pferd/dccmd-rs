@@ -17,6 +17,7 @@ use dco3::{
 pub mod credentials;
 pub mod models;
 pub mod nodes;
+pub mod users;
 pub mod utils;
 
 // service name to store
@@ -27,7 +28,6 @@ async fn init_encryption(
     dracoon: Dracoon<Connected>,
     encryption_password: Option<String>,
 ) -> Result<Dracoon<Connected>, DcCmdError> {
-
     let account = format!("{}-crypto", dracoon.get_base_url());
 
     let entry = Entry::new(SERVICE_NAME, &account).map_err(|_| DcCmdError::CredentialStorageFailed);
@@ -63,12 +63,12 @@ async fn init_encryption(
 
     // If necessary, create a new entry to store the secret
     if store {
-        let entry = Entry::new(SERVICE_NAME, &account).map_err(|_| DcCmdError::CredentialStorageFailed)?;
+        let entry =
+            Entry::new(SERVICE_NAME, &account).map_err(|_| DcCmdError::CredentialStorageFailed)?;
         set_dracoon_env(&entry, &secret)?;
     }
 
     Ok(dracoon)
-
 }
 
 async fn init_dracoon(
@@ -82,11 +82,14 @@ async fn init_dracoon(
     // use multiple access tokens for transfers
     let token_rotation = if is_transfer { 5 } else { 1 };
 
+    let dccmd_user_agent = format!("{}|{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+
     let dracoon = DracoonBuilder::new()
         .with_base_url(base_url.clone())
         .with_client_id(client_id)
         .with_client_secret(client_secret)
         .with_token_rotation(token_rotation)
+        .with_user_agent(dccmd_user_agent)
         .build()?;
 
     let entry =

@@ -1,4 +1,9 @@
-use std::{collections::HashMap, path::Path, time::Duration, sync::atomic::{AtomicU64, Ordering}};
+use std::{
+    collections::HashMap,
+    path::Path,
+    sync::atomic::{AtomicU64, Ordering},
+    time::Duration,
+};
 
 use futures_util::future::join_all;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -40,14 +45,14 @@ pub async fn download(
     let node = if is_search_query(&node_name) {
         debug!("Searching for query {}", node_name);
         debug!("Parent path {}", parent_path);
-        dracoon.get_node_from_path(&parent_path).await?
+        dracoon.nodes.get_node_from_path(&parent_path).await?
     } else {
-        dracoon.get_node_from_path(&node_path).await?
+        dracoon.nodes.get_node_from_path(&node_path).await?
     };
 
     let Some(node) = node else {
         error!("Node not found");
-        return Err(DcCmdError::InvalidPath(source.clone()))
+        return Err(DcCmdError::InvalidPath(source.clone()));
     };
 
     if node.is_encrypted == Some(true) {
@@ -84,7 +89,6 @@ async fn download_file(
     node: &Node,
     target: &str,
 ) -> Result<(), DcCmdError> {
-
     info!("Attempting download of node {}.", node.name);
     info!("Target: {}", target);
 
@@ -104,7 +108,9 @@ async fn download_file(
         target.to_string()
     };
 
-    let mut out_file = tokio::fs::File::create(target).await.or(Err(DcCmdError::IoError))?;
+    let mut out_file = tokio::fs::File::create(target)
+        .await
+        .or(Err(DcCmdError::IoError))?;
 
     let progress_bar = ProgressBar::new(node.size.unwrap_or(0));
     progress_bar.set_style(
@@ -145,7 +151,6 @@ async fn download_files(
     targets: Option<HashMap<u64, String>>,
     velocity: Option<u8>,
 ) -> Result<(), DcCmdError> {
-
     info!("Attempting download of {} files.", files.len());
     info!("Target: {}", target);
 
@@ -189,7 +194,9 @@ async fn download_files(
                     target.join(&file.name)
                 };
 
-                let mut out_file = tokio::fs::File::create(&target).await.or(Err(DcCmdError::IoError))?;
+                let mut out_file = tokio::fs::File::create(&target)
+                    .await
+                    .or(Err(DcCmdError::IoError))?;
 
                 let node_name = file.name.clone();
 
@@ -201,7 +208,12 @@ async fn download_files(
                             progress_bar_mv.inc(progress);
                         })),
                     )
-                    .await?;
+                    .await
+                    .map_err(|e| {
+                        error!("Error downloading file: {}", node_name);
+                        error!("{:?}", e);
+                        e
+                    })?;
 
                 _ = &rm_files.fetch_sub(1, Ordering::Relaxed);
                 let message = format!("Downloading {} files", &rm_files.load(Ordering::Relaxed));
@@ -233,7 +245,6 @@ async fn download_container(
     target: &str,
     velocity: Option<u8>,
 ) -> Result<(), DcCmdError> {
-
     info!("Attempting download of container {}.", node.name);
     info!("Target: {}", target);
 
@@ -316,6 +327,7 @@ async fn get_files(
         .build();
 
     let mut files = dracoon
+        .nodes
         .search_nodes("*", Some(parent_node.id), Some(-1), Some(params))
         .await?;
 
@@ -334,6 +346,7 @@ async fn get_files(
                     .build();
 
                 let files = dracoon_client
+                    .nodes
                     .search_nodes("*", Some(parent_node.id), Some(-1), Some(params))
                     .await?;
 
@@ -372,6 +385,7 @@ async fn filter_files_in_sub_rooms(
 
     // ignore files in sub rooms
     let sub_rooms = dracoon
+        .nodes
         .search_nodes("*", Some(parent_node.id), None, Some(params))
         .await?;
 
@@ -405,6 +419,7 @@ async fn get_folders(
         .build();
 
     let mut folders = dracoon
+        .nodes
         .search_nodes("*", Some(parent_node.id), Some(-1), Some(params))
         .await?;
 
@@ -423,6 +438,7 @@ async fn get_folders(
                     .build();
 
                 let folders = dracoon_client
+                    .nodes
                     .search_nodes("*", Some(parent_node.id), Some(-1), Some(params))
                     .await?;
 
