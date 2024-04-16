@@ -197,7 +197,7 @@ impl UserCommandHandler {
             let reqs = (500..=total)
                 .step_by(500)
                 .map(|offset| {
-                    let params = self.build_params(&search, offset.into(), 500);
+                    let params = self.build_params(&search, offset, 500);
                     self.client.users.get_users(Some(params), None, None)
                 })
                 .collect::<Vec<_>>();
