@@ -149,7 +149,7 @@ async fn main() {
         DcCmdCommand::Rm { source, recursive } => {
             delete_node(term, source, Some(recursive), password_auth).await
         }
-        DcCmdCommand::Users { cmd, target } => handle_users_cmd(cmd, term, target).await,
+        DcCmdCommand::Users { cmd } => handle_users_cmd(cmd, term).await,
 
         DcCmdCommand::Version => {
             println!("dccmd-rs {}", env!("CARGO_PKG_VERSION"));

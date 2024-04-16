@@ -199,8 +199,6 @@ pub enum DcCmdCommand {
     Users {
         #[clap(subcommand)]
         cmd: UserCommand,
-
-        target: String,
     },
 
     /// Print current dccmd-rs version
@@ -211,6 +209,9 @@ pub enum DcCmdCommand {
 pub enum UserCommand {
     /// List users in DRACOON
     Ls {
+        /// DRACOON url 
+        target: String,
+
         /// search filter (username, first name, last name)
         #[clap(long)]
         search: Option<String>,
@@ -234,6 +235,9 @@ pub enum UserCommand {
 
     /// Create a user in DRACOON
     Create {
+        /// DRACOON url 
+        target: String,
+
         /// User first name
         #[clap(long, short)]
         first_name: String,
@@ -261,6 +265,9 @@ pub enum UserCommand {
 
     /// delete a user in DRACOON
     Rm {
+        /// DRACOON url 
+        target: String,
+
         /// User login
         #[clap(long, short)]
         user_name: Option<String>,
@@ -271,6 +278,9 @@ pub enum UserCommand {
 
     /// import users from CSV file into DRACOON
     Import {
+        /// DRACOON url 
+        target: String,
+
         /// Source file path
         source: String,
 
@@ -281,6 +291,9 @@ pub enum UserCommand {
 
     /// print user information in DRACOON
     Info {
+        /// DRACOON url 
+        target: String,
+
         /// User login
         #[clap(long, short)]
         user_name: Option<String>,
