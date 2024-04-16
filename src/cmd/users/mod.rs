@@ -158,6 +158,22 @@ impl UserCommandHandler {
         Ok(())
     }
 
+    fn build_params(&self, search: &Option<String>, offset: u64, limit: u64) -> ListAllParams {
+        if let Some(search) = search {
+            let filter = UsersFilter::username_contains(search);
+            ListAllParams::builder()
+                .with_filter(filter)
+                .with_offset(offset)
+                .with_limit(limit)
+                .build()
+        } else {
+            ListAllParams::builder()
+                .with_offset(offset)
+                .with_limit(limit)
+                .build()
+        }
+    }
+
     async fn list_users(
         &self,
         search: Option<String>,
@@ -166,19 +182,7 @@ impl UserCommandHandler {
         all: bool,
         csv: bool,
     ) -> Result<(), DcCmdError> {
-        let params = if let Some(search) = search {
-            let filter = UsersFilter::username_contains(search);
-            ListAllParams::builder()
-                .with_filter(filter)
-                .with_offset(offset.unwrap_or(0) as u64)
-                .with_limit(limit.unwrap_or(500) as u64)
-                .build()
-        } else {
-            ListAllParams::builder()
-                .with_offset(offset.unwrap_or(0) as u64)
-                .with_limit(limit.unwrap_or(500) as u64)
-                .build()
-        };
+        let params = self.build_params(&search, offset.unwrap_or(0).into(), limit.unwrap_or(500).into());
 
         let results = self
             .client
@@ -193,10 +197,7 @@ impl UserCommandHandler {
             let reqs = (500..=total)
                 .step_by(500)
                 .map(|offset| {
-                    let params = ListAllParams::builder()
-                        .with_offset(offset)
-                        .with_limit(500)
-                        .build();
+                    let params = self.build_params(&search, offset.into(), 500);
                     self.client.users.get_users(Some(params), None, None)
                 })
                 .collect::<Vec<_>>();
