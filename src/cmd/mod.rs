@@ -210,6 +210,14 @@ fn get_error_message(err: &DcCmdError) -> String {
     }
 }
 
+pub fn print_version(term: &Term) -> Result<(), DcCmdError> {
+    term.write_line(get_version().as_str()).map_err(|_| DcCmdError::IoError)
+}
+
+pub fn get_version() -> String {
+    format!("🚀 dccmd-rs {}\n▶︎ https://github.com/unbekanntes-pferd/dccmd-rs", env!("CARGO_PKG_VERSION"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

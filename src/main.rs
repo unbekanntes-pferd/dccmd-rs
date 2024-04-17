@@ -3,13 +3,10 @@
 
 use clap::Parser;
 use cmd::{
-    handle_error,
-    models::{DcCmd, DcCmdCommand, PasswordAuth},
-    nodes::{
+    handle_error, models::{DcCmd, DcCmdCommand, PasswordAuth}, nodes::{
         create_folder, create_room, delete_node, download::download, list_nodes,
         models::UploadOptions, upload::upload,
-    },
-    users::handle_users_cmd,
+    }, print_version, users::handle_users_cmd
 };
 use console::Term;
 use std::fs::OpenOptions;
@@ -152,8 +149,7 @@ async fn main() {
         DcCmdCommand::Users { cmd } => handle_users_cmd(cmd, term).await,
 
         DcCmdCommand::Version => {
-            println!("dccmd-rs {}", env!("CARGO_PKG_VERSION"));
-            Ok(())
+            print_version(&term)
         }
     };
 
