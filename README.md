@@ -76,6 +76,14 @@ To download a list search result, use the download command with a search string:
 dccmd-rs download your.dracoon.domain/some/*.pdf ./your/path
 ```
 
+To download a file with **no** authorization to a public download share (share):
+
+```bash
+dccmd-rs download your.dracoon.domain/public/download-shares/someLongAccessKey /your/path
+```
+
+**Note**: This essentially means you need to copy the created share link
+
 ### Uploads
 
 To upload a file, use the upload command:
@@ -98,6 +106,14 @@ To upload a folder, use the `--recursive` flag:
 dccmd-rs upload /your/path your.dracoon.domain/some/room
 ```
 **Note:** Currently only absolute paths are supported for recursive uploads.
+
+To upload a file with **no** authorization to a public upload share (file request):
+
+```bash
+dccmd-rs upload /your/path your.dracoon.domain/public/upload-shares/someLongAccessKey
+```
+
+**Note**: This essentially means you need to copy the created share link
 
 ### Listing nodes
 To list nodes, use the `ls` command:
@@ -165,33 +181,33 @@ To list users, you can use the `users some.dracoon.domain.com ls` command:
 ```bash
 # optional flags: --all (lists all users, default: 500, paging) --csv (csv format)
 # optional flags: --search (by username)
-dccmd-rs users your.dracoon.domain/ ls
-dccmd-rs users your.dracoon.domain/ ls --csv --all > userlist.csv
-dccmd-rs users your.dracoon.domain/ ls --search foo
+dccmd-rs users ls your.dracoon.domain/
+dccmd-rs users ls your.dracoon.domain/ --csv --all > userlist.csv
+dccmd-rs users ls your.dracoon.domain/ --search foo
 ```
 
 To create users, you can use the `users some.dracoon.domain.com create` command:
 
 ```bash
 # params: --first-name, --last-name, --email, --login, --oidc-id 
-dccmd-rs users your.dracoon.domain/ create -f foo -l bar -e foo@bar.com # local user
-dccmd-rs users your.dracoon.domain/ create -f foo -l bar -e foo@bar.com --oidc-id 2 # OIDC user
+dccmd-rs users create your.dracoon.domain/ -f foo -l bar -e foo@bar.com # local user
+dccmd-rs users create your.dracoon.domain/ -f foo -l bar -e foo@bar.com --oidc-id 2 # OIDC user
 ```
 
 To delete users, you can use the `users some.dracoon.domain.com rm` command:
 
 ```bash
 # supported: user id, user login / username
-dccmd-rs users your.dracoon.domain/ rm --user-id 2
-dccmd-rs users your.dracoon.domain/ rm --user-name foo # short: -u
+dccmd-rs users rm your.dracoon.domain/ --user-id 2
+dccmd-rs users rm your.dracoon.domain/ --user-name foo # short: -u
 ```
 
 To fetch specific user info, you can use the `users some.dracoon.domain.com info` command:
 
 ```bash
 # supported: user id, user login / username
-dccmd-rs users your.dracoon.domain/ info --user-id 2
-dccmd-rs users your.dracoon.domain/ info --user-name foo # short: -u
+dccmd-rs users info your.dracoon.domain/ --user-id 2
+dccmd-rs users info your.dracoon.domain/ --user-name foo # short: -u
 ```
 
 ### CLI mode
