@@ -67,8 +67,8 @@ impl UserCommandHandler {
                     &import.email,
                     import.login.as_deref(),
                     oidc_id,
-                    true,
                     import.mfa_enabled.unwrap_or(false),
+                    true
                 )
             })
             .collect::<Vec<_>>();
