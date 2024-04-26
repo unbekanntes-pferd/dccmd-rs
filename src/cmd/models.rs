@@ -51,6 +51,7 @@ impl From<DracoonClientError> for DcCmdError {
             DracoonClientError::InvalidUrl(url) => DcCmdError::InvalidUrl(url),
             DracoonClientError::IoError => DcCmdError::IoError,
             DracoonClientError::S3Error(err) => DcCmdError::DracoonS3Error(err),
+            DracoonClientError::MissingArgument => DcCmdError::InvalidArgument("Missing argument (password set?)".to_string()),
             _ => DcCmdError::Unknown,
         }
     }
@@ -116,6 +117,9 @@ pub enum DcCmdCommand {
         /// share upload
         #[clap(long)]
         share: bool,
+
+        #[clap(long)]
+        share_password: Option<String>,
     },
     /// Download a file or container from DRACOON to target
     Download {
@@ -130,6 +134,9 @@ pub enum DcCmdCommand {
         /// recursive download
         #[clap(short, long)]
         recursive: bool,
+
+        #[clap(long)]
+        share_password: Option<String>,
     },
     /// List nodes in DRACOON
     Ls {

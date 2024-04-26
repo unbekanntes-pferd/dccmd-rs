@@ -126,6 +126,22 @@ async fn init_dracoon(
     authenticate_auth_code_flow(dracoon, entry).await
 }
 
+pub async fn init_public_dracoon(url_path: &str) -> Result<Dracoon<Disconnected> , DcCmdError> {
+    let (client_id, client_secret) = get_client_credentials();
+    let base_url = parse_base_url(url_path.to_string())?;
+
+    let dccmd_user_agent = format!("{}|{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+
+    let dracoon = DracoonBuilder::new()
+        .with_base_url(base_url.clone())
+        .with_client_id(client_id)
+        .with_client_secret(client_secret)
+        .with_user_agent(dccmd_user_agent)
+        .build()?;
+
+    Ok(dracoon)
+}
+
 async fn authenticate_auth_code_flow(
     dracoon: Dracoon<Disconnected>,
     entry: Entry,

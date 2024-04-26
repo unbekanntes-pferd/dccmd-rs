@@ -619,8 +619,7 @@ dependencies = [
 [[package]]
 name = "dco3"
 version = "0.10.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0cf20b87cc3a94fece8f77d2e37ab2b55c23ec3525fadf206f12548d4c4555d6"
+source = "git+https://github.com/unbekanntes-pferd/dco3?branch=feature/public-upload#b8f3da3724af83470b0403b7d42257941a460387"
 dependencies = [
  "async-stream",
  "async-trait",
@@ -646,9 +645,9 @@ dependencies = [
 
 [[package]]
 name = "dco3_crypto"
-version = "0.6.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9f8934c0f0fcd92fcd902ccd80da5cf2e21e932b9a1286a1c8eeafd4e938a16"
+checksum = "63c2024bab3ab4d684f04d6f1e43b67682861dc5d019f1be7dae2554aaa81779"
 dependencies = [
  "openssl",
  "serde",
@@ -659,8 +658,7 @@ dependencies = [
 [[package]]
 name = "dco3_derive"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "106c5727483277ecfd7a6f9c63aa6fc3d66a0c95f35f751102a8ca058173cca5"
+source = "git+https://github.com/unbekanntes-pferd/dco3?branch=feature/public-upload#b8f3da3724af83470b0403b7d42257941a460387"
 dependencies = [
  "quote",
  "syn 2.0.59",

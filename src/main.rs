@@ -3,10 +3,14 @@
 
 use clap::Parser;
 use cmd::{
-    handle_error, models::{DcCmd, DcCmdCommand, PasswordAuth}, nodes::{
+    handle_error,
+    models::{DcCmd, DcCmdCommand, PasswordAuth},
+    nodes::{
         create_folder, create_room, delete_node, download::download, list_nodes,
-        models::UploadOptions, upload::upload,
-    }, print_version, users::handle_users_cmd
+        models::{CmdDownloadOptions, CmdUploadOptions}, upload::upload,
+    },
+    print_version,
+    users::handle_users_cmd,
 };
 use console::Term;
 use std::fs::OpenOptions;
@@ -74,14 +78,18 @@ async fn main() {
             target,
             velocity,
             recursive,
+            share_password,
         } => {
             download(
                 source,
                 target,
-                velocity,
-                recursive,
-                password_auth,
-                opt.encryption_password,
+                CmdDownloadOptions::new(
+                    recursive,
+                    velocity,
+                    password_auth,
+                    opt.encryption_password,
+                    share_password,
+                ),
             )
             .await
         }
@@ -94,21 +102,24 @@ async fn main() {
             recursive,
             skip_root,
             share,
+            share_password
         } => {
             upload(
                 term,
                 source.into(),
                 target,
-                UploadOptions::new(
+                CmdUploadOptions::new(
                     overwrite,
-                    classification,
-                    velocity,
                     recursive,
                     skip_root,
                     share,
-                ),
-                password_auth,
-                opt.encryption_password,
+                    classification,
+                    velocity,
+                    password_auth,
+                    opt.encryption_password,
+                    share_password,
+
+                )
             )
             .await
         }
@@ -148,9 +159,7 @@ async fn main() {
         }
         DcCmdCommand::Users { cmd } => handle_users_cmd(cmd, term).await,
 
-        DcCmdCommand::Version => {
-            print_version(&term)
-        }
+        DcCmdCommand::Version => print_version(&term),
     };
 
     if let Err(e) = res {

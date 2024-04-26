@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::{
+    ops::Add,
+    sync::{atomic::AtomicU32, Arc},
+};
 
 use console::Term;
 use dco3::{
@@ -30,8 +33,17 @@ pub struct UserCommandHandler {
 }
 
 impl UserCommandHandler {
-    pub async fn try_new(target_domain: &str, term: Term) -> Result<Self, DcCmdError> {
-        let client = init_dracoon(target_domain, None, false).await?;
+    pub async fn try_new(
+        target_domain: &str,
+        term: Term,
+        is_import: bool,
+    ) -> Result<Self, DcCmdError> {
+        let client = if is_import {
+            init_dracoon(target_domain, None, true).await?
+        } else {
+            init_dracoon(target_domain, None, false).await?
+        };
+
         Ok(Self { client, term })
     }
 
@@ -68,17 +80,27 @@ impl UserCommandHandler {
                     import.login.as_deref(),
                     oidc_id,
                     import.mfa_enabled.unwrap_or(false),
-                    true
+                    true,
                 )
             })
             .collect::<Vec<_>>();
 
+        let errors = AtomicU32::new(0);
+
         stream::iter(reqs)
             .chunks(5)
             .for_each_concurrent(None, |f| async move {
-                join_all(f).await;
+                let results = join_all(f).await;
+                results.iter().filter(|r| r.is_err()).for_each(|r| {
+                    error!("Failed to import user: {:?}", r);
+                });
+                let errors = results.iter().filter(|r| r.is_err()).count() as u32;
+                let prev = errors.add(errors);
+                error!("Current error count: {}", prev);
             })
             .await;
+
+        let imported = imports.len() as u32 - errors.load(std::sync::atomic::Ordering::Relaxed);
 
         let msg = format!("{} users imported", imports.len());
 
@@ -301,7 +323,6 @@ impl UserCommandHandler {
 }
 
 pub async fn handle_users_cmd(cmd: UserCommand, term: Term) -> Result<(), DcCmdError> {
-
     let target = match &cmd {
         UserCommand::Create { target, .. }
         | UserCommand::Ls { target, .. }
@@ -310,7 +331,10 @@ pub async fn handle_users_cmd(cmd: UserCommand, term: Term) -> Result<(), DcCmdE
         | UserCommand::Info { target, .. } => target,
     };
 
-    let handler = UserCommandHandler::try_new(&target, term).await?;
+    let handler = match &cmd {
+        UserCommand::Import { .. } => UserCommandHandler::try_new(target, term, true).await?,
+        _ => UserCommandHandler::try_new(target, term, false).await?,
+    };
 
     match cmd {
         UserCommand::Create {

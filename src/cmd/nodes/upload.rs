@@ -14,8 +14,8 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use tracing::{debug, error, info};
 
 use crate::cmd::{
-    init_dracoon, init_encryption,
-    models::{DcCmdError, PasswordAuth},
+    init_dracoon, init_encryption, init_public_dracoon,
+    models::DcCmdError,
     nodes::share::share_node,
     utils::{
         dates::to_datetime_utc,
@@ -28,22 +28,28 @@ use dco3::{
         models::{FileMeta, ResolutionStrategy, UploadOptions},
         CreateFolderRequest, Node, Nodes, Upload,
     },
-    Dracoon, DracoonClientError, Folders,
+    public::PublicUpload,
+    Dracoon, DracoonClientError, Folders, Public,
 };
+
+use super::models::CmdUploadOptions;
 
 // this is currently set low to display progress
 // TODO: fix dco3 chunk progress for uploads
-const DEFAULT_CHUNK_SIZE: usize = 1024 * 1024 * 5; // 5 MB
+pub const DEFAULT_CHUNK_SIZE: usize = 1024 * 1024 * 5; // 5 MB
 
 pub async fn upload(
     term: Term,
     source: PathBuf,
     target: String,
-    options: super::models::UploadOptions,
-    auth: Option<PasswordAuth>,
-    encryption_password: Option<String>,
+    opts: CmdUploadOptions,
 ) -> Result<(), DcCmdError> {
-    let mut dracoon = init_dracoon(&target, auth, true).await?;
+    // this is a public upload share
+    if target.contains("/public/upload-shares/") {
+        return upload_public_file(source, target, opts).await;
+    }
+
+    let mut dracoon = init_dracoon(&target, opts.auth, true).await?;
 
     let (parent_path, node_name, _) = parse_path(&target, dracoon.get_base_url().as_str())
         .or(Err(DcCmdError::InvalidPath(target.clone())))?;
@@ -57,17 +63,17 @@ pub async fn upload(
     };
 
     if parent_node.is_encrypted == Some(true) {
-        dracoon = init_encryption(dracoon, encryption_password).await?;
+        dracoon = init_encryption(dracoon, opts.encryption_password).await?;
     }
 
-    if parent_node.is_encrypted.unwrap_or(false) && options.share {
+    if parent_node.is_encrypted.unwrap_or(false) && opts.share {
         error!("Parent node is encrypted. Cannot upload to encrypted nodes.");
         return Err(DcCmdError::InvalidArgument(
             "Sharing encrypted files currently not supported (remove --share flag).".to_string(),
         ));
     }
 
-    match (source.is_file(), source.is_dir(), options.recursive) {
+    match (source.is_file(), source.is_dir(), opts.recursive) {
         // is a file
         (true, _, _) => {
             upload_file(
@@ -75,9 +81,9 @@ pub async fn upload(
                 &dracoon,
                 source,
                 &parent_node,
-                options.overwrite,
-                options.classification,
-                options.share,
+                opts.overwrite,
+                opts.classification,
+                opts.share,
             )
             .await?
         }
@@ -88,10 +94,10 @@ pub async fn upload(
                 source,
                 &parent_node,
                 &node_path,
-                options.overwrite,
-                options.skip_root,
-                options.classification,
-                options.velocity,
+                opts.overwrite,
+                opts.skip_root,
+                opts.classification,
+                opts.velocity,
             )
             .await?
         }
@@ -108,6 +114,81 @@ pub async fn upload(
             ));
         }
     }
+
+    Ok(())
+}
+
+async fn upload_public_file(
+    source: PathBuf,
+    target: String,
+    opts: CmdUploadOptions,
+) -> Result<(), DcCmdError> {
+    let dracoon = init_public_dracoon(&target).await?;
+
+    let access_key = target
+        .split('/')
+        .last()
+        .ok_or(DcCmdError::InvalidPath(target.clone()))?;
+
+    let upload_share = dracoon.public.get_public_upload_share(access_key).await?;
+
+    let file = tokio::fs::File::open(&source)
+        .await
+        .or(Err(DcCmdError::IoError))?;
+
+    let file_meta = file.metadata().await.or(Err(DcCmdError::IoError))?;
+
+    if !file_meta.is_file() {
+        return Err(DcCmdError::InvalidPath(
+            source.to_string_lossy().to_string(),
+        ));
+    }
+
+    let file_meta = get_file_meta(&file_meta, &source)?;
+
+    let classification = opts.classification.unwrap_or(2);
+    let resolution_strategy = if opts.overwrite {
+        ResolutionStrategy::Overwrite
+    } else {
+        ResolutionStrategy::AutoRename
+    };
+    let keep_share_links = matches!(resolution_strategy, ResolutionStrategy::Overwrite);
+
+    let file_size = file_meta.1;
+
+    let progress_bar = ProgressBar::new(file_size);
+    progress_bar.set_style(
+    ProgressStyle::default_bar()
+    .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}) {msg}").unwrap()
+    .progress_chars("=>-"),
+);
+
+    let upload_opts = UploadOptions::builder(file_meta)
+        .with_classification(classification)
+        .with_resolution_strategy(resolution_strategy)
+        .with_keep_share_links(keep_share_links)
+        .build();
+
+    let reader = tokio::io::BufReader::new(file);
+
+    let progress_bar_mv = progress_bar.clone();
+
+    progress_bar_mv.set_message("Uploading");
+    progress_bar_mv.set_length(file_size);
+
+    dracoon
+        .public
+        .upload(
+            access_key,
+            upload_share,
+            upload_opts,
+            reader,
+            Some(Box::new(move |progress, total| {
+                progress_bar_mv.set_position(progress);
+            })),
+            Some(DEFAULT_CHUNK_SIZE),
+        )
+        .await?;
 
     Ok(())
 }
@@ -138,7 +219,7 @@ async fn upload_file(
     let file_meta = get_file_meta(&file_meta, &source)?;
     let file_name = file_meta.0.clone();
 
-    let progress_bar = ProgressBar::new(target_node.size.unwrap_or(0));
+    let progress_bar = ProgressBar::new(file_meta.1);
     progress_bar.set_style(
     ProgressStyle::default_bar()
     .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}) {msg}").unwrap()
@@ -158,7 +239,7 @@ async fn upload_file(
     };
     let keep_share_links = matches!(resolution_strategy, ResolutionStrategy::Overwrite);
 
-    let upload_options = UploadOptions::builder()
+    let upload_options = UploadOptions::builder(file_meta)
         .with_classification(classification)
         .with_resolution_strategy(resolution_strategy)
         .with_keep_share_links(keep_share_links)
@@ -168,7 +249,6 @@ async fn upload_file(
 
     let node = dracoon
         .upload(
-            file_meta,
             target_node,
             upload_options,
             reader,
@@ -618,7 +698,7 @@ async fn upload_files(
 
                 let keep_share_links = matches!(resolution_strategy, ResolutionStrategy::Overwrite);
 
-                let upload_options = UploadOptions::builder()
+                let upload_options = UploadOptions::builder(file_meta)
                     .with_classification(classification)
                     .with_resolution_strategy(resolution_strategy)
                     .with_keep_share_links(keep_share_links)
@@ -628,7 +708,6 @@ async fn upload_files(
 
                 client
                     .upload(
-                        file_meta,
                         &parent_node,
                         upload_options,
                         reader,
