@@ -126,7 +126,7 @@ async fn init_dracoon(
     authenticate_auth_code_flow(dracoon, entry).await
 }
 
-pub async fn init_public_dracoon(url_path: &str) -> Result<Dracoon<Disconnected> , DcCmdError> {
+pub async fn init_public_dracoon(url_path: &str) -> Result<Dracoon<Disconnected>, DcCmdError> {
     let (client_id, client_secret) = get_client_credentials();
     let base_url = parse_base_url(url_path.to_string())?;
 
@@ -227,11 +227,15 @@ fn get_error_message(err: &DcCmdError) -> String {
 }
 
 pub fn print_version(term: &Term) -> Result<(), DcCmdError> {
-    term.write_line(get_version().as_str()).map_err(|_| DcCmdError::IoError)
+    term.write_line(get_version().as_str())
+        .map_err(|_| DcCmdError::IoError)
 }
 
 pub fn get_version() -> String {
-    format!("🚀 dccmd-rs {}\n▶︎ https://github.com/unbekanntes-pferd/dccmd-rs", env!("CARGO_PKG_VERSION"))
+    format!(
+        "🚀 dccmd-rs {}\n▶︎ https://github.com/unbekanntes-pferd/dccmd-rs",
+        env!("CARGO_PKG_VERSION")
+    )
 }
 
 #[cfg(test)]

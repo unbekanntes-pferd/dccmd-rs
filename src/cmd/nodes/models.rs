@@ -1,7 +1,10 @@
 use console::Term;
 use dco3::{auth::Connected, Dracoon};
 
-use crate::cmd::{init_dracoon, models::{DcCmdError, PasswordAuth}};
+use crate::cmd::{
+    init_dracoon,
+    models::{DcCmdError, PasswordAuth},
+};
 
 pub struct CmdMkRoomOptions {
     pub inherit_permissions: bool,
@@ -24,7 +27,6 @@ impl CmdMkRoomOptions {
             admin_users,
         }
     }
-
 }
 
 pub struct CmdDownloadOptions {
@@ -32,7 +34,7 @@ pub struct CmdDownloadOptions {
     pub velocity: Option<u8>,
     pub auth: Option<PasswordAuth>,
     pub encryption_password: Option<String>,
-    pub share_password: Option<String>
+    pub share_password: Option<String>,
 }
 
 impl CmdDownloadOptions {
@@ -62,9 +64,10 @@ pub struct CmdUploadOptions {
     pub velocity: Option<u8>,
     pub auth: Option<PasswordAuth>,
     pub encryption_password: Option<String>,
-    pub share_password: Option<String>
+    pub share_password: Option<String>,
 }
 
+#[allow(clippy::too_many_arguments)]
 impl CmdUploadOptions {
     pub fn new(
         overwrite: bool,
@@ -86,7 +89,7 @@ impl CmdUploadOptions {
             share,
             auth,
             encryption_password,
-            share_password
+            share_password,
         }
     }
 }

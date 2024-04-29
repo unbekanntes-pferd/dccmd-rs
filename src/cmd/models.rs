@@ -52,7 +52,9 @@ impl From<DracoonClientError> for DcCmdError {
             DracoonClientError::InvalidUrl(url) => DcCmdError::InvalidUrl(url),
             DracoonClientError::IoError => DcCmdError::IoError,
             DracoonClientError::S3Error(err) => DcCmdError::DracoonS3Error(err),
-            DracoonClientError::MissingArgument => DcCmdError::InvalidArgument("Missing argument (password set?)".to_string()),
+            DracoonClientError::MissingArgument => {
+                DcCmdError::InvalidArgument("Missing argument (password set?)".to_string())
+            }
             _ => DcCmdError::Unknown,
         }
     }
@@ -225,7 +227,7 @@ pub enum DcCmdCommand {
 pub enum UserCommand {
     /// List users in DRACOON
     Ls {
-        /// DRACOON url 
+        /// DRACOON url
         target: String,
 
         /// search filter (username, first name, last name)
@@ -251,7 +253,7 @@ pub enum UserCommand {
 
     /// Create a user in DRACOON
     Create {
-        /// DRACOON url 
+        /// DRACOON url
         target: String,
 
         /// User first name
@@ -281,7 +283,7 @@ pub enum UserCommand {
 
     /// delete a user in DRACOON
     Rm {
-        /// DRACOON url 
+        /// DRACOON url
         target: String,
 
         /// User login
@@ -294,7 +296,7 @@ pub enum UserCommand {
 
     /// import users from CSV file into DRACOON
     Import {
-        /// DRACOON url 
+        /// DRACOON url
         target: String,
 
         /// Source file path
@@ -307,7 +309,7 @@ pub enum UserCommand {
 
     /// print user information in DRACOON
     Info {
-        /// DRACOON url 
+        /// DRACOON url
         target: String,
 
         /// User login

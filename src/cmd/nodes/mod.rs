@@ -386,7 +386,9 @@ pub async fn create_room(
                 .collect();
 
             if admin_users.is_empty() {
-                return Err(DcCmdError::InvalidArgument("No valid admin users provided.".to_string()));
+                return Err(DcCmdError::InvalidArgument(
+                    "No valid admin users provided.".to_string(),
+                ));
             }
 
             CreateRoomRequest::builder(&node_name.clone())

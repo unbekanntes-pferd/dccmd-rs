@@ -85,10 +85,13 @@ impl UserCommandHandler {
 
         let progress_bar = ProgressBar::new(reqs.len() as u64);
         progress_bar.set_style(
-        ProgressStyle::default_bar()
-           .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {percent}% {msg}").unwrap()
-           .progress_chars("=>-"),
-);
+            ProgressStyle::default_bar()
+                .template(
+                    "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {percent}% {msg}",
+                )
+                .unwrap()
+                .progress_chars("=>-"),
+        );
 
         let errors = Arc::new(AtomicU32::new(0));
 
