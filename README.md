@@ -162,8 +162,12 @@ dccmd-rs mkroom your.dracoon.domain/some/path/newroom
 # pass optional usernames for admins (example adds admins with usernames foo1, foo2 and foo3)
 dccmd-rs mkroom your.dracoon.domain/some/path/newroom -a foo1 -a foo2 -a foo3
 
+# you can additionally inherit permissions using the --inherit-permissions flag 
+dccmd-rs mkroom your.dracoon.domain/some/path/newroom -a foo1 --inherit-permissions
+
+# you can also set the default classification (example sets to confidential)
+dccmd-rs mkroom your.dracoon.domain/some/path/newroom --classification 3
 ```
-*Note*: Rooms can currently only be created as inheriting permissions from parent.
 
 ### Managing users
 
