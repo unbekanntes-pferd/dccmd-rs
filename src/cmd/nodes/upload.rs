@@ -45,11 +45,18 @@ pub async fn upload(
     opts: CmdUploadOptions,
 ) -> Result<(), DcCmdError> {
     // this is a public upload share
-    if target.contains("/public/upload-shares/") {
-        return upload_public_file(source, target, opts).await;
+    match (target.contains("/public/upload-shares/"), source.is_file()) {
+        (true, true) => return upload_public_file(source, target, opts).await,
+        (true, false) => {
+            error!("Public upload shares only support file uploads.");
+            return Err(DcCmdError::InvalidPath(
+                source.to_string_lossy().to_string(),
+            ));
+        }
+        _ => (),
     }
 
-    let mut dracoon = init_dracoon(&target, opts.auth, true).await?;
+    let mut dracoon = init_dracoon(&target, opts.auth.clone(), true).await?;
 
     let (parent_path, node_name, _) = parse_path(&target, dracoon.get_base_url().as_str())
         .or(Err(DcCmdError::InvalidPath(target.clone())))?;
@@ -63,7 +70,7 @@ pub async fn upload(
     };
 
     if parent_node.is_encrypted == Some(true) {
-        dracoon = init_encryption(dracoon, opts.encryption_password).await?;
+        dracoon = init_encryption(dracoon, opts.encryption_password.clone()).await?;
     }
 
     if parent_node.is_encrypted.unwrap_or(false) && opts.share {
@@ -89,17 +96,7 @@ pub async fn upload(
         }
         // is a directory and recursive flag is set
         (_, true, true) => {
-            upload_container(
-                &dracoon,
-                source,
-                &parent_node,
-                &node_path,
-                opts.overwrite,
-                opts.skip_root,
-                opts.classification,
-                opts.velocity,
-            )
-            .await?
+            upload_container(&dracoon, source, &parent_node, &node_path, &opts).await?
         }
         // is a directory and recursive flag is not set
         (_, true, false) => {
@@ -277,16 +274,13 @@ async fn upload_file(
     Ok(())
 }
 
-#[allow(clippy::too_many_lines, clippy::too_many_arguments)]
+#[allow(clippy::too_many_lines)]
 async fn upload_container(
     dracoon: &Dracoon<Connected>,
     source: PathBuf,
     target: &Node,
     target_parent: &str,
-    overwrite: bool,
-    skip_root: bool,
-    classification: Option<u8>,
-    velocity: Option<u8>,
+    opts: &CmdUploadOptions,
 ) -> Result<(), DcCmdError> {
     info!("Attempting upload of folder: {}.", source.to_string_lossy());
     info!("Target node: {}.", target.name);
@@ -315,7 +309,7 @@ async fn upload_container(
     progress_spinner.set_message("Creating folder structure...");
     progress_spinner.enable_steady_tick(Duration::from_millis(100));
     progress.add(progress_spinner);
-    let parent_id = if skip_root {
+    let parent_id = if opts.skip_root {
         info!("Skipping root folder.");
         target.id
     } else {
@@ -405,7 +399,7 @@ async fn upload_container(
                 target_parent,
                 &name,
                 folder,
-                skip_root,
+                opts.skip_root,
             )
             .await?;
             progress_bar.inc(processed as u64);
@@ -446,7 +440,7 @@ async fn upload_container(
             debug!("Parent path: {}", parent_path);
             debug!("{:?}", created_nodes);
 
-            if overwrite {
+            if opts.overwrite {
                 //TODO: broken - does not work, entry not present
                 let path = format!("{}{}", target_parent, parent_path);
                 let node = dracoon.nodes.get_node_from_path(&path).await?;
@@ -470,7 +464,7 @@ async fn upload_container(
         target_parent,
         &name,
         &source,
-        skip_root,
+        opts.skip_root,
     )
     .await?;
 
@@ -486,9 +480,9 @@ async fn upload_container(
         dracoon,
         target,
         file_map,
-        overwrite,
-        classification,
-        velocity,
+        opts.overwrite,
+        opts.classification,
+        opts.velocity,
     )
     .await?;
 

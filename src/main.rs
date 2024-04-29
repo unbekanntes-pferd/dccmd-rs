@@ -6,8 +6,11 @@ use cmd::{
     handle_error,
     models::{DcCmd, DcCmdCommand, PasswordAuth},
     nodes::{
-        create_folder, create_room, delete_node, download::download, list_nodes,
-        models::{CmdDownloadOptions, CmdUploadOptions}, upload::upload,
+        create_folder, create_room, delete_node,
+        download::download,
+        list_nodes,
+        models::{CmdDownloadOptions, CmdMkRoomOptions, CmdUploadOptions},
+        upload::upload,
     },
     print_version,
     users::handle_users_cmd,
@@ -102,7 +105,7 @@ async fn main() {
             recursive,
             skip_root,
             share,
-            share_password
+            share_password,
         } => {
             upload(
                 term,
@@ -118,8 +121,7 @@ async fn main() {
                     password_auth,
                     opt.encryption_password,
                     share_password,
-
-                )
+                ),
             )
             .await
         }
@@ -151,9 +153,23 @@ async fn main() {
             notes,
         } => create_folder(term, source, classification, notes, password_auth).await,
         DcCmdCommand::Mkroom {
+            inherit_permissions,
             source,
             classification,
-        } => create_room(term, source, classification, password_auth).await,
+            admin_users,
+        } => {
+            create_room(
+                term,
+                source,
+                CmdMkRoomOptions::new(
+                    inherit_permissions,
+                    classification,
+                    password_auth,
+                    admin_users,
+                ),
+            )
+            .await
+        }
         DcCmdCommand::Rm { source, recursive } => {
             delete_node(term, source, Some(recursive), password_auth).await
         }

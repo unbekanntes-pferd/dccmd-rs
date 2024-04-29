@@ -21,16 +21,16 @@ For all DRACOON operations `dco3` is used.
 
 ## Installation
 
-You can install this using cargo like so:
+You can download precompiled binaries on the Github releases page: 
+[Releases](https://github.com/unbekanntes-pferd/dccmd-rs/releases)
+
+If you have the Rust toolchain installed, you can install this using cargo like so:
 
 ```bash
 cargo install dccmd-rs
 ```
 
-You can also download precompiled binaries on the Github releases page: 
-[Releases](https://github.com/unbekanntes-pferd/dccmd-rs/releases)
-
-If you like it rough, feel free to compile from source:
+If you like it even rougher or would like to contribute, feel free to compile from source:
 
 Clone the repository and either use `cargo run` or build your own executable with `cargo build`:
 
@@ -50,6 +50,7 @@ Currently, the following commands are working:
 - `mkdir` - creates a folder in given path in DRACOON
 - `mkroom` - creates a room (inherits permissions) in given path in DRACOON
 - `rm` - removes a node by given path in DRACOON
+- `users` - user management in DRACOON (see subcommands below)
 
 ## Example usage
 
@@ -118,7 +119,7 @@ dccmd-rs upload /your/path your.dracoon.domain/public/upload-shares/someLongAcce
 ### Listing nodes
 To list nodes, use the `ls` command:
 
-```
+```bash
 dccmd-rs ls your.dracoon.domain/some/path
 
 // for root node use a trailing slash
@@ -150,33 +151,33 @@ dccmd-rs rm -r your.dracoon.domain/some/path/some/room
 
 To create folders, use the `mkdir` command:
 
-```
+```bash
 dccmd-rs mkdir your.dracoon.domain/some/path/newfolder
-
 ```
-
 
 To create rooms, use the `mkroom` command:
 
-```
-dccmd mkroom your.dracoon.domain/some/path/newfolder
+```bash
+dccmd-rs mkroom your.dracoon.domain/some/path/newroom
+# pass optional usernames for admins (example adds admins with usernames foo1, foo2 and foo3)
+dccmd-rs mkroom your.dracoon.domain/some/path/newroom -a foo1 -a foo2 -a foo3
 
 ```
 *Note*: Rooms can currently only be created as inheriting permissions from parent.
 
 ### Managing users
 
-To import users, you can use the `users some.dracoon.domain.com import` command:
+To import users, you can use the `users import some.dracoon.domain.com` command:
 
 ```bash
 # csv header must be 'first_name,last_name,email,login,oidc_id,mfa_enforced'
 # the order of these fields does not matter
 # login, oidc_id and mfa_enforced are optional but must be present as field
-dccmd-rs users your.dracoon.domain/ import /path/to/users.csv
-dccmd-rs users your.dracoon.domain/ import /path/to/users.csv --oidc-id 2 # import as OIDC users
+dccmd-rs users import your.dracoon.domain/ /path/to/users.csv
+dccmd-rs users import your.dracoon.domain/ /path/to/users.csv --oidc-id 2 # import as OIDC users
 ```
 
-To list users, you can use the `users some.dracoon.domain.com ls` command:
+To list users, you can use the `users ls some.dracoon.domain.com` command:
 
 ```bash
 # optional flags: --all (lists all users, default: 500, paging) --csv (csv format)
@@ -186,7 +187,7 @@ dccmd-rs users ls your.dracoon.domain/ --csv --all > userlist.csv
 dccmd-rs users ls your.dracoon.domain/ --search foo
 ```
 
-To create users, you can use the `users some.dracoon.domain.com create` command:
+To create users, you can use the `users create some.dracoon.domain.com` command:
 
 ```bash
 # params: --first-name, --last-name, --email, --login, --oidc-id 
@@ -202,7 +203,7 @@ dccmd-rs users rm your.dracoon.domain/ --user-id 2
 dccmd-rs users rm your.dracoon.domain/ --user-name foo # short: -u
 ```
 
-To fetch specific user info, you can use the `users some.dracoon.domain.com info` command:
+To fetch specific user info, you can use the `users info some.dracoon.domain.com` command:
 
 ```bash
 # supported: user id, user login / username

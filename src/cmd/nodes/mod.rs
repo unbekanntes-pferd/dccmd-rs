@@ -1,10 +1,17 @@
+use std::sync::Arc;
+
 use console::Term;
 use dialoguer::Confirm;
-use futures_util::future::join_all;
+use futures_util::{
+    future::{join_all, try_join_all},
+    stream, StreamExt,
+};
+use tokio::sync::Mutex;
 use tracing::{debug, error, info};
 
 use crate::cmd::{
     init_dracoon,
+    users::UserCommandHandler,
     utils::strings::{build_node_path, parse_path, print_node},
 };
 
@@ -18,6 +25,8 @@ use dco3::{
     },
     Dracoon,
 };
+
+use self::models::CmdMkRoomOptions;
 
 use super::{
     models::{DcCmdError, PasswordAuth},
@@ -326,10 +335,9 @@ pub async fn create_folder(
 pub async fn create_room(
     term: Term,
     source: String,
-    classification: Option<u8>,
-    auth: Option<PasswordAuth>,
+    opts: CmdMkRoomOptions,
 ) -> Result<(), DcCmdError> {
-    let dracoon = init_dracoon(&source, auth, false).await?;
+    let dracoon = init_dracoon(&source, opts.auth, false).await?;
     let (parent_path, node_name, _) = parse_path(&source, dracoon.get_base_url().as_ref())?;
 
     let parent_node = dracoon
@@ -342,13 +350,58 @@ pub async fn create_room(
         return Err(DcCmdError::InvalidPath(source.clone()));
     }
 
-    let classification = classification.unwrap_or(2);
+    let classification = opts.classification.unwrap_or(2);
 
-    let req = CreateRoomRequest::builder(&node_name.clone())
-        .with_parent_id(parent_node.id)
-        .with_classification(classification)
-        .with_inherit_permissions(true)
-        .build();
+    let req = match opts.admin_users {
+        Some(users) => {
+            let handler = UserCommandHandler::new_from_client(dracoon.clone(), term.clone()).await;
+
+            let reqs = users
+                .iter()
+                .map(|username| handler.find_user_by_username(username));
+
+            let admin_users = Arc::new(Mutex::new(Vec::new()));
+
+            stream::iter(reqs)
+                .chunks(5)
+                .for_each_concurrent(None, |f| {
+                    let cloned_admin_users = Arc::clone(&admin_users);
+                    async move {
+                        let result = try_join_all(f).await.map_err(|e| {
+                            error!("Failed to find users: {}", e);
+                            e
+                        });
+                        if let Ok(users) = result {
+                            cloned_admin_users.lock().await.extend(users)
+                        }
+                    }
+                })
+                .await;
+
+            let admin_users: Vec<_> = admin_users
+                .lock()
+                .await
+                .iter()
+                .map(|user| user.id)
+                .collect();
+
+            if admin_users.is_empty() {
+                return Err(DcCmdError::InvalidArgument("No valid admin users provided.".to_string()));
+            }
+
+            CreateRoomRequest::builder(&node_name.clone())
+                .with_parent_id(parent_node.id)
+                .with_classification(classification)
+                .with_inherit_permissions(opts.inherit_permissions)
+                .with_admin_ids(admin_users)
+                .build()
+        }
+        None => CreateRoomRequest::builder(&node_name.clone())
+            .with_parent_id(parent_node.id)
+            .with_classification(classification)
+            .with_inherit_permissions(true)
+            .build(),
+    };
 
     let room = dracoon.nodes.create_room(req).await?;
 

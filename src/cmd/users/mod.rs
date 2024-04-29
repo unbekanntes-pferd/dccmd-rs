@@ -1,7 +1,4 @@
-use std::{
-    ops::Add,
-    sync::{atomic::AtomicU32, Arc},
-};
+use std::sync::{atomic::AtomicU32, Arc};
 
 use console::Term;
 use dco3::{
@@ -11,6 +8,7 @@ use dco3::{
     Dracoon, ListAllParams, Users,
 };
 use futures_util::{future::join_all, stream, StreamExt};
+use indicatif::{ProgressBar, ProgressStyle};
 use tokio::sync::Mutex;
 use tracing::{error, info};
 
@@ -85,24 +83,41 @@ impl UserCommandHandler {
             })
             .collect::<Vec<_>>();
 
-        let errors = AtomicU32::new(0);
+        let progress_bar = ProgressBar::new(reqs.len() as u64);
+        progress_bar.set_style(
+        ProgressStyle::default_bar()
+           .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {percent}% {msg}").unwrap()
+           .progress_chars("=>-"),
+);
+
+        let errors = Arc::new(AtomicU32::new(0));
 
         stream::iter(reqs)
             .chunks(5)
-            .for_each_concurrent(None, |f| async move {
-                let results = join_all(f).await;
-                results.iter().filter(|r| r.is_err()).for_each(|r| {
-                    error!("Failed to import user: {:?}", r);
-                });
-                let errors = results.iter().filter(|r| r.is_err()).count() as u32;
-                let prev = errors.add(errors);
-                error!("Current error count: {}", prev);
+            .for_each_concurrent(None, |f| {
+                let errors = Arc::clone(&errors);
+                let progress_bar = progress_bar.clone();
+                async move {
+                    let results = join_all(f).await;
+                    results.iter().filter(|r| r.is_err()).for_each(|r| {
+                        error!("Failed to import user: {:?}", r);
+                    });
+                    let err_count = results.iter().filter(|r| r.is_err()).count() as u32;
+                    let prev_err_count =
+                        errors.fetch_add(err_count, std::sync::atomic::Ordering::Relaxed);
+                    progress_bar.inc(results.len() as u64);
+                    if prev_err_count > 0 {
+                        error!("Current error count: {}", prev_err_count);
+                    }
+                }
             })
             .await;
 
         let imported = imports.len() as u32 - errors.load(std::sync::atomic::Ordering::Relaxed);
 
-        let msg = format!("{} users imported", imports.len());
+        let msg = format!("{} users imported", imported);
+
+        progress_bar.finish_with_message(msg.clone());
 
         self.term
             .write_line(format_success_message(&msg).as_str())
@@ -312,13 +327,13 @@ impl UserCommandHandler {
             .get_users(Some(params), None, None)
             .await?;
 
-        if results.items.is_empty() {
+        let Some(user) = results.items.into_iter().find(|u| u.user_name == user_name) else {
             error!("No user found with username: {}", user_name);
             let msg = format!("No user found with username: {}", user_name);
             return Err(DcCmdError::InvalidArgument(msg));
-        }
+        };
 
-        Ok(results.items.first().expect("No user found").clone())
+        Ok(user)
     }
 }
 

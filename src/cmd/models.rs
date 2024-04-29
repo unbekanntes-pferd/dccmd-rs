@@ -10,6 +10,7 @@ use dco3::{
 };
 
 // represents password flow
+#[derive(Clone)]
 pub struct PasswordAuth(pub String, pub String);
 
 #[derive(Debug, PartialEq, Error)]
@@ -187,9 +188,17 @@ pub enum DcCmdCommand {
         /// Source file path in DRACOON
         source: String,
 
+        /// admin usernames
+        #[clap(long, short)]
+        admin_users: Option<Vec<String>>,
+
         /// classification of the node (1-4)
         #[clap(long)]
         classification: Option<u8>,
+
+        /// inherit permissions from parent room
+        #[clap(long)]
+        inherit_permissions: bool,
     },
 
     /// Delete a node in DRACOON

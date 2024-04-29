@@ -3,6 +3,30 @@ use dco3::{auth::Connected, Dracoon};
 
 use crate::cmd::{init_dracoon, models::{DcCmdError, PasswordAuth}};
 
+pub struct CmdMkRoomOptions {
+    pub inherit_permissions: bool,
+    pub classification: Option<u8>,
+    pub auth: Option<PasswordAuth>,
+    pub admin_users: Option<Vec<String>>,
+}
+
+impl CmdMkRoomOptions {
+    pub fn new(
+        inherit_permissions: bool,
+        classification: Option<u8>,
+        auth: Option<PasswordAuth>,
+        admin_users: Option<Vec<String>>,
+    ) -> Self {
+        Self {
+            inherit_permissions,
+            classification,
+            auth,
+            admin_users,
+        }
+    }
+
+}
+
 pub struct CmdDownloadOptions {
     pub recursive: bool,
     pub velocity: Option<u8>,
