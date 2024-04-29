@@ -595,7 +595,7 @@ dependencies = [
 
 [[package]]
 name = "dccmd-rs"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "async-recursion",
  "chrono",
@@ -618,9 +618,9 @@ dependencies = [
 
 [[package]]
 name = "dco3"
-version = "0.10.2"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0cf20b87cc3a94fece8f77d2e37ab2b55c23ec3525fadf206f12548d4c4555d6"
+checksum = "7e33f9025e1c60762ea3d3fcf10e3484e3ca099b4f7a63b4a2b91dbb7217ac58"
 dependencies = [
  "async-stream",
  "async-trait",
@@ -646,9 +646,9 @@ dependencies = [
 
 [[package]]
 name = "dco3_crypto"
-version = "0.6.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9f8934c0f0fcd92fcd902ccd80da5cf2e21e932b9a1286a1c8eeafd4e938a16"
+checksum = "63c2024bab3ab4d684f04d6f1e43b67682861dc5d019f1be7dae2554aaa81779"
 dependencies = [
  "openssl",
  "serde",

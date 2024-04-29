@@ -6,9 +6,13 @@ use cmd::{
     handle_error,
     models::{DcCmd, DcCmdCommand, PasswordAuth},
     nodes::{
-        create_folder, create_room, delete_node, download::download, list_nodes,
-        models::UploadOptions, upload::upload,
+        create_folder, create_room, delete_node,
+        download::download,
+        list_nodes,
+        models::{CmdDownloadOptions, CmdMkRoomOptions, CmdUploadOptions},
+        upload::upload,
     },
+    print_version,
     users::handle_users_cmd,
 };
 use console::Term;
@@ -77,14 +81,18 @@ async fn main() {
             target,
             velocity,
             recursive,
+            share_password,
         } => {
             download(
                 source,
                 target,
-                velocity,
-                recursive,
-                password_auth,
-                opt.encryption_password,
+                CmdDownloadOptions::new(
+                    recursive,
+                    velocity,
+                    password_auth,
+                    opt.encryption_password,
+                    share_password,
+                ),
             )
             .await
         }
@@ -97,21 +105,23 @@ async fn main() {
             recursive,
             skip_root,
             share,
+            share_password,
         } => {
             upload(
                 term,
                 source.into(),
                 target,
-                UploadOptions::new(
+                CmdUploadOptions::new(
                     overwrite,
-                    classification,
-                    velocity,
                     recursive,
                     skip_root,
                     share,
+                    classification,
+                    velocity,
+                    password_auth,
+                    opt.encryption_password,
+                    share_password,
                 ),
-                password_auth,
-                opt.encryption_password,
             )
             .await
         }
@@ -143,18 +153,29 @@ async fn main() {
             notes,
         } => create_folder(term, source, classification, notes, password_auth).await,
         DcCmdCommand::Mkroom {
+            inherit_permissions,
             source,
             classification,
-        } => create_room(term, source, classification, password_auth).await,
+            admin_users,
+        } => {
+            create_room(
+                term,
+                source,
+                CmdMkRoomOptions::new(
+                    inherit_permissions,
+                    classification,
+                    password_auth,
+                    admin_users,
+                ),
+            )
+            .await
+        }
         DcCmdCommand::Rm { source, recursive } => {
             delete_node(term, source, Some(recursive), password_auth).await
         }
-        DcCmdCommand::Users { cmd, target } => handle_users_cmd(cmd, term, target).await,
+        DcCmdCommand::Users { cmd } => handle_users_cmd(cmd, term).await,
 
-        DcCmdCommand::Version => {
-            println!("dccmd-rs {}", env!("CARGO_PKG_VERSION"));
-            Ok(())
-        }
+        DcCmdCommand::Version => print_version(&term),
     };
 
     if let Err(e) = res {

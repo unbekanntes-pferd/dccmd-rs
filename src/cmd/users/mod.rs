@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{atomic::AtomicU32, Arc};
 
 use console::Term;
 use dco3::{
@@ -8,6 +8,7 @@ use dco3::{
     Dracoon, ListAllParams, Users,
 };
 use futures_util::{future::join_all, stream, StreamExt};
+use indicatif::{ProgressBar, ProgressStyle};
 use tokio::sync::Mutex;
 use tracing::{error, info};
 
@@ -30,8 +31,17 @@ pub struct UserCommandHandler {
 }
 
 impl UserCommandHandler {
-    pub async fn try_new(target_domain: &str, term: Term) -> Result<Self, DcCmdError> {
-        let client = init_dracoon(target_domain, None, false).await?;
+    pub async fn try_new(
+        target_domain: &str,
+        term: Term,
+        is_import: bool,
+    ) -> Result<Self, DcCmdError> {
+        let client = if is_import {
+            init_dracoon(target_domain, None, true).await?
+        } else {
+            init_dracoon(target_domain, None, false).await?
+        };
+
         Ok(Self { client, term })
     }
 
@@ -67,20 +77,50 @@ impl UserCommandHandler {
                     &import.email,
                     import.login.as_deref(),
                     oidc_id,
-                    true,
                     import.mfa_enabled.unwrap_or(false),
+                    true,
                 )
             })
             .collect::<Vec<_>>();
 
+        let progress_bar = ProgressBar::new(reqs.len() as u64);
+        progress_bar.set_style(
+            ProgressStyle::default_bar()
+                .template(
+                    "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {percent}% {msg}",
+                )
+                .unwrap()
+                .progress_chars("=>-"),
+        );
+
+        let errors = Arc::new(AtomicU32::new(0));
+
         stream::iter(reqs)
             .chunks(5)
-            .for_each_concurrent(None, |f| async move {
-                join_all(f).await;
+            .for_each_concurrent(None, |f| {
+                let errors = Arc::clone(&errors);
+                let progress_bar = progress_bar.clone();
+                async move {
+                    let results = join_all(f).await;
+                    results.iter().filter(|r| r.is_err()).for_each(|r| {
+                        error!("Failed to import user: {:?}", r);
+                    });
+                    let err_count = results.iter().filter(|r| r.is_err()).count() as u32;
+                    let prev_err_count =
+                        errors.fetch_add(err_count, std::sync::atomic::Ordering::Relaxed);
+                    progress_bar.inc(results.len() as u64);
+                    if prev_err_count > 0 {
+                        error!("Current error count: {}", prev_err_count);
+                    }
+                }
             })
             .await;
 
-        let msg = format!("{} users imported", imports.len());
+        let imported = imports.len() as u32 - errors.load(std::sync::atomic::Ordering::Relaxed);
+
+        let msg = format!("{} users imported", imported);
+
+        progress_bar.finish_with_message(msg.clone());
 
         self.term
             .write_line(format_success_message(&msg).as_str())
@@ -182,7 +222,11 @@ impl UserCommandHandler {
         all: bool,
         csv: bool,
     ) -> Result<(), DcCmdError> {
-        let params = self.build_params(&search, offset.unwrap_or(0).into(), limit.unwrap_or(500).into());
+        let params = self.build_params(
+            &search,
+            offset.unwrap_or(0).into(),
+            limit.unwrap_or(500).into(),
+        );
 
         let results = self
             .client
@@ -286,27 +330,33 @@ impl UserCommandHandler {
             .get_users(Some(params), None, None)
             .await?;
 
-        if results.items.is_empty() {
+        let Some(user) = results.items.into_iter().find(|u| u.user_name == user_name) else {
             error!("No user found with username: {}", user_name);
             let msg = format!("No user found with username: {}", user_name);
             return Err(DcCmdError::InvalidArgument(msg));
-        }
+        };
 
-        Ok(results.items.first().expect("No user found").clone())
+        Ok(user)
     }
 }
 
-pub async fn handle_users_cmd(
-    cmd: UserCommand,
-    term: Term,
-    target_domain: String,
-) -> Result<(), DcCmdError> {
-    let handler = UserCommandHandler::try_new(&target_domain, term).await?;
+pub async fn handle_users_cmd(cmd: UserCommand, term: Term) -> Result<(), DcCmdError> {
+    let target = match &cmd {
+        UserCommand::Create { target, .. }
+        | UserCommand::Ls { target, .. }
+        | UserCommand::Rm { target, .. }
+        | UserCommand::Import { target, .. }
+        | UserCommand::Info { target, .. } => target,
+    };
 
-    let client = init_dracoon(&target_domain, None, false).await?;
+    let handler = match &cmd {
+        UserCommand::Import { .. } => UserCommandHandler::try_new(target, term, true).await?,
+        _ => UserCommandHandler::try_new(target, term, false).await?,
+    };
 
     match cmd {
         UserCommand::Create {
+            target,
             first_name,
             last_name,
             email,
@@ -327,6 +377,7 @@ pub async fn handle_users_cmd(
                 .await?;
         }
         UserCommand::Ls {
+            target,
             search,
             offset,
             limit,
@@ -335,13 +386,25 @@ pub async fn handle_users_cmd(
         } => {
             handler.list_users(search, offset, limit, all, csv).await?;
         }
-        UserCommand::Rm { user_name, user_id } => {
+        UserCommand::Rm {
+            target,
+            user_name,
+            user_id,
+        } => {
             handler.delete_user(user_name, user_id).await?;
         }
-        UserCommand::Import { source, oidc_id } => {
+        UserCommand::Import {
+            target,
+            source,
+            oidc_id,
+        } => {
             handler.import_users(source, oidc_id).await?;
         }
-        UserCommand::Info { user_name, user_id } => {
+        UserCommand::Info {
+            target,
+            user_name,
+            user_id,
+        } => {
             handler.get_user_info(user_name, user_id).await?;
         }
     }

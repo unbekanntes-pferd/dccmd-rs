@@ -10,6 +10,7 @@ use dco3::{
 };
 
 // represents password flow
+#[derive(Clone)]
 pub struct PasswordAuth(pub String, pub String);
 
 #[derive(Debug, PartialEq, Error)]
@@ -51,6 +52,9 @@ impl From<DracoonClientError> for DcCmdError {
             DracoonClientError::InvalidUrl(url) => DcCmdError::InvalidUrl(url),
             DracoonClientError::IoError => DcCmdError::IoError,
             DracoonClientError::S3Error(err) => DcCmdError::DracoonS3Error(err),
+            DracoonClientError::MissingArgument => {
+                DcCmdError::InvalidArgument("Missing argument (password set?)".to_string())
+            }
             _ => DcCmdError::Unknown,
         }
     }
@@ -116,6 +120,9 @@ pub enum DcCmdCommand {
         /// share upload
         #[clap(long)]
         share: bool,
+
+        #[clap(long)]
+        share_password: Option<String>,
     },
     /// Download a file or container from DRACOON to target
     Download {
@@ -130,6 +137,9 @@ pub enum DcCmdCommand {
         /// recursive download
         #[clap(short, long)]
         recursive: bool,
+
+        #[clap(long)]
+        share_password: Option<String>,
     },
     /// List nodes in DRACOON
     Ls {
@@ -180,9 +190,17 @@ pub enum DcCmdCommand {
         /// Source file path in DRACOON
         source: String,
 
+        /// admin usernames
+        #[clap(long, short)]
+        admin_users: Option<Vec<String>>,
+
         /// classification of the node (1-4)
         #[clap(long)]
         classification: Option<u8>,
+
+        /// inherit permissions from parent room
+        #[clap(long)]
+        inherit_permissions: bool,
     },
 
     /// Delete a node in DRACOON
@@ -199,8 +217,6 @@ pub enum DcCmdCommand {
     Users {
         #[clap(subcommand)]
         cmd: UserCommand,
-
-        target: String,
     },
 
     /// Print current dccmd-rs version
@@ -211,6 +227,9 @@ pub enum DcCmdCommand {
 pub enum UserCommand {
     /// List users in DRACOON
     Ls {
+        /// DRACOON url
+        target: String,
+
         /// search filter (username, first name, last name)
         #[clap(long)]
         search: Option<String>,
@@ -234,6 +253,9 @@ pub enum UserCommand {
 
     /// Create a user in DRACOON
     Create {
+        /// DRACOON url
+        target: String,
+
         /// User first name
         #[clap(long, short)]
         first_name: String,
@@ -261,6 +283,9 @@ pub enum UserCommand {
 
     /// delete a user in DRACOON
     Rm {
+        /// DRACOON url
+        target: String,
+
         /// User login
         #[clap(long, short)]
         user_name: Option<String>,
@@ -271,6 +296,9 @@ pub enum UserCommand {
 
     /// import users from CSV file into DRACOON
     Import {
+        /// DRACOON url
+        target: String,
+
         /// Source file path
         source: String,
 
@@ -281,6 +309,9 @@ pub enum UserCommand {
 
     /// print user information in DRACOON
     Info {
+        /// DRACOON url
+        target: String,
+
         /// User login
         #[clap(long, short)]
         user_name: Option<String>,

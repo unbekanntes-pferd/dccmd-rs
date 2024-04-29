@@ -10,8 +10,8 @@ use indicatif::{ProgressBar, ProgressStyle};
 use tracing::{debug, error, info};
 
 use crate::cmd::{
-    init_dracoon, init_encryption,
-    models::{DcCmdError, PasswordAuth},
+    init_dracoon, init_encryption, init_public_dracoon,
+    models::DcCmdError,
     nodes::{is_search_query, search_nodes},
     utils::strings::parse_path,
 };
@@ -22,21 +22,25 @@ use dco3::{
         models::{filters::NodesSearchFilter, sorts::NodesSearchSortBy, Node, NodeType},
         Download, Nodes,
     },
-    Dracoon, ListAllParams, SortOrder,
+    Dracoon, ListAllParams, Public, PublicDownload, SortOrder,
 };
+
+use super::models::CmdDownloadOptions;
 
 pub async fn download(
     source: String,
     target: String,
-    velocity: Option<u8>,
-    recursive: bool,
-    auth: Option<PasswordAuth>,
-    encryption_password: Option<String>,
+    download_opts: CmdDownloadOptions,
 ) -> Result<(), DcCmdError> {
     debug!("Downloading {} to {}", source, target);
-    debug!("Velocity: {}", velocity.unwrap_or(1));
+    debug!("Velocity: {}", download_opts.velocity.unwrap_or(1));
 
-    let mut dracoon = init_dracoon(&source, auth, true).await?;
+    // this is a public download share
+    if source.contains("/public/download-shares/") {
+        return download_public_file(source, target, download_opts).await;
+    }
+
+    let mut dracoon = init_dracoon(&source, download_opts.auth, true).await?;
 
     let (parent_path, node_name, _) = parse_path(&source, dracoon.get_base_url().as_ref())
         .or(Err(DcCmdError::InvalidPath(source.clone())))?;
@@ -56,7 +60,7 @@ pub async fn download(
     };
 
     if node.is_encrypted == Some(true) {
-        dracoon = init_encryption(dracoon, encryption_password).await?;
+        dracoon = init_encryption(dracoon, download_opts.encryption_password).await?;
     }
 
     if is_search_query(&node_name) {
@@ -67,13 +71,13 @@ pub async fn download(
 
         info!("Found {} files.", files.len());
 
-        download_files(&mut dracoon, files, &target, None, velocity).await
+        download_files(&dracoon, files, &target, None, download_opts.velocity).await
     } else {
         match node.node_type {
-            NodeType::File => download_file(&mut dracoon, &node, &target).await,
+            NodeType::File => download_file(&dracoon, &node, &target).await,
             _ => {
-                if recursive {
-                    download_container(&mut dracoon, &node, &target, velocity).await
+                if download_opts.recursive {
+                    download_container(&dracoon, &node, &target, download_opts.velocity).await
                 } else {
                     Err(DcCmdError::InvalidArgument(
                         "Container download requires recursive flag".to_string(),
@@ -84,8 +88,82 @@ pub async fn download(
     }
 }
 
+async fn download_public_file(
+    source: String,
+    target: String,
+    download_opts: CmdDownloadOptions,
+) -> Result<(), DcCmdError> {
+    if download_opts.recursive {
+        return Err(DcCmdError::InvalidArgument(
+            "Recursive download not supported for public download shares".to_string(),
+        ));
+    }
+
+    let access_key = source
+        .split('/')
+        .last()
+        .ok_or(DcCmdError::InvalidPath(source.clone()))?;
+
+    let dracoon = init_public_dracoon(&source).await?;
+
+    let public_download_share = dracoon.public.get_public_download_share(access_key).await?;
+    let file_name = public_download_share.file_name.clone();
+
+    let original_target = target.to_string();
+
+    // if own name provided - use it - otherwise use node name
+    let target = if std::path::Path::new(&target).is_dir() {
+        let path = std::path::Path::new(&target);
+        let target = path.join(&public_download_share.file_name);
+
+        let Some(target) = target.to_str() else {
+            return Err(DcCmdError::InvalidPath(original_target));
+        };
+
+        target.to_string()
+    } else {
+        target.to_string()
+    };
+
+    let mut out_file = tokio::fs::File::create(target)
+        .await
+        .or(Err(DcCmdError::IoError))?;
+
+    let progress_bar = ProgressBar::new(public_download_share.size);
+    progress_bar.set_style(
+    ProgressStyle::default_bar()
+    .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}) {msg}").unwrap()
+    .progress_chars("=>-"),
+);
+
+    progress_bar.set_length(public_download_share.size);
+
+    let progress_bar_mv = progress_bar.clone();
+
+    dracoon
+        .public
+        .download(
+            access_key,
+            public_download_share.clone(),
+            download_opts.share_password,
+            &mut out_file,
+            Some(Box::new(move |progress, total| {
+                progress_bar_mv.set_message(public_download_share.clone().file_name);
+                progress_bar_mv.inc(progress);
+            })),
+            None,
+        )
+        .await?;
+
+    progress_bar.finish_with_message(format!("{} complete", file_name));
+
+    info!("Download of public file {} complete.", file_name);
+
+    Ok(())
+}
+
 async fn download_file(
-    dracoon: &mut Dracoon<Connected>,
+    dracoon: &Dracoon<Connected>,
     node: &Node,
     target: &str,
 ) -> Result<(), DcCmdError> {
@@ -145,7 +223,7 @@ async fn download_file(
 }
 
 async fn download_files(
-    dracoon: &mut Dracoon<Connected>,
+    dracoon: &Dracoon<Connected>,
     files: Vec<Node>,
     target: &str,
     targets: Option<HashMap<u64, String>>,
@@ -240,7 +318,7 @@ async fn download_files(
 }
 
 async fn download_container(
-    dracoon: &mut Dracoon<Connected>,
+    dracoon: &Dracoon<Connected>,
     node: &Node,
     target: &str,
     velocity: Option<u8>,
