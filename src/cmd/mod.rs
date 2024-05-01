@@ -117,7 +117,7 @@ async fn init_dracoon(
             return Ok(dracoon);
         }
         // Refresh token didn't work, delete it
-        let _ = entry.delete_dracoon_env(&base_url);
+        let _ = entry.delete_dracoon_env();
     }
 
     // Final resort: auth code flow

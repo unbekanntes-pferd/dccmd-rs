@@ -5,7 +5,7 @@ use crate::cmd::models::DcCmdError;
 pub trait HandleCredentials {
     fn set_dracoon_env(&self, secret: &str) -> Result<(), DcCmdError>;
     fn get_dracoon_env(&self) -> Result<String, DcCmdError>;
-    fn delete_dracoon_env(&self, dracoon_url: &str) -> Result<(), DcCmdError>;
+    fn delete_dracoon_env(&self) -> Result<(), DcCmdError>;
 }
 
 impl HandleCredentials for Entry {
@@ -21,7 +21,7 @@ impl HandleCredentials for Entry {
             Err(_) => Err(DcCmdError::InvalidAccount),
         }
     }
-    fn delete_dracoon_env(&self, dracoon_url: &str) -> Result<(), DcCmdError> {
+    fn delete_dracoon_env(&self) -> Result<(), DcCmdError> {
         if self.get_password().is_err() {
             return Err(DcCmdError::InvalidAccount);
         }

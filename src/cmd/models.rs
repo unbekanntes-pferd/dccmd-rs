@@ -9,6 +9,8 @@ use dco3::{
     nodes::models::S3ErrorResponse,
 };
 
+use super::config::models::{ConfigAuthCommand, ConfigCryptoCommand};
+
 // represents password flow
 #[derive(Clone)]
 pub struct PasswordAuth(pub String, pub String);
@@ -219,6 +221,13 @@ pub enum DcCmdCommand {
         cmd: UserCommand,
     },
 
+    /// Configure DRACOON Commander
+    Config {
+        #[clap(subcommand)]
+        cmd: ConfigCommand,
+
+    },
+
     /// Print current dccmd-rs version
     Version,
 }
@@ -318,6 +327,22 @@ pub enum UserCommand {
 
         #[clap(long)]
         user_id: Option<u64>,
+    },
+}
+
+#[derive(Parser)]
+pub enum ConfigCommand {
+
+    /// Manage DRACOON Commander auth credentials (refresh token)
+    Auth {
+        #[clap(subcommand)]
+        cmd: ConfigAuthCommand,
+    },
+
+    /// Manage DRACOON Commander encryption credentials (encryption secret)
+    Crypto {
+        #[clap(subcommand)]
+        cmd: ConfigCryptoCommand,
     },
 }
 
