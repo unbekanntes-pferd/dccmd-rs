@@ -235,15 +235,30 @@ pub async fn delete_node(
 ) -> Result<(), DcCmdError> {
     let dracoon = init_dracoon(&source, auth, false).await?;
     let (parent_path, node_name, depth) = parse_path(&source, dracoon.get_base_url().as_ref())?;
+    let is_search_query = is_search_query(&node_name);
+    // check if recursive flag is set
+    let recursive = recursive.unwrap_or(false);
+
+    match (recursive, is_search_query) {
+        (true, true) => return delete_node_content(&dracoon, &term, &node_name, parent_path).await,
+        (false, true) => {
+            let msg = format_error_message(
+                "Deleting search results not allowed. Use --recursive flag to delete recursively.",
+            );
+            error!("{}", msg);
+            term.write_line(&msg)
+                .expect("Error writing message to terminal.");
+            return Ok(());
+        }
+        _ => (),
+    }
+
     let node_path = build_node_path((parent_path.clone(), node_name.clone(), depth));
     let node = dracoon
         .nodes
         .get_node_from_path(&node_path)
         .await?
         .ok_or(DcCmdError::InvalidPath(source.clone()))?;
-
-    // check if recursive flag is set
-    let recursive = recursive.unwrap_or(false);
 
     // if node type is folder or room and not recursive, abort
     if !recursive && (node.node_type == NodeType::Folder || node.node_type == NodeType::Room) {
@@ -286,6 +301,40 @@ pub async fn delete_node(
         }
         _ => delete_node.await,
     }
+}
+
+async fn delete_node_content(
+    dracoon: &Dracoon<Connected>,
+    term: &Term,
+    search: &str,
+    parent_path: String,
+) -> Result<(), DcCmdError> {
+    let nodes = search_nodes(
+        dracoon,
+        search,
+        Some(&parent_path),
+        Some(true),
+        true,
+        0,
+        500,
+    )
+    .await?;
+    let node_ids = nodes.items.iter().map(|node| node.id).collect::<Vec<u64>>();
+
+    // ask for confirmation and provide info about number of items to delete
+    let confirmed = Confirm::new()
+        .with_prompt(format!(
+            "Do you really want to delete {} items?",
+            node_ids.len()
+        ))
+        .interact()
+        .expect("Error reading user input.");
+
+    if confirmed {
+        dracoon.nodes.delete_nodes(node_ids.into()).await?;
+    }
+
+    Ok(())
 }
 
 pub async fn create_folder(
