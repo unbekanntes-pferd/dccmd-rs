@@ -3,7 +3,7 @@ use keyring::Entry;
 use tracing::error;
 
 use self::{
-    credentials::{get_client_credentials, HandleCredentials},
+    config::credentials::{get_client_credentials, HandleCredentials},
     models::{DcCmdError, PasswordAuth},
     utils::strings::format_error_message,
 };
@@ -12,7 +12,7 @@ use dco3::{
     Dracoon, DracoonBuilder,
 };
 
-pub mod credentials;
+pub mod config;
 pub mod models;
 pub mod nodes;
 pub mod users;

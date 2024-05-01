@@ -2,9 +2,6 @@ use keyring::Entry;
 
 use crate::cmd::models::DcCmdError;
 
-// service name to store
-const SERVICE_NAME: &str = env!("CARGO_PKG_NAME");
-
 pub trait HandleCredentials {
     fn set_dracoon_env(&self, secret: &str) -> Result<(), DcCmdError>;
     fn get_dracoon_env(&self) -> Result<String, DcCmdError>;
@@ -38,14 +35,14 @@ impl HandleCredentials for Entry {
 
 #[allow(clippy::module_name_repetitions)]
 pub fn get_client_credentials() -> (String, String) {
-    let client_id = include_str!("../../.env")
+    let client_id = include_str!("../../../.env")
         .split('\n')
         .next()
         .expect("env file has more than one line")
         .split("CLIENT_ID=")
         .nth(1)
         .expect("CLIENT_ID MUST be provided");
-    let client_secret = include_str!("../../.env")
+    let client_secret = include_str!("../../../.env")
         .split('\n')
         .nth(1)
         .expect("env file has more than one line")
