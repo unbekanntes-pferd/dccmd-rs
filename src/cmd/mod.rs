@@ -2,10 +2,8 @@ use console::Term;
 use keyring::Entry;
 use tracing::error;
 
-use crate::cmd::credentials::{delete_dracoon_env, get_client_credentials};
-
 use self::{
-    credentials::{get_dracoon_env, set_dracoon_env},
+    credentials::{get_client_credentials, HandleCredentials},
     models::{DcCmdError, PasswordAuth},
     utils::strings::format_error_message,
 };
@@ -46,7 +44,7 @@ async fn init_encryption(
         None => {
             // Entry present and holds a secret
             if let Ok(entry) = &entry {
-                if let Ok(stored_secret) = get_dracoon_env(entry) {
+                if let Ok(stored_secret) = entry.get_dracoon_env() {
                     (stored_secret, false)
                 } else {
                     // Entry present but no secret, ask and store
@@ -65,7 +63,7 @@ async fn init_encryption(
     if store {
         let entry =
             Entry::new(SERVICE_NAME, &account).map_err(|_| DcCmdError::CredentialStorageFailed)?;
-        set_dracoon_env(&entry, &secret)?;
+        entry.set_dracoon_env(&secret)?;
     }
 
     Ok(dracoon)
@@ -110,7 +108,7 @@ async fn init_dracoon(
     };
 
     // Attempt to use refresh token if exists
-    if let Ok(refresh_token) = get_dracoon_env(&entry) {
+    if let Ok(refresh_token) = entry.get_dracoon_env() {
         if let Ok(dracoon) = dracoon
             .clone()
             .connect(OAuth2Flow::RefreshToken(refresh_token))
@@ -119,7 +117,7 @@ async fn init_dracoon(
             return Ok(dracoon);
         }
         // Refresh token didn't work, delete it
-        let _ = delete_dracoon_env(&entry, &base_url);
+        let _ = entry.delete_dracoon_env(&base_url);
     }
 
     // Final resort: auth code flow
@@ -159,7 +157,7 @@ async fn authenticate_auth_code_flow(
         .await?;
 
     // TODO: if this fails, offer to store in plain
-    set_dracoon_env(&entry, &dracoon.get_refresh_token().await)?;
+    entry.set_dracoon_env(&dracoon.get_refresh_token().await)?;
 
     Ok(dracoon)
 }
