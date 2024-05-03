@@ -13,15 +13,6 @@ pub enum ConfigAuthCommand {
         /// DRACOON url
         target: String,
     },
-
-    /// Add a DRACOON refresh token manually to store securely
-    Add {
-        /// DRACOON url
-        target: String,
-
-        /// Refresh token
-        refresh_token: String,
-    },
 }
 
 #[derive(Parser)]
@@ -36,14 +27,5 @@ pub enum ConfigCryptoCommand {
     Rm {
         /// DRACOON url
         target: String,
-    },
-
-    /// Add a DRACOON encryption secret manually to store securely
-    Add {
-        /// DRACOON url
-        target: String,
-
-        /// Encryption secret
-        secret: String,
     },
 }
