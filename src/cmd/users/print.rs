@@ -99,9 +99,7 @@ impl UserCommandHandler {
                 let displayed = users.len();
                 let mut user_table = Table::new(users);
                 user_table
-                    .with(Panel::footer(format!(
-                        "{displayed} users ({total} total)",
-                    )))
+                    .with(Panel::footer(format!("{displayed} users ({total} total)",)))
                     .with(Style::modern())
                     .with(Modify::new(Segment::all()).with(Width::wrap(16)));
 

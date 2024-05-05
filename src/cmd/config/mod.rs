@@ -15,8 +15,8 @@ use super::{
 };
 
 pub mod credentials;
-pub mod models;
 pub mod logs;
+pub mod models;
 
 pub struct ConfigCommandHandler {
     entry: Box<dyn HandleCredentials>,

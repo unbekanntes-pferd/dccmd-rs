@@ -64,7 +64,6 @@ pub struct CmdUploadOptions {
     pub share_password: Option<String>,
 }
 
-
 #[allow(clippy::too_many_arguments)]
 impl CmdUploadOptions {
     pub fn new(

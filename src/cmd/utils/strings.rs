@@ -169,7 +169,6 @@ pub fn parse_path(path: &str, base_url: &str) -> Result<ParsedPath, DcCmdError> 
     Ok((parent_path, name, depth))
 }
 
-
 pub fn build_node_path(path: ParsedPath) -> String {
     let (parent_path, name, depth) = path;
 

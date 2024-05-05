@@ -69,15 +69,7 @@ pub async fn list_nodes(
 
     let node_list = if is_search_query(&node_name) {
         debug!("Searching for nodes with query {}", node_name);
-        search_nodes(
-            &dracoon,
-            &node_name,
-            Some(&parent_path),
-            all,
-            offset,
-            limit,
-        )
-        .await?
+        search_nodes(&dracoon, &node_name, Some(&parent_path), all, offset, limit).await?
     } else {
         debug!("Fetching node list from path {}", node_path.unwrap_or("/"));
         get_nodes(&dracoon, node_path, managed, all, offset, limit).await?
@@ -238,7 +230,7 @@ pub async fn delete_node(
     let recursive = recursive.unwrap_or(false);
 
     match (recursive, is_search_query) {
-        (true, true) => return delete_node_content(&dracoon,  &node_name, parent_path).await,
+        (true, true) => return delete_node_content(&dracoon, &node_name, parent_path).await,
         (false, true) => {
             let msg = format_error_message(
                 "Deleting search results not allowed. Use --recursive flag to delete recursively.",
@@ -306,15 +298,7 @@ async fn delete_node_content(
     search: &str,
     parent_path: String,
 ) -> Result<(), DcCmdError> {
-    let nodes = search_nodes(
-        dracoon,
-        search,
-        Some(&parent_path),
-        true,
-        0,
-        500,
-    )
-    .await?;
+    let nodes = search_nodes(dracoon, search, Some(&parent_path), true, 0, 500).await?;
     let node_ids = nodes
         .items
         .iter()

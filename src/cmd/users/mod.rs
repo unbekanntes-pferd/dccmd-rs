@@ -283,10 +283,10 @@ impl UserCommandHandler {
         let confirm_msg = if let Some(user_name) = user_name {
             let user = self.find_user_by_username(&user_name).await?;
             self.client.users.delete_user(user.id).await?;
-            format!("User {user_name} deleted", )
+            format!("User {user_name} deleted",)
         } else if let Some(user_id) = user_id {
             self.client.users.delete_user(user_id).await?;
-            format!("User {user_id} (id) deleted", )
+            format!("User {user_id} (id) deleted",)
         } else {
             error!("User name or user id must be provided");
             return Err(DcCmdError::InvalidArgument(
