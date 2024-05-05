@@ -104,14 +104,10 @@ async fn init_dracoon(
     if let Some(password_auth) = password_auth {
         return authenticate_password_flow(dracoon, password_auth).await;
     }
-
     // Entry not present & no password auth? Game over.
-    let entry = match entry {
-        Ok(entry) => entry,
-        Err(_) => {
-            error!("Can't open keyring entry for {}", base_url);
-            return Err(DcCmdError::CredentialStorageFailed);
-        }
+    let Ok(entry) = entry else {
+        error!("Can't open keyring entry for {}", base_url);
+        return Err(DcCmdError::CredentialStorageFailed);
     };
 
     // Attempt to use refresh token if exists

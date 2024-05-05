@@ -92,11 +92,11 @@ pub async fn upload(
                 opts.classification,
                 opts.share,
             )
-            .await?
+            .await?;
         }
         // is a directory and recursive flag is set
         (_, true, true) => {
-            upload_container(&dracoon, source, &parent_node, &node_path, &opts).await?
+            upload_container(&dracoon, source, &parent_node, &node_path, &opts).await?;
         }
         // is a directory and recursive flag is not set
         (_, true, false) => {
@@ -180,7 +180,7 @@ async fn upload_public_file(
             upload_share,
             upload_opts,
             reader,
-            Some(Box::new(move |progress, total| {
+            Some(Box::new(move |progress, _| {
                 progress_bar_mv.set_position(progress);
             })),
             Some(DEFAULT_CHUNK_SIZE),
@@ -249,7 +249,7 @@ async fn upload_file(
             target_node,
             upload_options,
             reader,
-            Some(Box::new(move |progress, total| {
+            Some(Box::new(move |progress, _| {
                 progress_bar_mv.set_position(progress);
             })),
             Some(DEFAULT_CHUNK_SIZE),
@@ -264,8 +264,8 @@ async fn upload_file(
     if !is_encrypted && share {
         let link = share_node(dracoon, &node).await?;
         let success_msg =
-            format_success_message(format!("Shared {}.\n▶︎▶︎ {}", file_name, link).as_str());
-        let success_msg = format!("\n{}", success_msg);
+            format_success_message(format!("Shared {file_name}.\n▶︎▶︎ {link}").as_str());
+        let success_msg = format!("\n{success_msg}");
 
         term.write_line(&success_msg)
             .expect("Error writing message to terminal.");
@@ -318,7 +318,7 @@ async fn upload_container(
         let root_folder = match dracoon.nodes.create_folder(root_folder).await {
             Ok(folder) => folder,
             Err(e) if e.is_conflict() => {
-                let path = format!("{}{}", target_parent, name);
+                let path = format!("{target_parent}{name}");
                 debug!("Path: {}", path);
                 dracoon
                     .nodes
@@ -442,7 +442,7 @@ async fn upload_container(
 
             if opts.overwrite {
                 //TODO: broken - does not work, entry not present
-                let path = format!("{}{}", target_parent, parent_path);
+                let path = format!("{target_parent}{parent_path}");
                 let node = dracoon.nodes.get_node_from_path(&path).await?;
                 node.ok_or(DcCmdError::Unknown)?.id
             } else {
@@ -510,9 +510,8 @@ async fn update_folder_map(
         let folder = match folder {
             Ok(folder) => folder,
             Err(e) if e.is_conflict() => {
-                let error_details = match &e {
-                    DracoonClientError::Http(e) => e,
-                    _ => unreachable!("Error is http - checked and is conflict"),
+                let DracoonClientError::Http(error_details) = &e else {
+                    unreachable!("Error is http - checked and is conflict");
                 };
 
                 let mut found_start = false;
@@ -522,7 +521,7 @@ async fn update_folder_map(
                 let name = name
                     .split('\'')
                     .nth(1)
-                    .map(|s| s.to_string())
+                    .map(std::string::ToString::to_string)
                     .ok_or(DcCmdError::IoError)?;
 
                 debug!("Name: {}", name);
@@ -546,7 +545,7 @@ async fn update_folder_map(
                 }
 
                 let path = result_path.to_str().ok_or(DcCmdError::IoError)?;
-                let path = format!("{}{}", target_parent, path);
+                let path = format!("{target_parent}{path}");
                 debug!("Path: {}", path);
                 dracoon
                     .nodes
@@ -581,12 +580,12 @@ async fn update_folder_map(
         };
 
         let target_parent = if skip_root {
-            format!("/{}{}", parent_name, target_parent)
+            format!("/{parent_name}{target_parent}")
         } else {
             target_parent
         };
 
-        debug!("Target parent: {}", target_parent);
+        debug!("Target parent: {target_parent}",);
 
         created_nodes.insert(target_parent, folder.id);
     }
@@ -665,7 +664,7 @@ async fn upload_files(
     for batch in files_iter.chunks(concurrent_reqs.into()) {
         let mut file_reqs = Vec::new();
 
-        for (source, (node_id, file_size)) in batch {
+        for (source, (node_id, _file_size)) in batch {
             let rm_files = &remaining_files;
             let progress_bar_mv = progress_bar.clone();
             let progress_bar_inc = progress_bar.clone();

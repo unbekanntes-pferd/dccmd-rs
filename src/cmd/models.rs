@@ -57,7 +57,7 @@ impl From<DracoonClientError> for DcCmdError {
             DracoonClientError::MissingArgument => {
                 DcCmdError::InvalidArgument("Missing argument (password set?)".to_string())
             },
-            DracoonClientError::CryptoError(err) => {
+            DracoonClientError::CryptoError(_) => {
                 DcCmdError::InvalidArgument(("Wrong encryption secret.").to_string())
             },  
             _ => DcCmdError::Unknown,

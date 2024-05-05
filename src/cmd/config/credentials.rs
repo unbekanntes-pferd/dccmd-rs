@@ -11,7 +11,7 @@ pub trait HandleCredentials {
 impl HandleCredentials for Entry {
     fn set_dracoon_env(&self, secret: &str) -> Result<(), DcCmdError> {
         match self.set_password(secret) {
-            Ok(_) => Ok(()),
+            Ok(()) => Ok(()),
             Err(_) => Err(DcCmdError::CredentialStorageFailed),
         }
     }
@@ -27,7 +27,7 @@ impl HandleCredentials for Entry {
         }
 
         match self.delete_password() {
-            Ok(_) => Ok(()),
+            Ok(()) => Ok(()),
             Err(_) => Err(DcCmdError::CredentialDeletionFailed),
         }
     }

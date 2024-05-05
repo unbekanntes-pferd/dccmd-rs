@@ -41,10 +41,10 @@ impl UserCommandHandler {
             ))
             .map_err(|_| DcCmdError::IoError)?;
         self.term
-            .write_line(&format!("► last login at: {}", last_login))
+            .write_line(&format!("► last login at: {last_login}"))
             .map_err(|_| DcCmdError::IoError)?;
         self.term
-            .write_line(&format!("► expire at: {}", expire_at))
+            .write_line(&format!("► expire at: {expire_at}"))
             .map_err(|_| DcCmdError::IoError)?;
         self.term
             .write_line(&format!("► locked: {}", user_info.is_locked))
@@ -100,13 +100,12 @@ impl UserCommandHandler {
                 let mut user_table = Table::new(users);
                 user_table
                     .with(Panel::footer(format!(
-                        "{} users ({} total)",
-                        displayed, total
+                        "{displayed} users ({total} total)",
                     )))
                     .with(Style::modern())
                     .with(Modify::new(Segment::all()).with(Width::wrap(16)));
 
-                println!("{}", user_table);
+                println!("{user_table}");
             }
         }
 

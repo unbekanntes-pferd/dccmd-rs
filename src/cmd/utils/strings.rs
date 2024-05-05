@@ -8,9 +8,6 @@ use tracing::debug;
 const ERROR_PREFIX: &str = "Error: ";
 const SUCCESS_PREFIX: &str = "Success: ";
 
-const NODE_LIST_HEADER: &str =
-    "id\tname\ttype\tsize\tmodified\tcreated\tparent id\tparent path\tDe";
-
 pub fn format_error_message(message: &str) -> String {
     let err_prefix_red = format!("{}", style(ERROR_PREFIX).red().bold());
 
@@ -172,58 +169,6 @@ pub fn parse_path(path: &str, base_url: &str) -> Result<ParsedPath, DcCmdError> 
     Ok((parent_path, name, depth))
 }
 
-pub fn parse_niode_path(path: &str, base_url: &str) -> Result<ParsedPath, DcCmdError> {
-    let base_url = base_url.trim_start_matches("https://");
-    let path = path.trim_start_matches(base_url);
-
-    debug!("path: {}", path);
-
-    if path == "/" {
-        return Ok((String::from("/"), String::new(), 0));
-    }
-
-    let (parent_path, name, depth) = if path.ends_with('/') {
-        // this is a container (folder or room)
-
-        debug!("path: {}", path);
-        let path = path.split('/').collect::<Vec<&str>>();
-        debug!("path: {:?}", path);
-        let name = (*path
-            .last()
-            .ok_or(DcCmdError::InvalidPath(path.clone().join("/")))?)
-        .to_string();
-        debug!("name: {}", name);
-        let parent_path = path[..path.len() - 1].join("/");
-        debug!("parent_path: {}", parent_path);
-        let parent_path = format!("{parent_path}/");
-        debug!("parent_path: {}", parent_path);
-        let parent_path = parent_path.trim_start_matches(base_url).to_string();
-        debug!("parent_path: {}", parent_path);
-        let depth = path.len() as u64 - 2;
-
-        (parent_path, name, depth)
-    }
-    // this is a file
-    else {
-        let path = path.split('/').collect::<Vec<&str>>();
-        let name = (*path
-            .last()
-            .ok_or(DcCmdError::InvalidPath(path.clone().join("/")))?)
-        .to_string();
-        let parent_path = path[..path.len() - 1].join("/");
-        let parent_path = format!("{parent_path}/");
-        let parent_path = parent_path.trim_start_matches(base_url).to_string();
-        let depth = path.len() as u64 - 2;
-
-        (parent_path, name, depth)
-    };
-
-    debug!("parent_path: {}", parent_path);
-    debug!("name: {}", name);
-    debug!("depth: {}", depth);
-
-    Ok((parent_path, name, depth))
-}
 
 pub fn build_node_path(path: ParsedPath) -> String {
     let (parent_path, name, depth) = path;

@@ -66,7 +66,7 @@ pub async fn download(
     if is_search_query(&node_name) {
         info!("Attempting download of search query {}.", node_name);
         let files =
-            search_nodes(&dracoon, &node_name, Some(&parent_path), None, true, 0, 500).await?;
+            search_nodes(&dracoon, &node_name, Some(&parent_path), true, 0, 500).await?;
         let files = files.get_files();
 
         info!("Found {} files.", files.len());
@@ -147,7 +147,7 @@ async fn download_public_file(
             public_download_share.clone(),
             download_opts.share_password,
             &mut out_file,
-            Some(Box::new(move |progress, total| {
+            Some(Box::new(move |progress, _| {
                 progress_bar_mv.set_message(public_download_share.clone().file_name);
                 progress_bar_mv.inc(progress);
             })),
@@ -155,9 +155,9 @@ async fn download_public_file(
         )
         .await?;
 
-    progress_bar.finish_with_message(format!("{} complete", file_name));
+    progress_bar.finish_with_message(format!("{file_name} complete"));
 
-    info!("Download of public file {} complete.", file_name);
+    info!("Download of public file {file_name} complete.");
 
     Ok(())
 }
@@ -208,7 +208,7 @@ async fn download_file(
         .download(
             node,
             &mut out_file,
-            Some(Box::new(move |progress, total| {
+            Some(Box::new(move |progress, _| {
                 progress_bar_mv.set_message(node_name_clone.clone());
                 progress_bar_mv.inc(progress);
             })),
@@ -512,7 +512,7 @@ async fn get_folders(
                 let params = ListAllParams::builder()
                     .with_filter(NodesSearchFilter::is_folder())
                     .with_sort(NodesSearchSortBy::parent_path(SortOrder::Asc))
-                    .with_offset(500)
+                    .with_offset(offset)
                     .build();
 
                 let folders = dracoon_client

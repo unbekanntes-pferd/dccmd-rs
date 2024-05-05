@@ -1,9 +1,9 @@
-#![allow(dead_code)]
-#![allow(unused_variables)]
+#![allow(clippy::module_name_repetitions)]
+#![allow(clippy::struct_excessive_bools)]
 
 use clap::Parser;
 use cmd::{
-    config::handle_config_cmd,
+    config::{handle_config_cmd, logs::init_logging},
     handle_error,
     models::{DcCmd, DcCmdCommand, PasswordAuth},
     nodes::{
@@ -17,14 +17,10 @@ use cmd::{
     users::handle_users_cmd,
 };
 use console::Term;
-use std::fs::OpenOptions;
-use tracing::{error, metadata::LevelFilter};
-use tracing_subscriber::filter::EnvFilter;
-
-use crate::cmd::models::DcCmdError;
 
 mod cmd;
 
+#[allow(clippy::too_many_lines)]
 #[tokio::main]
 async fn main() {
     let opt = DcCmd::parse();
@@ -32,44 +28,7 @@ async fn main() {
     let term = Term::stdout();
     let err_term = Term::stderr();
 
-    let env_filter = if opt.debug {
-        EnvFilter::from_default_env().add_directive(LevelFilter::DEBUG.into())
-    } else {
-        EnvFilter::from_default_env().add_directive(LevelFilter::INFO.into())
-    };
-
-    // set up logging file
-    let log_file_path = opt.log_file_path.unwrap_or("dccmd-rs.log".to_string());
-
-    let log_file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(log_file_path)
-        .map_err(|e| {
-            error!("Failed to create or open log file: {}", e);
-            DcCmdError::LogFileCreationFailed
-        });
-
-    if let Err(e) = &log_file {
-        handle_error(&err_term, e);
-    }
-
-    let log_file = log_file.unwrap();
-
-    // set up logging format
-    let log_format = tracing_subscriber::fmt::format()
-        .with_level(true)
-        .with_thread_names(false)
-        .with_target(true)
-        .with_ansi(false)
-        .compact();
-
-    // initialize logging
-    tracing_subscriber::fmt()
-        .with_env_filter(env_filter)
-        .event_format(log_format)
-        .with_writer(std::sync::Mutex::new(log_file))
-        .init();
+    init_logging(&err_term, opt.debug, opt.log_file_path);
 
     let password_auth = match (opt.username, opt.password) {
         (Some(username), Some(password)) => Some(PasswordAuth(username, password)),
