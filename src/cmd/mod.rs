@@ -1,6 +1,6 @@
 use console::Term;
 use keyring::Entry;
-use tracing::error;
+use tracing::{debug, error};
 
 use self::{
     config::credentials::{get_client_credentials, HandleCredentials},
@@ -57,7 +57,14 @@ async fn init_encryption(
         }
     };
 
-    let _ = dracoon.get_keypair(Some(secret.clone())).await?;
+    let _ = dracoon
+        .get_keypair(Some(secret.clone()))
+        .await
+        .map_err(|e| {
+            error!("Error getting keypair: {}", e);
+            debug!("Wrong credentials?");
+            e
+        })?;
 
     // If necessary, create a new entry to store the secret
     if store {

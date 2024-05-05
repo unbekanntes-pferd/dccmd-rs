@@ -56,7 +56,10 @@ impl From<DracoonClientError> for DcCmdError {
             DracoonClientError::S3Error(err) => DcCmdError::DracoonS3Error(err),
             DracoonClientError::MissingArgument => {
                 DcCmdError::InvalidArgument("Missing argument (password set?)".to_string())
-            }
+            },
+            DracoonClientError::CryptoError(err) => {
+                DcCmdError::InvalidArgument(("Wrong encryption secret.").to_string())
+            },  
             _ => DcCmdError::Unknown,
         }
     }
@@ -225,7 +228,6 @@ pub enum DcCmdCommand {
     Config {
         #[clap(subcommand)]
         cmd: ConfigCommand,
-
     },
 
     /// Print current dccmd-rs version
@@ -332,7 +334,6 @@ pub enum UserCommand {
 
 #[derive(Parser)]
 pub enum ConfigCommand {
-
     /// Manage DRACOON Commander auth credentials (refresh token)
     Auth {
         #[clap(subcommand)]

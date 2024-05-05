@@ -18,13 +18,13 @@ pub mod credentials;
 pub mod models;
 
 pub struct ConfigCommandHandler {
-    entry: Entry,
+    entry: Box<dyn HandleCredentials>,
     term: Term,
 }
 
 impl ConfigCommandHandler {
-    pub fn new(entry: Entry, term: Term) -> Self {
-        Self { entry, term }
+    pub fn new(entry: impl HandleCredentials + 'static, term: Term) -> Self {
+        Self { entry: Box::new(entry), term }
     }
 
     pub async fn get_refresh_token_info(&self, target: String) -> Result<(), DcCmdError> {
@@ -95,7 +95,7 @@ impl ConfigCommandHandler {
         };
 
         self.term
-            .write_line(format!("► Encryption secret securely stored for {}.", target).as_str())
+            .write_line(format!("► Encryption secret securely stored for {}.", target.trim_end_matches("-crypto")).as_str())
             .map_err(|_| DcCmdError::IoError)?;
 
         Ok(())
@@ -152,7 +152,7 @@ fn prepare_config_cmd(
     target: String,
     term: &Term,
     is_crypto: bool,
-) -> Result<(String, Entry), DcCmdError> {
+) -> Result<(String, impl HandleCredentials), DcCmdError> {
     let base_url = format!(
         "https://{}",
         target
