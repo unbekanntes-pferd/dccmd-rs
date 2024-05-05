@@ -319,7 +319,12 @@ async fn delete_node_content(
         500,
     )
     .await?;
-    let node_ids = nodes.items.iter().map(|node| node.id).collect::<Vec<u64>>();
+    let node_ids = nodes
+        .items
+        .iter()
+        .filter(|node| node.node_type != NodeType::Room)
+        .map(|node| node.id)
+        .collect::<Vec<u64>>();
 
     // ask for confirmation and provide info about number of items to delete
     let confirmed = Confirm::new()
