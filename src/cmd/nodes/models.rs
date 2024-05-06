@@ -1,10 +1,6 @@
-use console::Term;
-use dco3::{auth::Connected, Dracoon};
+#![allow(clippy::struct_excessive_bools)]
 
-use crate::cmd::{
-    init_dracoon,
-    models::{DcCmdError, PasswordAuth},
-};
+use crate::cmd::models::PasswordAuth;
 
 pub struct CmdMkRoomOptions {
     pub inherit_permissions: bool,
@@ -55,6 +51,7 @@ impl CmdDownloadOptions {
     }
 }
 
+#[allow(clippy::struct_excessive_bools)]
 pub struct CmdUploadOptions {
     pub overwrite: bool,
     pub recursive: bool,
@@ -82,30 +79,14 @@ impl CmdUploadOptions {
     ) -> Self {
         Self {
             overwrite,
-            classification,
-            velocity,
             recursive,
             skip_root,
             share,
+            classification,
+            velocity,
             auth,
             encryption_password,
             share_password,
         }
-    }
-}
-
-pub struct UploadCommandHandler {
-    client: Dracoon<Connected>,
-    term: Term,
-}
-
-impl UploadCommandHandler {
-    pub async fn try_new(target_domain: &str, term: Term) -> Result<Self, DcCmdError> {
-        let client = init_dracoon(target_domain, None, false).await?;
-        Ok(Self { client, term })
-    }
-
-    pub fn client(&self) -> &Dracoon<Connected> {
-        &self.client
     }
 }

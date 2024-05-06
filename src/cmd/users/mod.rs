@@ -45,7 +45,7 @@ impl UserCommandHandler {
         Ok(Self { client, term })
     }
 
-    pub async fn new_from_client(client: Dracoon<Connected>, term: Term) -> Self {
+    pub fn new_from_client(client: Dracoon<Connected>, term: Term) -> Self {
         Self { client, term }
     }
 
@@ -56,15 +56,15 @@ impl UserCommandHandler {
             .from_path(&source)
             .map_err(|e| {
                 error!("Error reading file: {}", e);
-                DcCmdError::InvalidArgument(format!("File not found: {}", source))
+                DcCmdError::InvalidArgument(format!("File not found: {source}"))
             })?;
 
         let imports = rdr
             .deserialize::<UserImport>()
             .collect::<Result<Vec<_>, csv::Error>>()
             .map_err(|e| {
-                error!("Error reading record: {}", e);
-                DcCmdError::InvalidArgument(format!("Invalid CSV format. Expected fields: first_name, last_name, email, login (optional), mfa_enabled (optional).\n{})", e))
+                error!("Error reading record: {e}");
+                DcCmdError::InvalidArgument(format!("Invalid CSV format. Expected fields: first_name, last_name, email, login (optional), mfa_enabled (optional).\n{e})"))
             })?;
 
         // build requests per import
@@ -105,6 +105,7 @@ impl UserCommandHandler {
                     results.iter().filter(|r| r.is_err()).for_each(|r| {
                         error!("Failed to import user: {:?}", r);
                     });
+                    #[allow(clippy::cast_possible_truncation)]
                     let err_count = results.iter().filter(|r| r.is_err()).count() as u32;
                     let prev_err_count =
                         errors.fetch_add(err_count, std::sync::atomic::Ordering::Relaxed);
@@ -116,9 +117,10 @@ impl UserCommandHandler {
             })
             .await;
 
+        #[allow(clippy::arithmetic_side_effects, clippy::cast_possible_truncation)]
         let imported = imports.len() as u32 - errors.load(std::sync::atomic::Ordering::Relaxed);
 
-        let msg = format!("{} users imported", imported);
+        let msg = format!("{imported} users imported");
 
         progress_bar.finish_with_message(msg.clone());
 
@@ -198,7 +200,7 @@ impl UserCommandHandler {
         Ok(())
     }
 
-    fn build_params(&self, search: &Option<String>, offset: u64, limit: u64) -> ListAllParams {
+    fn build_params(search: &Option<String>, offset: u64, limit: u64) -> ListAllParams {
         if let Some(search) = search {
             let filter = UsersFilter::username_contains(search);
             ListAllParams::builder()
@@ -222,7 +224,7 @@ impl UserCommandHandler {
         all: bool,
         csv: bool,
     ) -> Result<(), DcCmdError> {
-        let params = self.build_params(
+        let params = UserCommandHandler::build_params(
             &search,
             offset.unwrap_or(0).into(),
             limit.unwrap_or(500).into(),
@@ -241,7 +243,7 @@ impl UserCommandHandler {
             let reqs = (500..=total)
                 .step_by(500)
                 .map(|offset| {
-                    let params = self.build_params(&search, offset, 500);
+                    let params = UserCommandHandler::build_params(&search, offset, 500);
                     self.client.users.get_users(Some(params), None, None)
                 })
                 .collect::<Vec<_>>();
@@ -281,10 +283,10 @@ impl UserCommandHandler {
         let confirm_msg = if let Some(user_name) = user_name {
             let user = self.find_user_by_username(&user_name).await?;
             self.client.users.delete_user(user.id).await?;
-            format!("User {} deleted", user_name)
+            format!("User {user_name} deleted",)
         } else if let Some(user_id) = user_id {
             self.client.users.delete_user(user_id).await?;
-            format!("User {} (id) deleted", user_id)
+            format!("User {user_id} (id) deleted",)
         } else {
             error!("User name or user id must be provided");
             return Err(DcCmdError::InvalidArgument(
@@ -331,8 +333,8 @@ impl UserCommandHandler {
             .await?;
 
         let Some(user) = results.items.into_iter().find(|u| u.user_name == user_name) else {
-            error!("No user found with username: {}", user_name);
-            let msg = format!("No user found with username: {}", user_name);
+            error!("No user found with username: {user_name}");
+            let msg = format!("No user found with username: {user_name}");
             return Err(DcCmdError::InvalidArgument(msg));
         };
 
@@ -356,7 +358,7 @@ pub async fn handle_users_cmd(cmd: UserCommand, term: Term) -> Result<(), DcCmdE
 
     match cmd {
         UserCommand::Create {
-            target,
+            target: _,
             first_name,
             last_name,
             email,
@@ -377,7 +379,7 @@ pub async fn handle_users_cmd(cmd: UserCommand, term: Term) -> Result<(), DcCmdE
                 .await?;
         }
         UserCommand::Ls {
-            target,
+            target: _,
             search,
             offset,
             limit,
@@ -387,21 +389,21 @@ pub async fn handle_users_cmd(cmd: UserCommand, term: Term) -> Result<(), DcCmdE
             handler.list_users(search, offset, limit, all, csv).await?;
         }
         UserCommand::Rm {
-            target,
+            target: _,
             user_name,
             user_id,
         } => {
             handler.delete_user(user_name, user_id).await?;
         }
         UserCommand::Import {
-            target,
+            target: _,
             source,
             oidc_id,
         } => {
             handler.import_users(source, oidc_id).await?;
         }
         UserCommand::Info {
-            target,
+            target: _,
             user_name,
             user_id,
         } => {

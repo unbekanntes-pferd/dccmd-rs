@@ -44,13 +44,15 @@ cargo build
 
 Currently, the following commands are working:
 
+- `config` - config management of DRACOON Commander (see subcommands below)
 - `download` - downloads a file or folder / room from DRACOON to a desired location on disk (encrypted, unencrypted)
-- `upload` - uploads a file or folder to a parent in DRACOON (encrypted, unencrypted)
 - `ls` - lists all nodes for a given path in DRACOON
 - `mkdir` - creates a folder in given path in DRACOON
 - `mkroom` - creates a room (inherits permissions) in given path in DRACOON
 - `rm` - removes a node by given path in DRACOON
+- `upload` - uploads a file or folder to a parent in DRACOON (encrypted, unencrypted)
 - `users` - user management in DRACOON (see subcommands below)
+
 
 ## Example usage
 
@@ -143,9 +145,11 @@ To delete nodes, use the `rm` command:
 ```bash
 dccmd-rs rm your.dracoon.domain/some/path/some_file.pdf
 dccmd-rs rm -r your.dracoon.domain/some/path/some/room
+dccmd-rs rm -r your.dracoon.domain/*test
 ```
 *Note*: If you intend to delete a container (room or folder), use the recursive flag.
 *Note*: Room deletion always requires additional confirmation.
+*Note*: You can delete the content in a room by using search strings (`*` deletes all). This does **not** include rooms.
 
 ### Creating folders
 
@@ -215,14 +219,39 @@ dccmd-rs users info your.dracoon.domain/ --user-id 2
 dccmd-rs users info your.dracoon.domain/ --user-name foo # short: -u
 ```
 
+### Config
+
+#### Stored authorization
+
+You can verify if the refresh stoken is (securely) stored via the `config auth ls` command.
+In order to remove a stored token, use the `config auth rm` command.
+
+```bash
+# displays user info for stored refresh token
+dccmd-rs config auth ls your.dracoon.domain/
+# removes stored refresh token for given domain
+dccmd-rs config auth rm your.dracoon.domain/ 
+```
+
+#### Stored crypto secret
+
+You can verify if the crypto secret is (securely) stored via the `config crypto ls` command.
+In order to remove a stored token, use the `config crypto rm` command.
+
+```bash
+# displays user info for stored crypto secret
+dccmd-rs config crypto ls your.dracoon.domain/
+# removes stored crypto secret for given domain
+dccmd-rs config crypto rm your.dracoon.domain/ 
+```
+
 ### CLI mode
 
 Currently dccmd-rs will fail to store credentials if you are running a headless Linux or are trying to run in Windows with WSL.
 In such cases you can pass the username and password as arguments like so:
 
-```
+```bash
 dccmd-rs --username your_username --password your_secure_password ls your.dracoon.domain/some/path
-
 ```
 
 Use this at your own risk and be aware that the password is stored in plain in your shell history.
@@ -230,7 +259,6 @@ Use this at your own risk and be aware that the password is stored in plain in y
 
 This also works for the encryption password like so: 
 
-```
+```bash
 dccmd-rs --username your_username --password your_secure_password --encryption-password your_secure_encryption_password ls your.dracoon.domain/some/path
-
 ```

@@ -69,16 +69,7 @@ pub async fn list_nodes(
 
     let node_list = if is_search_query(&node_name) {
         debug!("Searching for nodes with query {}", node_name);
-        search_nodes(
-            &dracoon,
-            &node_name,
-            Some(&parent_path),
-            managed,
-            all,
-            offset,
-            limit,
-        )
-        .await?
+        search_nodes(&dracoon, &node_name, Some(&parent_path), all, offset, limit).await?
     } else {
         debug!("Fetching node list from path {}", node_path.unwrap_or("/"));
         get_nodes(&dracoon, node_path, managed, all, offset, limit).await?
@@ -166,7 +157,6 @@ async fn search_nodes(
     dracoon: &Dracoon<Connected>,
     search_string: &str,
     node_path: Option<&str>,
-    managed: Option<bool>,
     all: bool,
     offset: u32,
     limit: u32,
@@ -235,15 +225,30 @@ pub async fn delete_node(
 ) -> Result<(), DcCmdError> {
     let dracoon = init_dracoon(&source, auth, false).await?;
     let (parent_path, node_name, depth) = parse_path(&source, dracoon.get_base_url().as_ref())?;
+    let is_search_query = is_search_query(&node_name);
+    // check if recursive flag is set
+    let recursive = recursive.unwrap_or(false);
+
+    match (recursive, is_search_query) {
+        (true, true) => return delete_node_content(&dracoon, &node_name, parent_path).await,
+        (false, true) => {
+            let msg = format_error_message(
+                "Deleting search results not allowed. Use --recursive flag to delete recursively.",
+            );
+            error!("{}", msg);
+            term.write_line(&msg)
+                .expect("Error writing message to terminal.");
+            return Ok(());
+        }
+        _ => (),
+    }
+
     let node_path = build_node_path((parent_path.clone(), node_name.clone(), depth));
     let node = dracoon
         .nodes
         .get_node_from_path(&node_path)
         .await?
         .ok_or(DcCmdError::InvalidPath(source.clone()))?;
-
-    // check if recursive flag is set
-    let recursive = recursive.unwrap_or(false);
 
     // if node type is folder or room and not recursive, abort
     if !recursive && (node.node_type == NodeType::Folder || node.node_type == NodeType::Room) {
@@ -288,6 +293,35 @@ pub async fn delete_node(
     }
 }
 
+async fn delete_node_content(
+    dracoon: &Dracoon<Connected>,
+    search: &str,
+    parent_path: String,
+) -> Result<(), DcCmdError> {
+    let nodes = search_nodes(dracoon, search, Some(&parent_path), true, 0, 500).await?;
+    let node_ids = nodes
+        .items
+        .iter()
+        .filter(|node| node.node_type != NodeType::Room)
+        .map(|node| node.id)
+        .collect::<Vec<u64>>();
+
+    // ask for confirmation and provide info about number of items to delete
+    let confirmed = Confirm::new()
+        .with_prompt(format!(
+            "Do you really want to delete {} items?",
+            node_ids.len()
+        ))
+        .interact()
+        .expect("Error reading user input.");
+
+    if confirmed {
+        dracoon.nodes.delete_nodes(node_ids.into()).await?;
+    }
+
+    Ok(())
+}
+
 pub async fn create_folder(
     term: Term,
     source: String,
@@ -321,7 +355,7 @@ pub async fn create_folder(
 
     let req = req.build();
 
-    let folder = dracoon.nodes.create_folder(req).await?;
+    let _folder = dracoon.nodes.create_folder(req).await?;
 
     let msg = format!("Folder {node_name} created.");
     info!("{}", msg);
@@ -354,7 +388,7 @@ pub async fn create_room(
 
     let req = match opts.admin_users {
         Some(users) => {
-            let handler = UserCommandHandler::new_from_client(dracoon.clone(), term.clone()).await;
+            let handler = UserCommandHandler::new_from_client(dracoon.clone(), term.clone());
 
             let reqs = users
                 .iter()
@@ -372,7 +406,7 @@ pub async fn create_room(
                             e
                         });
                         if let Ok(users) = result {
-                            cloned_admin_users.lock().await.extend(users)
+                            cloned_admin_users.lock().await.extend(users);
                         }
                     }
                 })
@@ -405,7 +439,7 @@ pub async fn create_room(
             .build(),
     };
 
-    let room = dracoon.nodes.create_room(req).await?;
+    let _room = dracoon.nodes.create_room(req).await?;
 
     let msg = format!("Room {node_name} created.");
     info!("{}", msg);

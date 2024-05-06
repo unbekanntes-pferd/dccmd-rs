@@ -9,6 +9,8 @@ use dco3::{
     nodes::models::S3ErrorResponse,
 };
 
+use super::config::models::{ConfigAuthCommand, ConfigCryptoCommand};
+
 // represents password flow
 #[derive(Clone)]
 pub struct PasswordAuth(pub String, pub String);
@@ -54,6 +56,9 @@ impl From<DracoonClientError> for DcCmdError {
             DracoonClientError::S3Error(err) => DcCmdError::DracoonS3Error(err),
             DracoonClientError::MissingArgument => {
                 DcCmdError::InvalidArgument("Missing argument (password set?)".to_string())
+            }
+            DracoonClientError::CryptoError(_) => {
+                DcCmdError::InvalidArgument(("Wrong encryption secret.").to_string())
             }
             _ => DcCmdError::Unknown,
         }
@@ -219,6 +224,12 @@ pub enum DcCmdCommand {
         cmd: UserCommand,
     },
 
+    /// Configure DRACOON Commander
+    Config {
+        #[clap(subcommand)]
+        cmd: ConfigCommand,
+    },
+
     /// Print current dccmd-rs version
     Version,
 }
@@ -318,6 +329,21 @@ pub enum UserCommand {
 
         #[clap(long)]
         user_id: Option<u64>,
+    },
+}
+
+#[derive(Parser)]
+pub enum ConfigCommand {
+    /// Manage DRACOON Commander auth credentials (refresh token)
+    Auth {
+        #[clap(subcommand)]
+        cmd: ConfigAuthCommand,
+    },
+
+    /// Manage DRACOON Commander encryption credentials (encryption secret)
+    Crypto {
+        #[clap(subcommand)]
+        cmd: ConfigCryptoCommand,
     },
 }
 
