@@ -107,6 +107,10 @@ pub enum DcCmdCommand {
         #[clap(long)]
         overwrite: bool,
 
+        /// Preserve Download Share Links and point them to the new node in DRACOON
+        #[clap(long)]
+        keep_share_links: bool,
+
         /// classification of the node (1-4)
         #[clap(long)]
         classification: Option<u8>,
