@@ -46,7 +46,7 @@ pub async fn upload(
 ) -> Result<(), DcCmdError> {
     // this is a public upload share
     match (target.contains("/public/upload-shares/"), source.is_file()) {
-        (true, true) => return upload_public_file(source, target, opts).await,
+        (true, true) => return upload_public_file(source, target).await,
         (true, false) => {
             error!("Public upload shares only support file uploads.");
             return Err(DcCmdError::InvalidPath(
@@ -83,16 +83,7 @@ pub async fn upload(
     match (source.is_file(), source.is_dir(), opts.recursive) {
         // is a file
         (true, _, _) => {
-            upload_file(
-                term,
-                &dracoon,
-                source,
-                &parent_node,
-                opts.overwrite,
-                opts.classification,
-                opts.share,
-            )
-            .await?;
+            upload_file(term, &dracoon, source, &parent_node, opts.clone()).await?;
         }
         // is a directory and recursive flag is set
         (_, true, true) => {
@@ -115,11 +106,7 @@ pub async fn upload(
     Ok(())
 }
 
-async fn upload_public_file(
-    source: PathBuf,
-    target: String,
-    opts: CmdUploadOptions,
-) -> Result<(), DcCmdError> {
+async fn upload_public_file(source: PathBuf, target: String) -> Result<(), DcCmdError> {
     let dracoon = init_public_dracoon(&target).await?;
 
     let access_key = target
@@ -143,14 +130,6 @@ async fn upload_public_file(
 
     let file_meta = get_file_meta(&file_meta, &source)?;
 
-    let classification = opts.classification.unwrap_or(2);
-    let resolution_strategy = if opts.overwrite {
-        ResolutionStrategy::Overwrite
-    } else {
-        ResolutionStrategy::AutoRename
-    };
-    let keep_share_links = matches!(resolution_strategy, ResolutionStrategy::Overwrite);
-
     let file_size = file_meta.1;
 
     let progress_bar = ProgressBar::new(file_size);
@@ -160,11 +139,7 @@ async fn upload_public_file(
     .progress_chars("=>-"),
 );
 
-    let upload_opts = UploadOptions::builder(file_meta)
-        .with_classification(classification)
-        .with_resolution_strategy(resolution_strategy)
-        .with_keep_share_links(keep_share_links)
-        .build();
+    let upload_opts = UploadOptions::builder(file_meta).build();
 
     let reader = tokio::io::BufReader::new(file);
 
@@ -195,9 +170,7 @@ async fn upload_file(
     dracoon: &Dracoon<Connected>,
     source: PathBuf,
     target_node: &Node,
-    overwrite: bool,
-    classification: Option<u8>,
-    share: bool,
+    opts: CmdUploadOptions,
 ) -> Result<(), DcCmdError> {
     info!("Attempting upload of file: {}.", source.to_string_lossy());
     info!("Target node: {}.", target_node.name);
@@ -228,13 +201,18 @@ async fn upload_file(
     progress_bar_mv.set_message("Uploading");
     progress_bar_mv.set_length(file_meta.1);
 
-    let classification = classification.unwrap_or(2);
-    let resolution_strategy = if overwrite {
+    let classification = opts.classification.unwrap_or(2);
+    let resolution_strategy = if opts.overwrite {
         ResolutionStrategy::Overwrite
     } else {
         ResolutionStrategy::AutoRename
     };
-    let keep_share_links = matches!(resolution_strategy, ResolutionStrategy::Overwrite);
+
+    // only keep share links if overwrite is set
+    let keep_share_links = match resolution_strategy {
+        ResolutionStrategy::Overwrite => opts.keep_share_links,
+        _ => false,
+    };
 
     let upload_options = UploadOptions::builder(file_meta)
         .with_classification(classification)
@@ -261,7 +239,7 @@ async fn upload_file(
 
     let is_encrypted = node.is_encrypted.unwrap_or(false);
 
-    if !is_encrypted && share {
+    if !is_encrypted && opts.share {
         let link = share_node(dracoon, &node).await?;
         let success_msg =
             format_success_message(format!("Shared {file_name}.\n▶︎▶︎ {link}").as_str());
@@ -480,10 +458,7 @@ async fn upload_container(
         dracoon,
         target,
         file_map,
-        opts.overwrite,
-        opts.keep_share_links,
-        opts.classification,
-        opts.velocity,
+        opts.clone(),
     )
     .await?;
 
@@ -636,14 +611,11 @@ async fn upload_files(
     dracoon: &Dracoon<Connected>,
     parent_node: &Node,
     files: BTreeMap<PathBuf, (u64, u64)>,
-    overwrite: bool,
-    keep_share_links: bool,
-    classification: Option<u8>,
-    velocity: Option<u8>,
+    opts: CmdUploadOptions,
 ) -> Result<(), DcCmdError> {
     info!("Attempting upload of {} files.", files.len());
 
-    let velocity = velocity.unwrap_or(1).clamp(1, 10);
+    let velocity = opts.velocity.unwrap_or(1).clamp(1, 10);
 
     let concurrent_reqs = velocity * 5;
 
@@ -684,11 +656,17 @@ async fn upload_files(
 
                 let file_name = file_meta.0.clone();
 
-                let classification = classification.unwrap_or(2);
-                let resolution_strategy = if overwrite {
+                let classification = opts.classification.unwrap_or(2);
+                let resolution_strategy = if opts.overwrite {
                     ResolutionStrategy::Overwrite
                 } else {
                     ResolutionStrategy::AutoRename
+                };
+
+                // only keep share links if overwrite is set
+                let keep_share_links = match resolution_strategy {
+                    ResolutionStrategy::Overwrite => opts.keep_share_links,
+                    _ => false,
                 };
 
                 let upload_options = UploadOptions::builder(file_meta)

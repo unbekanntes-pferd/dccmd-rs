@@ -52,6 +52,7 @@ impl CmdDownloadOptions {
 }
 
 #[allow(clippy::struct_excessive_bools)]
+#[derive(Clone)]
 pub struct CmdUploadOptions {
     pub overwrite: bool,
     pub keep_share_links: bool,
