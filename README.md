@@ -118,6 +118,14 @@ dccmd-rs upload /your/path your.dracoon.domain/public/upload-shares/someLongAcce
 
 **Note**: This essentially means you need to copy the created share link
 
+#### Upload options
+
+When uploading, the default resolution strategy is *autorename* - this means that if a file `foo.pdf` uploaded and already present, it is automatically renamed by DRACOON (e.g. to `foo (1).pdf`).
+
+In order to change this behavior, you can the pass the following flags / options:
+- *--overwrite* - a file with the same name will be overwritten (essentially creating versions of the same file)
+- *--keep-share-links* - if *--overwrite* is used, you can additionally keep existing (download) share links for file(s)
+
 ### Listing nodes
 To list nodes, use the `ls` command:
 
