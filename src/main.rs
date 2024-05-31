@@ -60,6 +60,7 @@ async fn main() {
             source,
             target,
             overwrite,
+            keep_share_links,
             classification,
             velocity,
             recursive,
@@ -73,6 +74,7 @@ async fn main() {
                 target,
                 CmdUploadOptions::new(
                     overwrite,
+                    keep_share_links,
                     recursive,
                     skip_root,
                     share,

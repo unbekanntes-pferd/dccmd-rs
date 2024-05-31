@@ -481,6 +481,7 @@ async fn upload_container(
         target,
         file_map,
         opts.overwrite,
+        opts.keep_share_links,
         opts.classification,
         opts.velocity,
     )
@@ -636,6 +637,7 @@ async fn upload_files(
     parent_node: &Node,
     files: BTreeMap<PathBuf, (u64, u64)>,
     overwrite: bool,
+    keep_share_links: bool,
     classification: Option<u8>,
     velocity: Option<u8>,
 ) -> Result<(), DcCmdError> {
@@ -688,8 +690,6 @@ async fn upload_files(
                 } else {
                     ResolutionStrategy::AutoRename
                 };
-
-                let keep_share_links = matches!(resolution_strategy, ResolutionStrategy::Overwrite);
 
                 let upload_options = UploadOptions::builder(file_meta)
                     .with_classification(classification)

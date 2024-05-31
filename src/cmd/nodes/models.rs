@@ -54,6 +54,7 @@ impl CmdDownloadOptions {
 #[allow(clippy::struct_excessive_bools)]
 pub struct CmdUploadOptions {
     pub overwrite: bool,
+    pub keep_share_links: bool,
     pub recursive: bool,
     pub skip_root: bool,
     pub share: bool,
@@ -68,6 +69,7 @@ pub struct CmdUploadOptions {
 impl CmdUploadOptions {
     pub fn new(
         overwrite: bool,
+        keep_share_links: bool,
         recursive: bool,
         skip_root: bool,
         share: bool,
@@ -79,6 +81,7 @@ impl CmdUploadOptions {
     ) -> Self {
         Self {
             overwrite,
+            keep_share_links,
             recursive,
             skip_root,
             share,
