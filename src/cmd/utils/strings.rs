@@ -136,7 +136,6 @@ fn to_readable_size(size: u64) -> String {
 
 type ParsedPath = (String, String, u64);
 pub fn parse_path(path: &str, base_url: &str) -> Result<ParsedPath, DcCmdError> {
-
     let base_url = base_url.trim_start_matches("https://");
     let path = path.trim_start_matches(base_url).trim_start_matches('/');
 
@@ -144,8 +143,11 @@ pub fn parse_path(path: &str, base_url: &str) -> Result<ParsedPath, DcCmdError> 
 
     let path_parts: Vec<&str> = path.trim_end_matches('/').split('/').collect();
     debug!("path_parts: {:?}", path_parts);
-    
-    let name = path_parts.last().ok_or(DcCmdError::InvalidPath(path.to_string()))?.to_string();
+
+    let name = path_parts
+        .last()
+        .ok_or(DcCmdError::InvalidPath(path.to_string()))?
+        .to_string();
     let depth = path_parts.len().saturating_sub(1) as u64;
 
     let parent_path = if depth == 0 {

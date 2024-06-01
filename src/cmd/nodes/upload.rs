@@ -454,13 +454,7 @@ async fn upload_container(
     let file_map = create_file_map(files, &created_nodes, root_path)?;
 
     // upload files
-    upload_files(
-        dracoon,
-        target,
-        file_map,
-        opts.clone(),
-    )
-    .await?;
+    upload_files(dracoon, target, file_map, opts.clone()).await?;
 
     info!("Upload of {} complete.", source.to_string_lossy());
 
