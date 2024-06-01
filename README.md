@@ -227,6 +227,33 @@ dccmd-rs users info your.dracoon.domain/ --user-id 2
 dccmd-rs users info your.dracoon.domain/ --user-name foo # short: -u
 ```
 
+
+### Managing groups
+
+To list groups, you can use the `groups ls some.dracoon.domain.com` command:
+
+```bash
+# optional flags: --all (lists all groups, default: 500, paging) --csv (csv format)
+# optional flags: --search (by username)
+dccmd-rs groups ls your.dracoon.domain/
+dccmd-rs groups ls your.dracoon.domain/ --csv --all > grouplist.csv
+dccmd-rs groups ls your.dracoon.domain/ --search foo
+```
+
+To create groups, you can use the `groups create some.dracoon.domain.com` command:
+
+```bash
+# params: --name
+dccmd-rs groups create your.dracoon.domain/ --name foo
+```
+
+To delete groups, you can use the `groups some.dracoon.domain.com rm` command:
+
+```bash
+# supported: group id, group name
+dccmd-rs groups rm your.dracoon.domain/ --group-id 2
+dccmd-rs groups rm your.dracoon.domain/ --group-name foo
+
 ### Config
 
 #### Stored authorization
