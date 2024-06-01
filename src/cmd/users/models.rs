@@ -20,7 +20,7 @@ pub struct UserInfo {
     pub last_login_at: Option<DateTime<Utc>>,
 }
 
-fn display_option<T: Display>(o: &Option<T>) -> String {
+pub fn display_option<T: Display>(o: &Option<T>) -> String {
     match o {
         Some(v) => v.to_string(),
         None => "N/A".to_string(),

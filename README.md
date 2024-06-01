@@ -118,6 +118,14 @@ dccmd-rs upload /your/path your.dracoon.domain/public/upload-shares/someLongAcce
 
 **Note**: This essentially means you need to copy the created share link
 
+#### Upload options
+
+When uploading, the default resolution strategy is *autorename* - this means that if a file `foo.pdf` uploaded and already present, it is automatically renamed by DRACOON (e.g. to `foo (1).pdf`).
+
+In order to change this behavior, you can the pass the following flags / options:
+- *--overwrite* - a file with the same name will be overwritten (essentially creating versions of the same file)
+- *--keep-share-links* - if *--overwrite* is used, you can additionally keep existing (download) share links for file(s)
+
 ### Listing nodes
 To list nodes, use the `ls` command:
 
@@ -218,6 +226,33 @@ To fetch specific user info, you can use the `users info some.dracoon.domain.com
 dccmd-rs users info your.dracoon.domain/ --user-id 2
 dccmd-rs users info your.dracoon.domain/ --user-name foo # short: -u
 ```
+
+
+### Managing groups
+
+To list groups, you can use the `groups ls some.dracoon.domain.com` command:
+
+```bash
+# optional flags: --all (lists all groups, default: 500, paging) --csv (csv format)
+# optional flags: --search (by username)
+dccmd-rs groups ls your.dracoon.domain/
+dccmd-rs groups ls your.dracoon.domain/ --csv --all > grouplist.csv
+dccmd-rs groups ls your.dracoon.domain/ --search foo
+```
+
+To create groups, you can use the `groups create some.dracoon.domain.com` command:
+
+```bash
+# params: --name
+dccmd-rs groups create your.dracoon.domain/ --name foo
+```
+
+To delete groups, you can use the `groups some.dracoon.domain.com rm` command:
+
+```bash
+# supported: group id, group name
+dccmd-rs groups rm your.dracoon.domain/ --group-id 2
+dccmd-rs groups rm your.dracoon.domain/ --group-name foo
 
 ### Config
 

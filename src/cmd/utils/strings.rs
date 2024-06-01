@@ -137,34 +137,28 @@ fn to_readable_size(size: u64) -> String {
 type ParsedPath = (String, String, u64);
 pub fn parse_path(path: &str, base_url: &str) -> Result<ParsedPath, DcCmdError> {
     let base_url = base_url.trim_start_matches("https://");
-    let path = path.trim_start_matches(base_url);
-    let path = path.trim_start_matches('/');
+    let path = path.trim_start_matches(base_url).trim_start_matches('/');
 
     debug!("path: {}", path);
 
-    if path == "/" {
-        return Ok((String::from("/"), String::new(), 0));
-    }
-
     let path_parts: Vec<&str> = path.trim_end_matches('/').split('/').collect();
     debug!("path_parts: {:?}", path_parts);
-    let name = String::from(
-        *path_parts
-            .last()
-            .ok_or(DcCmdError::InvalidPath(path.to_string()))?,
-    );
-    let mut parent_path = format!("/{}/", path_parts[..path_parts.len() - 1].join("/"));
+
+    let name = path_parts
+        .last()
+        .ok_or(DcCmdError::InvalidPath(path.to_string()))?
+        .to_string();
     let depth = path_parts.len().saturating_sub(1) as u64;
+
+    let parent_path = if depth == 0 {
+        String::from("/")
+    } else {
+        format!("/{}/", path_parts[..path_parts.len() - 1].join("/"))
+    };
 
     debug!("parent_path: {}", parent_path);
     debug!("name: {}", name);
     debug!("depth: {}", depth);
-
-    if parent_path == *"//" {
-        if let Some((prefix, _)) = parent_path.rsplit_once('/') {
-            parent_path = prefix.to_owned();
-        }
-    }
 
     Ok((parent_path, name, depth))
 }

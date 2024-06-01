@@ -4,6 +4,7 @@
 use clap::Parser;
 use cmd::{
     config::{handle_config_cmd, logs::init_logging},
+    groups::handle_groups_cmd,
     handle_error,
     models::{DcCmd, DcCmdCommand, PasswordAuth},
     nodes::{
@@ -136,7 +137,7 @@ async fn main() {
             delete_node(term, source, Some(recursive), password_auth).await
         }
         DcCmdCommand::Users { cmd } => handle_users_cmd(cmd, term).await,
-
+        DcCmdCommand::Groups { cmd } => handle_groups_cmd(cmd, term).await,
         DcCmdCommand::Version => print_version(&term),
         DcCmdCommand::Config { cmd } => handle_config_cmd(cmd, term).await,
     };

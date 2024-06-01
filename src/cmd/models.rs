@@ -228,6 +228,12 @@ pub enum DcCmdCommand {
         cmd: UserCommand,
     },
 
+    /// Manage groups in DRACOON
+    Groups {
+        #[clap(subcommand)]
+        cmd: GroupCommand,
+    },
+
     /// Configure DRACOON Commander
     Config {
         #[clap(subcommand)]
@@ -333,6 +339,59 @@ pub enum UserCommand {
 
         #[clap(long)]
         user_id: Option<u64>,
+    },
+}
+
+#[derive(Parser)]
+pub enum GroupCommand {
+    /// List groups in DRACOON
+    Ls {
+        /// DRACOON url
+        target: String,
+
+        /// search filter (group name)
+        #[clap(long)]
+        search: Option<String>,
+
+        /// skip n groups (default offset: 0)
+        #[clap(short, long)]
+        offset: Option<u32>,
+
+        /// limit n groups (default limit: 500)
+        #[clap(long)]
+        limit: Option<u32>,
+
+        /// fetch all groups (default: 500)
+        #[clap(long)]
+        all: bool,
+
+        /// print user information in CSV format
+        #[clap(long)]
+        csv: bool,
+    },
+
+    /// Create a group in DRACOON
+    Create {
+        /// DRACOON url
+        target: String,
+
+        /// Group name
+        #[clap(long, short)]
+        name: String,
+    },
+
+    /// delete a group in DRACOON
+    Rm {
+        /// DRACOON url
+        target: String,
+
+        ///  Group name
+        #[clap(long, short)]
+        group_name: Option<String>,
+
+        /// Group id
+        #[clap(long)]
+        group_id: Option<u64>,
     },
 }
 

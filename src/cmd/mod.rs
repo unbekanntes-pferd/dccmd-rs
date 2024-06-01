@@ -13,6 +13,7 @@ use dco3::{
 };
 
 pub mod config;
+pub mod groups;
 pub mod models;
 pub mod nodes;
 pub mod users;

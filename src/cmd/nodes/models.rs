@@ -52,6 +52,7 @@ impl CmdDownloadOptions {
 }
 
 #[allow(clippy::struct_excessive_bools)]
+#[derive(Clone)]
 pub struct CmdUploadOptions {
     pub overwrite: bool,
     pub keep_share_links: bool,
@@ -66,6 +67,7 @@ pub struct CmdUploadOptions {
 }
 
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::fn_params_excessive_bools)]
 impl CmdUploadOptions {
     pub fn new(
         overwrite: bool,
