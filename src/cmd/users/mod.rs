@@ -21,6 +21,8 @@ use super::{
     utils::strings::format_success_message,
 };
 
+pub use models::display_option;
+
 use crate::cmd::users::models::UserImport;
 
 use self::models::UserInfo;
@@ -200,7 +202,7 @@ impl UserCommandHandler {
         Ok(())
     }
 
-    fn build_params(search: &Option<String>, offset: u64, limit: u64) -> ListAllParams {
+    pub fn build_params(search: &Option<String>, offset: u64, limit: u64) -> ListAllParams {
         if let Some(search) = search {
             let filter = UsersFilter::username_contains(search);
             ListAllParams::builder()

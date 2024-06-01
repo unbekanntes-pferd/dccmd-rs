@@ -17,6 +17,7 @@ pub mod models;
 pub mod nodes;
 pub mod users;
 pub mod utils;
+pub mod groups;
 
 // service name to store
 const SERVICE_NAME: &str = env!("CARGO_PKG_NAME");
