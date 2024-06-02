@@ -5,7 +5,9 @@ use dco3::{
     auth::{
         errors::DracoonClientError,
         models::{DracoonAuthErrorResponse, DracoonErrorResponse},
-    }, nodes::models::S3ErrorResponse, FilterOperator, FilterQueryBuilder, ListAllParams
+    },
+    nodes::models::S3ErrorResponse,
+    FilterOperator, FilterQueryBuilder, ListAllParams,
 };
 
 use super::config::models::{ConfigAuthCommand, ConfigCryptoCommand};
@@ -428,7 +430,13 @@ pub struct ListOptions {
 }
 
 impl ListOptions {
-    pub fn new(filter: Option<String>, offset: Option<u32>, limit: Option<u32>, all: bool, csv: bool) -> Self {
+    pub fn new(
+        filter: Option<String>,
+        offset: Option<u32>,
+        limit: Option<u32>,
+        all: bool,
+        csv: bool,
+    ) -> Self {
         Self {
             filter,
             offset,
@@ -459,7 +467,7 @@ impl ListOptions {
     }
 }
 
-pub (crate) trait ToFilterOperator {
+pub(crate) trait ToFilterOperator {
     fn to_filter_operator(&self) -> Result<FilterOperator, DcCmdError>;
 }
 
@@ -471,7 +479,10 @@ impl ToFilterOperator for &str {
             "cn" => Ok(FilterOperator::Cn),
             "ge" => Ok(FilterOperator::Ge),
             "le" => Ok(FilterOperator::Le),
-            _ => Err(DcCmdError::InvalidArgument(format!("Invalid filter operator: {}", self))),
+            _ => Err(DcCmdError::InvalidArgument(format!(
+                "Invalid filter operator: {}",
+                self
+            ))),
         }
     }
 }

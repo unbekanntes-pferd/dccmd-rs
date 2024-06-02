@@ -44,7 +44,6 @@ pub async fn list_nodes(
     source: String,
     opts: CmdListNodesOptions,
 ) -> Result<(), DcCmdError> {
-
     let dracoon = init_dracoon(&source, opts.auth(), false).await?;
 
     let (parent_path, node_name, depth) = parse_path(&source, dracoon.get_base_url().as_ref())?;

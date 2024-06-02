@@ -108,9 +108,7 @@ fn to_printable_permissions(node: &Node) -> String {
     out_str
 }
 
-
 fn to_readable_size(size: u64) -> String {
-
     let units = ["B", "KB", "MB", "GB", "TB", "PB"];
 
     if size == 0 {
@@ -122,7 +120,6 @@ fn to_readable_size(size: u64) -> String {
     let res = size as f64 / pot as f64;
 
     format!("{:.0} {}", res, units[exp])
-
 }
 
 type ParsedPath = (String, String, u64);

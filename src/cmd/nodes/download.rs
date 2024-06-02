@@ -65,7 +65,13 @@ pub async fn download(
 
     if is_search_query(&node_name) {
         info!("Attempting download of search query {}.", node_name);
-        let files = search_nodes(&dracoon, &node_name, Some(&parent_path), &ListOptions::new(None, None, None, true, false)).await?;
+        let files = search_nodes(
+            &dracoon,
+            &node_name,
+            Some(&parent_path),
+            &ListOptions::new(None, None, None, true, false),
+        )
+        .await?;
         let files = files.get_files();
 
         info!("Found {} files.", files.len());

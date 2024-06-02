@@ -98,8 +98,8 @@ impl GroupCommandHandler {
             let reqs = (500..=total)
                 .step_by(500)
                 .map(|offset| {
-                    let params = build_params(opts.filter(), offset, 500)
-                        .expect("failed to build params");
+                    let params =
+                        build_params(opts.filter(), offset, 500).expect("failed to build params");
 
                     self.client.groups.get_groups(Some(params))
                 })
