@@ -16,7 +16,7 @@ mod print;
 
 use super::{
     init_dracoon,
-    models::{DcCmdError, GroupCommand},
+    models::{DcCmdError, GroupCommand, ListOptions},
     users::UserCommandHandler,
     utils::strings::format_success_message,
 };
@@ -83,30 +83,24 @@ impl GroupCommandHandler {
         Ok(group.clone())
     }
 
-    async fn list_groups(
-        &self,
-        search: Option<String>,
-        offset: Option<u32>,
-        limit: Option<u32>,
-        all: bool,
-        csv: bool,
-    ) -> Result<(), DcCmdError> {
+    async fn list_groups(&self, opts: ListOptions) -> Result<(), DcCmdError> {
         let params = UserCommandHandler::build_params(
-            &search,
-            offset.unwrap_or(0).into(),
-            limit.unwrap_or(500).into(),
+            opts.filter(),
+            opts.offset().unwrap_or(0).into(),
+            opts.limit().unwrap_or(500).into(),
         )?;
 
         let groups = self.client.groups.get_groups(Some(params)).await?;
 
-        if all {
+        if opts.all() {
             let total = groups.range.total;
             let shared_results = Arc::new(Mutex::new(groups.clone()));
 
             let reqs = (500..=total)
                 .step_by(500)
                 .map(|offset| {
-                    let params = UserCommandHandler::build_params(&search, offset, 500).expect("failed to build params");
+                    let params = UserCommandHandler::build_params(opts.filter(), offset, 500)
+                        .expect("failed to build params");
 
                     self.client.groups.get_groups(Some(params))
                 })
@@ -131,9 +125,9 @@ impl GroupCommandHandler {
 
             let results = shared_results.lock().await.clone();
 
-            self.print_groups(results, csv)?;
+            self.print_groups(results, opts.csv())?;
         } else {
-            self.print_groups(groups, csv)?;
+            self.print_groups(groups, opts.csv())?;
         }
 
         Ok(())
@@ -152,12 +146,16 @@ pub async fn handle_groups_cmd(cmd: GroupCommand, term: Term) -> Result<(), DcCm
         GroupCommand::Create { target: _, name } => handler.create_group(name).await,
         GroupCommand::Ls {
             target: _,
-            search,
+            filter,
             offset,
             limit,
             all,
             csv,
-        } => handler.list_groups(search, offset, limit, all, csv).await,
+        } => {
+            handler
+                .list_groups(ListOptions::new(filter, offset, limit, all, csv))
+                .await
+        }
         GroupCommand::Rm {
             group_name,
             target: _,

@@ -349,9 +349,9 @@ pub enum GroupCommand {
         /// DRACOON url
         target: String,
 
-        /// search filter (group name)
+        /// search filter (e.g. group name)
         #[clap(long)]
-        search: Option<String>,
+        filter: Option<String>,
 
         /// skip n groups (default offset: 0)
         #[clap(short, long)]
