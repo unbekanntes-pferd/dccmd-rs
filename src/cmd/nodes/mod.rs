@@ -6,6 +6,7 @@ use futures_util::{
     future::{join_all, try_join_all},
     stream, StreamExt,
 };
+use models::CmdListNodesOptions;
 use tokio::sync::Mutex;
 use tracing::{debug, error, info};
 
@@ -29,7 +30,7 @@ use dco3::{
 use self::models::CmdMkRoomOptions;
 
 use super::{
-    models::{DcCmdError, PasswordAuth},
+    models::{build_params, DcCmdError, ListOptions, PasswordAuth},
     utils::strings::{format_error_message, format_success_message},
 };
 
@@ -38,27 +39,21 @@ pub mod models;
 mod share;
 pub mod upload;
 
-#[allow(clippy::too_many_arguments, clippy::module_name_repetitions)]
+#[allow(clippy::module_name_repetitions)]
 pub async fn list_nodes(
     term: Term,
     source: String,
-    long: Option<bool>,
-    human_readable: Option<bool>,
-    managed: Option<bool>,
-    all: Option<bool>,
-    offset: Option<u32>,
-    limit: Option<u32>,
-    auth: Option<PasswordAuth>,
+    opts: CmdListNodesOptions,
 ) -> Result<(), DcCmdError> {
-    let offset = offset.unwrap_or(0);
-    let limit = limit.unwrap_or(500);
+    let offset = opts.list_opts().offset().unwrap_or(0);
+    let limit = opts.list_opts().limit().unwrap_or(500);
 
-    let dracoon = init_dracoon(&source, auth, false).await?;
+    let dracoon = init_dracoon(&source, opts.auth(), false).await?;
 
     let (parent_path, node_name, depth) = parse_path(&source, dracoon.get_base_url().as_ref())?;
     let node_path = build_node_path((parent_path.clone(), node_name.clone(), depth));
 
-    let all = all.unwrap_or(false);
+    let all = opts.list_opts().all();
 
     // only provide a path if not the root node
     let node_path = if node_path == "//" {
@@ -69,16 +64,16 @@ pub async fn list_nodes(
 
     let node_list = if is_search_query(&node_name) {
         debug!("Searching for nodes with query {}", node_name);
-        search_nodes(&dracoon, &node_name, Some(&parent_path), all, offset, limit).await?
+        search_nodes(&dracoon, &node_name, Some(&parent_path), opts.list_opts()).await?
     } else {
         debug!("Fetching node list from path {}", node_path.unwrap_or("/"));
-        get_nodes(&dracoon, node_path, managed, all, offset, limit).await?
+        get_nodes(&dracoon, node_path, Some(opts.managed()), opts.list_opts()).await?
     };
 
     node_list
         .items
         .iter()
-        .for_each(|node| print_node(&term, node, long, human_readable));
+        .for_each(|node| print_node(&term, node, Some(opts.long()), Some(opts.human_readable())));
 
     info!("Listed nodes in: {}", node_path.unwrap_or("/"));
     info!("Total nodes: {}", node_list.range.total);
@@ -96,9 +91,7 @@ async fn get_nodes(
     dracoon: &Dracoon<Connected>,
     node_path: Option<&str>,
     managed: Option<bool>,
-    all: bool,
-    offset: u32,
-    limit: u32,
+    opts: &ListOptions,
 ) -> Result<NodeList, DcCmdError> {
     let parent_id = if let Some(node_path) = node_path {
         let node = dracoon.nodes.get_node_from_path(node_path).await?;
@@ -112,17 +105,17 @@ async fn get_nodes(
         None
     };
 
-    let params = ListAllParams::builder()
-        .with_offset(offset.into())
-        .with_limit(limit.into())
-        .build();
+    let offset = opts.offset().unwrap_or(0) as u64;
+    let limit = opts.limit().unwrap_or(500) as u64;
+
+    let params = build_params(opts.filter(), offset, limit)?;
 
     let mut node_list = dracoon
         .nodes
         .get_nodes(parent_id, managed, Some(params))
         .await?;
 
-    if all && node_list.range.total > 500 {
+    if opts.all() && node_list.range.total > 500 {
         let mut offset = 500;
         let limit = 500;
 
@@ -130,10 +123,7 @@ async fn get_nodes(
             let mut futures = vec![];
 
             while offset < node_list.range.total {
-                let params = ListAllParams::builder()
-                    .with_offset(offset)
-                    .with_limit(limit)
-                    .build();
+                let params = build_params(opts.filter(), offset, limit)?;
 
                 let next_node_list_req = dracoon.nodes.get_nodes(parent_id, managed, Some(params));
                 futures.push(next_node_list_req);
@@ -157,9 +147,7 @@ async fn search_nodes(
     dracoon: &Dracoon<Connected>,
     search_string: &str,
     node_path: Option<&str>,
-    all: bool,
-    offset: u32,
-    limit: u32,
+    opts: &ListOptions,
 ) -> Result<NodeList, DcCmdError> {
     let parent_id = if let Some(node_path) = node_path {
         let node = dracoon.nodes.get_node_from_path(node_path).await?;
@@ -173,17 +161,18 @@ async fn search_nodes(
         None
     };
 
-    let params = ListAllParams::builder()
-        .with_offset(offset.into())
-        .with_limit(limit.into())
-        .build();
+    let params = build_params(
+        opts.filter(),
+        opts.offset().unwrap_or(0) as u64,
+        opts.limit().unwrap_or(500) as u64,
+    )?;
 
     let mut node_list = dracoon
         .nodes
         .search_nodes(search_string, parent_id, Some(0), Some(params))
         .await?;
 
-    if all && node_list.range.total > 500 {
+    if opts.all() && node_list.range.total > 500 {
         let mut offset = 500;
         let limit = 500;
 
@@ -191,10 +180,7 @@ async fn search_nodes(
             let mut futures = vec![];
 
             while offset < node_list.range.total {
-                let params = ListAllParams::builder()
-                    .with_offset(offset)
-                    .with_limit(limit)
-                    .build();
+                let params = build_params(opts.filter(), offset, limit)?;
 
                 let next_node_list_req =
                     dracoon
@@ -298,7 +284,13 @@ async fn delete_node_content(
     search: &str,
     parent_path: String,
 ) -> Result<(), DcCmdError> {
-    let nodes = search_nodes(dracoon, search, Some(&parent_path), true, 0, 500).await?;
+    let nodes = search_nodes(
+        dracoon,
+        search,
+        Some(&parent_path),
+        &ListOptions::new(None, None, None, true, false),
+    )
+    .await?;
     let node_ids = nodes
         .items
         .iter()

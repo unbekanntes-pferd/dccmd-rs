@@ -16,7 +16,7 @@ mod print;
 
 use super::{
     init_dracoon,
-    models::{DcCmdError, GroupCommand, ListOptions},
+    models::{build_params, DcCmdError, GroupCommand, ListOptions},
     users::UserCommandHandler,
     utils::strings::format_success_message,
 };
@@ -84,7 +84,7 @@ impl GroupCommandHandler {
     }
 
     async fn list_groups(&self, opts: ListOptions) -> Result<(), DcCmdError> {
-        let params = UserCommandHandler::build_params(
+        let params = build_params(
             opts.filter(),
             opts.offset().unwrap_or(0).into(),
             opts.limit().unwrap_or(500).into(),
@@ -99,7 +99,7 @@ impl GroupCommandHandler {
             let reqs = (500..=total)
                 .step_by(500)
                 .map(|offset| {
-                    let params = UserCommandHandler::build_params(opts.filter(), offset, 500)
+                    let params = build_params(opts.filter(), offset, 500)
                         .expect("failed to build params");
 
                     self.client.groups.get_groups(Some(params))

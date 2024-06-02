@@ -1,11 +1,9 @@
 use std::fmt::Display;
 
 use chrono::{DateTime, Utc};
-use dco3::{users::{UserData, UserItem}, FilterOperator};
+use dco3::users::{UserData, UserItem};
 use serde::Deserialize;
 use tabled::Tabled;
-
-use crate::cmd::models::DcCmdError;
 
 #[derive(Tabled)]
 pub struct UserInfo {
@@ -96,22 +94,4 @@ pub struct UserImport {
     pub email: String,
     pub login: Option<String>,
     pub mfa_enabled: Option<bool>,
-}
-
-pub (crate) trait IntoFilterOperator {
-    fn into_filter_operator(&self) -> Result<FilterOperator, DcCmdError>;
-}
-
-impl IntoFilterOperator for &str {
-    fn into_filter_operator(&self) -> Result<FilterOperator, DcCmdError> {
-        match self {
-            &"eq" => Ok(FilterOperator::Eq),
-            &"neq" => Ok(FilterOperator::Neq),
-            &"cn" => Ok(FilterOperator::Cn),
-            &"ge" => Ok(FilterOperator::Ge),
-            &"le" => Ok(FilterOperator::Le),
-            _ => Err(DcCmdError::InvalidArgument(format!("Invalid filter operator: {}", self))),
-            
-        }
-    }
 }

@@ -9,7 +9,6 @@ use dco3::{
 };
 use futures_util::{future::join_all, stream, StreamExt};
 use indicatif::{ProgressBar, ProgressStyle};
-use models::IntoFilterOperator;
 use tokio::sync::Mutex;
 use tracing::{error, info};
 
@@ -18,7 +17,7 @@ mod print;
 
 use super::{
     init_dracoon,
-    models::{DcCmdError, ListOptions, UserCommand},
+    models::{build_params, DcCmdError, ListOptions, ToFilterOperator, UserCommand},
     utils::strings::format_success_message,
 };
 
@@ -203,52 +202,8 @@ impl UserCommandHandler {
         Ok(())
     }
 
-    pub fn build_params(
-        filter: &Option<String>,
-        offset: u64,
-        limit: u64,
-    ) -> Result<ListAllParams, DcCmdError> {
-        if let Some(search) = filter {
-            let params = {
-                let mut parts = search.split(':');
-
-                let error_msg = format!(
-                    "Invalid filter query ({}) Expected format: field:operator:value",
-                    search
-                );
-                let field = parts
-                    .next()
-                    .ok_or(DcCmdError::InvalidArgument(error_msg.clone()))?;
-                let operator = parts
-                    .next()
-                    .ok_or(DcCmdError::InvalidArgument(error_msg.clone()))?
-                    .into_filter_operator()?;
-                let value = parts.next().ok_or(DcCmdError::InvalidArgument(error_msg))?;
-
-                let filter = FilterQueryBuilder::new()
-                    .with_field(field)
-                    .with_operator(operator)
-                    .with_value(value)
-                    .try_build()?;
-
-                ListAllParams::builder()
-                    .with_filter(filter)
-                    .with_offset(offset)
-                    .with_limit(limit)
-                    .build()
-            };
-
-            Ok(params)
-        } else {
-            Ok(ListAllParams::builder()
-                .with_offset(offset)
-                .with_limit(limit)
-                .build())
-        }
-    }
-
     async fn list_users(&self, opts: ListOptions) -> Result<(), DcCmdError> {
-        let params = UserCommandHandler::build_params(
+        let params = build_params(
             opts.filter(),
             opts.offset().unwrap_or(0).into(),
             opts.limit().unwrap_or(500).into(),
@@ -267,7 +222,7 @@ impl UserCommandHandler {
             let reqs = (500..=total)
                 .step_by(500)
                 .map(|offset| {
-                    let params = UserCommandHandler::build_params(&opts.filter(), offset, 500)
+                    let params = build_params(&opts.filter(), offset, 500)
                         .expect("failed to build params");
                     self.client.users.get_users(Some(params), None, None)
                 })

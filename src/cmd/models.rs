@@ -5,8 +5,7 @@ use dco3::{
     auth::{
         errors::DracoonClientError,
         models::{DracoonAuthErrorResponse, DracoonErrorResponse},
-    },
-    nodes::models::S3ErrorResponse,
+    }, nodes::models::S3ErrorResponse, FilterOperator, FilterQueryBuilder, ListAllParams
 };
 
 use super::config::models::{ConfigAuthCommand, ConfigCryptoCommand};
@@ -154,6 +153,10 @@ pub enum DcCmdCommand {
     Ls {
         /// Source file path in DRACOON
         source: String,
+
+        /// Filter nodes (e.g. by name)
+        #[clap(long)]
+        filter: Option<String>,
 
         /// Print node information (details)
         #[clap(short, long)]
@@ -456,3 +459,63 @@ impl ListOptions {
     }
 }
 
+pub (crate) trait ToFilterOperator {
+    fn to_filter_operator(&self) -> Result<FilterOperator, DcCmdError>;
+}
+
+impl ToFilterOperator for &str {
+    fn to_filter_operator(&self) -> Result<FilterOperator, DcCmdError> {
+        match *self {
+            "eq" => Ok(FilterOperator::Eq),
+            "neq" => Ok(FilterOperator::Neq),
+            "cn" => Ok(FilterOperator::Cn),
+            "ge" => Ok(FilterOperator::Ge),
+            "le" => Ok(FilterOperator::Le),
+            _ => Err(DcCmdError::InvalidArgument(format!("Invalid filter operator: {}", self))),
+        }
+    }
+}
+
+pub fn build_params(
+    filter: &Option<String>,
+    offset: u64,
+    limit: u64,
+) -> Result<ListAllParams, DcCmdError> {
+    if let Some(search) = filter {
+        let params = {
+            let mut parts = search.split(':');
+
+            let error_msg = format!(
+                "Invalid filter query ({}) Expected format: field:operator:value",
+                search
+            );
+            let field = parts
+                .next()
+                .ok_or(DcCmdError::InvalidArgument(error_msg.clone()))?;
+            let operator = parts
+                .next()
+                .ok_or(DcCmdError::InvalidArgument(error_msg.clone()))?
+                .to_filter_operator()?;
+            let value = parts.next().ok_or(DcCmdError::InvalidArgument(error_msg))?;
+
+            let filter = FilterQueryBuilder::new()
+                .with_field(field)
+                .with_operator(operator)
+                .with_value(value)
+                .try_build()?;
+
+            ListAllParams::builder()
+                .with_filter(filter)
+                .with_offset(offset)
+                .with_limit(limit)
+                .build()
+        };
+
+        Ok(params)
+    } else {
+        Ok(ListAllParams::builder()
+            .with_offset(offset)
+            .with_limit(limit)
+            .build())
+    }
+}
