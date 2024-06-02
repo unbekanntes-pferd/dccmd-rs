@@ -5,10 +5,11 @@ use dco3::{
     auth::Connected,
     user::UserAuthData,
     users::{CreateUserRequest, UserItem, UsersFilter},
-    Dracoon, ListAllParams, Users,
+    Dracoon, FilterQueryBuilder, ListAllParams, Users,
 };
 use futures_util::{future::join_all, stream, StreamExt};
 use indicatif::{ProgressBar, ProgressStyle};
+use models::IntoFilterOperator;
 use tokio::sync::Mutex;
 use tracing::{error, info};
 
@@ -17,7 +18,7 @@ mod print;
 
 use super::{
     init_dracoon,
-    models::{DcCmdError, UserCommand},
+    models::{DcCmdError, ListOptions, UserCommand},
     utils::strings::format_success_message,
 };
 
@@ -202,35 +203,56 @@ impl UserCommandHandler {
         Ok(())
     }
 
-    pub fn build_params(search: &Option<String>, offset: u64, limit: u64) -> ListAllParams {
-        if let Some(search) = search {
-            let filter = UsersFilter::username_contains(search);
-            ListAllParams::builder()
-                .with_filter(filter)
-                .with_offset(offset)
-                .with_limit(limit)
-                .build()
+    pub fn build_params(
+        filter: &Option<String>,
+        offset: u64,
+        limit: u64,
+    ) -> Result<ListAllParams, DcCmdError> {
+        if let Some(search) = filter {
+            let params = {
+                let mut parts = search.split(':');
+
+                let error_msg = format!(
+                    "Invalid filter query ({}) Expected format: field:operator:value",
+                    search
+                );
+                let field = parts
+                    .next()
+                    .ok_or(DcCmdError::InvalidArgument(error_msg.clone()))?;
+                let operator = parts
+                    .next()
+                    .ok_or(DcCmdError::InvalidArgument(error_msg.clone()))?
+                    .into_filter_operator()?;
+                let value = parts.next().ok_or(DcCmdError::InvalidArgument(error_msg))?;
+
+                let filter = FilterQueryBuilder::new()
+                    .with_field(field)
+                    .with_operator(operator)
+                    .with_value(value)
+                    .try_build()?;
+
+                ListAllParams::builder()
+                    .with_filter(filter)
+                    .with_offset(offset)
+                    .with_limit(limit)
+                    .build()
+            };
+
+            Ok(params)
         } else {
-            ListAllParams::builder()
+            Ok(ListAllParams::builder()
                 .with_offset(offset)
                 .with_limit(limit)
-                .build()
+                .build())
         }
     }
 
-    async fn list_users(
-        &self,
-        search: Option<String>,
-        offset: Option<u32>,
-        limit: Option<u32>,
-        all: bool,
-        csv: bool,
-    ) -> Result<(), DcCmdError> {
+    async fn list_users(&self, opts: ListOptions) -> Result<(), DcCmdError> {
         let params = UserCommandHandler::build_params(
-            &search,
-            offset.unwrap_or(0).into(),
-            limit.unwrap_or(500).into(),
-        );
+            opts.filter(),
+            opts.offset().unwrap_or(0).into(),
+            opts.limit().unwrap_or(500).into(),
+        )?;
 
         let results = self
             .client
@@ -238,14 +260,15 @@ impl UserCommandHandler {
             .get_users(Some(params), None, None)
             .await?;
 
-        if all {
+        if opts.all() {
             let total = results.range.total;
             let shared_results = Arc::new(Mutex::new(results.clone()));
 
             let reqs = (500..=total)
                 .step_by(500)
                 .map(|offset| {
-                    let params = UserCommandHandler::build_params(&search, offset, 500);
+                    let params = UserCommandHandler::build_params(&opts.filter(), offset, 500)
+                        .expect("failed to build params");
                     self.client.users.get_users(Some(params), None, None)
                 })
                 .collect::<Vec<_>>();
@@ -269,9 +292,9 @@ impl UserCommandHandler {
 
             let results = shared_results.lock().await.clone();
 
-            self.print_users(results, csv)?;
+            self.print_users(results, opts.csv())?;
         } else {
-            self.print_users(results, csv)?;
+            self.print_users(results, opts.csv())?;
         }
 
         Ok(())
@@ -382,13 +405,15 @@ pub async fn handle_users_cmd(cmd: UserCommand, term: Term) -> Result<(), DcCmdE
         }
         UserCommand::Ls {
             target: _,
-            search,
+            filter,
             offset,
             limit,
             all,
             csv,
         } => {
-            handler.list_users(search, offset, limit, all, csv).await?;
+            handler
+                .list_users(ListOptions::new(filter, offset, limit, all, csv))
+                .await?;
         }
         UserCommand::Rm {
             target: _,

@@ -251,9 +251,9 @@ pub enum UserCommand {
         /// DRACOON url
         target: String,
 
-        /// search filter (username, first name, last name)
+        /// search filter (e.g. username, first name, last name)
         #[clap(long)]
-        search: Option<String>,
+        filter: Option<String>,
 
         /// skip n users (default offset: 0)
         #[clap(short, long)]
@@ -415,3 +415,44 @@ pub enum PrintFormat {
     Pretty,
     Csv,
 }
+
+pub struct ListOptions {
+    filter: Option<String>,
+    offset: Option<u32>,
+    limit: Option<u32>,
+    all: bool,
+    csv: bool,
+}
+
+impl ListOptions {
+    pub fn new(filter: Option<String>, offset: Option<u32>, limit: Option<u32>, all: bool, csv: bool) -> Self {
+        Self {
+            filter,
+            offset,
+            limit,
+            all,
+            csv,
+        }
+    }
+
+    pub fn filter(&self) -> &Option<String> {
+        &self.filter
+    }
+
+    pub fn offset(&self) -> Option<u32> {
+        self.offset
+    }
+
+    pub fn limit(&self) -> Option<u32> {
+        self.limit
+    }
+
+    pub fn all(&self) -> bool {
+        self.all
+    }
+
+    pub fn csv(&self) -> bool {
+        self.csv
+    }
+}
+

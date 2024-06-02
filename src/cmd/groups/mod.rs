@@ -95,7 +95,7 @@ impl GroupCommandHandler {
             &search,
             offset.unwrap_or(0).into(),
             limit.unwrap_or(500).into(),
-        );
+        )?;
 
         let groups = self.client.groups.get_groups(Some(params)).await?;
 
@@ -106,7 +106,7 @@ impl GroupCommandHandler {
             let reqs = (500..=total)
                 .step_by(500)
                 .map(|offset| {
-                    let params = UserCommandHandler::build_params(&search, offset, 500);
+                    let params = UserCommandHandler::build_params(&search, offset, 500).expect("failed to build params");
 
                     self.client.groups.get_groups(Some(params))
                 })
