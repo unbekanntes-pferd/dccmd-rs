@@ -108,30 +108,21 @@ fn to_printable_permissions(node: &Node) -> String {
     out_str
 }
 
-#[allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_precision_loss
-)]
+
 fn to_readable_size(size: u64) -> String {
+
     let units = ["B", "KB", "MB", "GB", "TB", "PB"];
 
     if size == 0 {
-        // size is 0, so this is safe
-        return format!("{size} {}", units[size as usize]);
+        return "0 B".to_string();
     }
 
-    // size is always positive, so this is safe
-    let exp = (size as f64).log(1024.0).floor() as u64;
+    let exp = (size as f64).log(1024.0).floor() as usize;
+    let pot = 1024_u64.pow(exp as u32);
+    let res = size as f64 / pot as f64;
 
-    // precision loss is ok here because we are only interested in the integer part
-    let pot = 1024f64.powf(exp as f64);
+    format!("{:.0} {}", res, units[exp])
 
-    // precision loss is ok here because we are only interested in the integer part
-    let res = size as f64 / pot;
-
-    // exp is always positive, so this is safe
-    format!("{res:.0} {}", units[exp as usize])
 }
 
 type ParsedPath = (String, String, u64);
