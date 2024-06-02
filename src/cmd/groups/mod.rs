@@ -17,7 +17,6 @@ mod print;
 use super::{
     init_dracoon,
     models::{build_params, DcCmdError, GroupCommand, ListOptions},
-    users::UserCommandHandler,
     utils::strings::format_success_message,
 };
 

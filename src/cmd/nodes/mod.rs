@@ -18,7 +18,6 @@ use crate::cmd::{
 
 use dco3::{
     auth::Connected,
-    models::ListAllParams,
     nodes::{
         models::{CreateFolderRequest, NodeList, NodeType},
         rooms::models::CreateRoomRequest,
@@ -45,15 +44,11 @@ pub async fn list_nodes(
     source: String,
     opts: CmdListNodesOptions,
 ) -> Result<(), DcCmdError> {
-    let offset = opts.list_opts().offset().unwrap_or(0);
-    let limit = opts.list_opts().limit().unwrap_or(500);
 
     let dracoon = init_dracoon(&source, opts.auth(), false).await?;
 
     let (parent_path, node_name, depth) = parse_path(&source, dracoon.get_base_url().as_ref())?;
     let node_path = build_node_path((parent_path.clone(), node_name.clone(), depth));
-
-    let all = opts.list_opts().all();
 
     // only provide a path if not the root node
     let node_path = if node_path == "//" {

@@ -5,7 +5,7 @@ use dco3::{
     auth::Connected,
     user::UserAuthData,
     users::{CreateUserRequest, UserItem, UsersFilter},
-    Dracoon, FilterQueryBuilder, ListAllParams, Users,
+    Dracoon, ListAllParams, Users,
 };
 use futures_util::{future::join_all, stream, StreamExt};
 use indicatif::{ProgressBar, ProgressStyle};
@@ -17,7 +17,7 @@ mod print;
 
 use super::{
     init_dracoon,
-    models::{build_params, DcCmdError, ListOptions, ToFilterOperator, UserCommand},
+    models::{build_params, DcCmdError, ListOptions, UserCommand},
     utils::strings::format_success_message,
 };
 
@@ -222,8 +222,8 @@ impl UserCommandHandler {
             let reqs = (500..=total)
                 .step_by(500)
                 .map(|offset| {
-                    let params = build_params(&opts.filter(), offset, 500)
-                        .expect("failed to build params");
+                    let params =
+                        build_params(&opts.filter(), offset, 500).expect("failed to build params");
                     self.client.users.get_users(Some(params), None, None)
                 })
                 .collect::<Vec<_>>();
