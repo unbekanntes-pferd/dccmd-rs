@@ -8,7 +8,6 @@ use dco3::{
 };
 
 use futures_util::{stream, StreamExt};
-use models::GroupUsersOptions;
 use tokio::sync::Mutex;
 use tracing::error;
 
