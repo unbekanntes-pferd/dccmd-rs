@@ -1,6 +1,6 @@
 #![allow(clippy::struct_excessive_bools)]
 
-use crate::cmd::models::PasswordAuth;
+use crate::cmd::models::{ListOptions, PasswordAuth};
 
 pub struct CmdMkRoomOptions {
     pub inherit_permissions: bool,
@@ -93,5 +93,51 @@ impl CmdUploadOptions {
             encryption_password,
             share_password,
         }
+    }
+}
+
+pub struct CmdListNodesOptions {
+    list_opts: ListOptions,
+    human_readable: bool,
+    long: bool,
+    managed: bool,
+    auth: Option<PasswordAuth>,
+}
+
+impl CmdListNodesOptions {
+    pub fn new(
+        list_opts: ListOptions,
+        human_readable: bool,
+        long: bool,
+        managed: bool,
+        auth: Option<PasswordAuth>,
+    ) -> Self {
+        Self {
+            list_opts,
+            human_readable,
+            long,
+            managed,
+            auth,
+        }
+    }
+
+    pub fn list_opts(&self) -> &ListOptions {
+        &self.list_opts
+    }
+
+    pub fn human_readable(&self) -> bool {
+        self.human_readable
+    }
+
+    pub fn long(&self) -> bool {
+        self.long
+    }
+
+    pub fn managed(&self) -> bool {
+        self.managed
+    }
+
+    pub fn auth(&self) -> Option<PasswordAuth> {
+        self.auth.clone()
     }
 }

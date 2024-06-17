@@ -6,12 +6,12 @@ use cmd::{
     config::{handle_config_cmd, logs::init_logging},
     groups::handle_groups_cmd,
     handle_error,
-    models::{DcCmd, DcCmdCommand, PasswordAuth},
+    models::{DcCmd, DcCmdCommand, ListOptions, PasswordAuth},
     nodes::{
         create_folder, create_room, delete_node,
         download::download,
         list_nodes,
-        models::{CmdDownloadOptions, CmdMkRoomOptions, CmdUploadOptions},
+        models::{CmdDownloadOptions, CmdListNodesOptions, CmdMkRoomOptions, CmdUploadOptions},
         upload::upload,
     },
     print_version,
@@ -90,6 +90,7 @@ async fn main() {
         }
         DcCmdCommand::Ls {
             source,
+            filter,
             long,
             human_readable,
             managed,
@@ -97,18 +98,11 @@ async fn main() {
             offset,
             limit,
         } => {
-            list_nodes(
-                term,
-                source,
-                Some(long),
-                Some(human_readable),
-                Some(managed),
-                Some(all),
-                offset,
-                limit,
-                password_auth,
-            )
-            .await
+            let list_opts = ListOptions::new(filter, offset, limit, all, false);
+            let opts =
+                CmdListNodesOptions::new(list_opts, human_readable, long, managed, password_auth);
+
+            list_nodes(term, source, opts).await
         }
         DcCmdCommand::Mkdir {
             source,

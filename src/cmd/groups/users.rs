@@ -4,7 +4,7 @@ use dco3::{
 };
 use tracing::error;
 
-use crate::cmd::models::DcCmdError;
+use crate::cmd::models::{build_params, DcCmdError};
 
 use super::{models::GroupUsersOptions, GroupCommandHandler, GroupsUsersCommand};
 
@@ -57,10 +57,7 @@ impl GroupCommandHandler {
             let mut users = self.client.groups.get_group_users(group.id, None).await?;
 
             for offset in (500..users.range.total).step_by(500) {
-                let params = ListAllParams::builder()
-                    .with_offset(offset)
-                    .with_limit(500)
-                    .build();
+                let params = build_params(&opts.filter, offset, opts.limit.unwrap_or(500).into())?;
                 let mut new_users = self
                     .client
                     .groups
