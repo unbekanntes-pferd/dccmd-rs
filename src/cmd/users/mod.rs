@@ -17,7 +17,7 @@ mod print;
 
 use super::{
     init_dracoon,
-    models::{DcCmdError, UserCommand},
+    models::{DcCmdError, UsersCommand},
     utils::strings::format_success_message,
 };
 
@@ -344,22 +344,22 @@ impl UserCommandHandler {
     }
 }
 
-pub async fn handle_users_cmd(cmd: UserCommand, term: Term) -> Result<(), DcCmdError> {
+pub async fn handle_users_cmd(cmd: UsersCommand, term: Term) -> Result<(), DcCmdError> {
     let target = match &cmd {
-        UserCommand::Create { target, .. }
-        | UserCommand::Ls { target, .. }
-        | UserCommand::Rm { target, .. }
-        | UserCommand::Import { target, .. }
-        | UserCommand::Info { target, .. } => target,
+        UsersCommand::Create { target, .. }
+        | UsersCommand::Ls { target, .. }
+        | UsersCommand::Rm { target, .. }
+        | UsersCommand::Import { target, .. }
+        | UsersCommand::Info { target, .. } => target,
     };
 
     let handler = match &cmd {
-        UserCommand::Import { .. } => UserCommandHandler::try_new(target, term, true).await?,
+        UsersCommand::Import { .. } => UserCommandHandler::try_new(target, term, true).await?,
         _ => UserCommandHandler::try_new(target, term, false).await?,
     };
 
     match cmd {
-        UserCommand::Create {
+        UsersCommand::Create {
             target: _,
             first_name,
             last_name,
@@ -380,7 +380,7 @@ pub async fn handle_users_cmd(cmd: UserCommand, term: Term) -> Result<(), DcCmdE
                 )
                 .await?;
         }
-        UserCommand::Ls {
+        UsersCommand::Ls {
             target: _,
             search,
             offset,
@@ -390,21 +390,21 @@ pub async fn handle_users_cmd(cmd: UserCommand, term: Term) -> Result<(), DcCmdE
         } => {
             handler.list_users(search, offset, limit, all, csv).await?;
         }
-        UserCommand::Rm {
+        UsersCommand::Rm {
             target: _,
             user_name,
             user_id,
         } => {
             handler.delete_user(user_name, user_id).await?;
         }
-        UserCommand::Import {
+        UsersCommand::Import {
             target: _,
             source,
             oidc_id,
         } => {
             handler.import_users(source, oidc_id).await?;
         }
-        UserCommand::Info {
+        UsersCommand::Info {
             target: _,
             user_name,
             user_id,
