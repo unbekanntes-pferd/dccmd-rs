@@ -10,7 +10,10 @@ use dco3::{
     FilterOperator, FilterQueryBuilder, ListAllParams,
 };
 
-use super::config::models::{ConfigAuthCommand, ConfigCryptoCommand};
+use super::{
+    config::models::{ConfigAuthCommand, ConfigCryptoCommand},
+    groups::GroupsUsersCommand,
+};
 
 // represents password flow
 #[derive(Clone)]
@@ -230,13 +233,13 @@ pub enum DcCmdCommand {
     /// Manage users in DRACOON
     Users {
         #[clap(subcommand)]
-        cmd: UserCommand,
+        cmd: UsersCommand,
     },
 
     /// Manage groups in DRACOON
     Groups {
         #[clap(subcommand)]
-        cmd: GroupCommand,
+        cmd: GroupsCommand,
     },
 
     /// Configure DRACOON Commander
@@ -250,7 +253,7 @@ pub enum DcCmdCommand {
 }
 
 #[derive(Parser)]
-pub enum UserCommand {
+pub enum UsersCommand {
     /// List users in DRACOON
     Ls {
         /// DRACOON url
@@ -348,7 +351,7 @@ pub enum UserCommand {
 }
 
 #[derive(Parser)]
-pub enum GroupCommand {
+pub enum GroupsCommand {
     /// List groups in DRACOON
     Ls {
         /// DRACOON url
@@ -397,6 +400,11 @@ pub enum GroupCommand {
         /// Group id
         #[clap(long)]
         group_id: Option<u64>,
+    },
+
+    Users {
+        #[clap(subcommand)]
+        cmd: GroupsUsersCommand,
     },
 }
 

@@ -13,12 +13,15 @@ use tracing::error;
 
 mod models;
 mod print;
+mod users;
 
 use super::{
     init_dracoon,
-    models::{build_params, DcCmdError, GroupCommand, ListOptions},
+    models::{build_params, DcCmdError, GroupsCommand, ListOptions},
     utils::strings::format_success_message,
 };
+
+pub use models::GroupsUsersCommand;
 
 pub struct GroupCommandHandler {
     client: Dracoon<Connected>,
@@ -133,17 +136,20 @@ impl GroupCommandHandler {
     }
 }
 
-pub async fn handle_groups_cmd(cmd: GroupCommand, term: Term) -> Result<(), DcCmdError> {
+pub async fn handle_groups_cmd(cmd: GroupsCommand, term: Term) -> Result<(), DcCmdError> {
     let target = match &cmd {
-        GroupCommand::Create { target, .. }
-        | GroupCommand::Ls { target, .. }
-        | GroupCommand::Rm { target, .. } => target,
+        GroupsCommand::Create { target, .. }
+        | GroupsCommand::Ls { target, .. }
+        | GroupsCommand::Rm { target, .. } => target,
+        GroupsCommand::Users { cmd } => match cmd {
+            GroupsUsersCommand::Ls { target, .. } => target,
+        },
     };
 
     let handler = GroupCommandHandler::try_new(target.to_string(), term).await?;
     match cmd {
-        GroupCommand::Create { target: _, name } => handler.create_group(name).await,
-        GroupCommand::Ls {
+        GroupsCommand::Create { target: _, name } => handler.create_group(name).await,
+        GroupsCommand::Ls {
             target: _,
             filter,
             offset,
@@ -155,10 +161,11 @@ pub async fn handle_groups_cmd(cmd: GroupCommand, term: Term) -> Result<(), DcCm
                 .list_groups(ListOptions::new(filter, offset, limit, all, csv))
                 .await
         }
-        GroupCommand::Rm {
+        GroupsCommand::Rm {
             group_name,
             target: _,
             group_id,
         } => handler.delete_group(group_name, group_id).await,
+        GroupsCommand::Users { cmd } => users::handle_group_users_cmd(cmd, handler).await,
     }
 }

@@ -42,3 +42,8 @@ csv = "1"
 
 # credentials
 keyring = "2"
+
+[package.metadata.generate-rpm]
+assets = [
+    { source = "target/release/dccmd-rs", dest = "/usr/bin/dccmd-rs", mode = "755" },
+]
