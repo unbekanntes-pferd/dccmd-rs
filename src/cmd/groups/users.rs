@@ -39,17 +39,17 @@ impl GroupCommandHandler {
             vec![self.get_group_by_name(group_name).await?]
         } else {
             let mut groups = self.client.groups.get_groups(None).await?;
-        
+
             for offset in (500..groups.range.total).step_by(500) {
                 let params = ListAllParams::builder()
                     .with_offset(offset)
                     .with_limit(500)
                     .build();
                 let mut new_groups = self.client.groups.get_groups(Some(params)).await?;
-        
+
                 groups.items.append(&mut new_groups.items);
             }
-        
+
             groups.items
         };
 
@@ -72,7 +72,7 @@ impl GroupCommandHandler {
 
             let is_first = idx == 0;
 
-            self.print_group_users(users, &group, opts.csv, is_first)?;
+            self.print_group_users(users, group, opts.csv, is_first)?;
         }
 
         Ok(())

@@ -9,7 +9,10 @@ use dco3::{
     nodes::models::S3ErrorResponse,
 };
 
-use super::{config::models::{ConfigAuthCommand, ConfigCryptoCommand}, groups::GroupsUsersCommand};
+use super::{
+    config::models::{ConfigAuthCommand, ConfigCryptoCommand},
+    groups::GroupsUsersCommand,
+};
 
 // represents password flow
 #[derive(Clone)]

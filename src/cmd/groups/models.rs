@@ -24,7 +24,6 @@ impl From<Group> for GroupInfo {
     }
 }
 
-
 #[derive(Tabled)]
 pub struct GroupUserInfo {
     pub id: i64,
@@ -52,7 +51,6 @@ impl GroupUserInfo {
 
 #[derive(Parser)]
 pub enum GroupsUsersCommand {
-
     Ls {
         target: String,
 
@@ -75,10 +73,8 @@ pub enum GroupsUsersCommand {
         /// print user information in CSV format
         #[clap(long)]
         csv: bool,
-
-    }
+    },
 }
-
 
 pub struct GroupUsersOptions {
     pub filter: Option<String>,
@@ -89,7 +85,13 @@ pub struct GroupUsersOptions {
 }
 
 impl GroupUsersOptions {
-    pub fn new(filter: Option<String>, offset: Option<u32>, limit: Option<u32>, all: bool, csv: bool) -> Self {
+    pub fn new(
+        filter: Option<String>,
+        offset: Option<u32>,
+        limit: Option<u32>,
+        all: bool,
+        csv: bool,
+    ) -> Self {
         Self {
             filter,
             offset,
