@@ -253,6 +253,23 @@ To delete groups, you can use the `groups some.dracoon.domain.com rm` command:
 # supported: group id, group name
 dccmd-rs groups rm your.dracoon.domain/ --group-id 2
 dccmd-rs groups rm your.dracoon.domain/ --group-name foo
+```
+
+### Group users
+
+To list group users, you can use the `groups users ls some.dracoon.domain.com` command:
+
+```bash
+# get all group users for every group
+dccmd-rs groups users ls your.dracoon.domain/
+
+# list group users in csv format 
+dccmd-rs groups users ls your.dracoon.domain/ --csv
+dccmd-rs groups users ls your.dracoon.domain/ --csv --all > groupusers.csv
+
+# get specific group users (for a group)
+dccmd-rs groups users ls your.dracoon.domain/YourGroupName --csv --all
+```
 
 ### Config
 
