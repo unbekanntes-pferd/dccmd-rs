@@ -154,6 +154,33 @@ pub enum DcCmdCommand {
         #[clap(long)]
         share_password: Option<String>,
     },
+    /// Transfer files across DRACOON instances
+    Transfer {
+        /// Source file path in DRACOON
+        source: String,
+
+        /// Target file path in DRACOON
+        target: String,
+
+        /// Overwrite existing file in DRACOON
+        #[clap(long)]
+        overwrite: bool,
+
+        /// Preserve Download Share Links and point them to the new node in DRACOON
+        #[clap(long)]
+        keep_share_links: bool,
+
+        /// classification of the node (1-4)
+        #[clap(long)]
+        classification: Option<u8>,
+        
+        /// share upload
+        #[clap(long)]
+        share: bool,
+
+        #[clap(long)]
+        share_password: Option<String>,
+    },
     /// List nodes in DRACOON
     Ls {
         /// Source file path in DRACOON

@@ -130,7 +130,7 @@ pub fn parse_path(path: &str, base_url: &str) -> Result<ParsedPath, DcCmdError> 
     debug!("path: {}", path);
 
     let path_parts: Vec<&str> = path.trim_end_matches('/').split('/').collect();
-    debug!("path_parts: {:?}", path_parts);
+    debug!("path parts: {:?}", path_parts);
 
     let name = path_parts
         .last()
@@ -144,7 +144,7 @@ pub fn parse_path(path: &str, base_url: &str) -> Result<ParsedPath, DcCmdError> 
         format!("/{}/", path_parts[..path_parts.len() - 1].join("/"))
     };
 
-    debug!("parent_path: {}", parent_path);
+    debug!("parent path: {}", parent_path);
     debug!("name: {}", name);
     debug!("depth: {}", depth);
 

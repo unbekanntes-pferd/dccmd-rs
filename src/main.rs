@@ -11,7 +11,11 @@ use cmd::{
         create_folder, create_room, delete_node,
         download::download,
         list_nodes,
-        models::{CmdDownloadOptions, CmdListNodesOptions, CmdMkRoomOptions, CmdUploadOptions},
+        models::{
+            CmdDownloadOptions, CmdListNodesOptions, CmdMkRoomOptions, CmdTransferOptions,
+            CmdUploadOptions,
+        },
+        transfer::transfer_node,
         upload::upload,
     },
     print_version,
@@ -83,6 +87,29 @@ async fn main() {
                     velocity,
                     password_auth,
                     opt.encryption_password,
+                    share_password,
+                ),
+            )
+            .await
+        }
+        DcCmdCommand::Transfer {
+            source,
+            target,
+            overwrite,
+            keep_share_links,
+            classification,
+            share,
+            share_password,
+        } => {
+            transfer_node(
+                term,
+                source,
+                target,
+                CmdTransferOptions::new(
+                    overwrite,
+                    keep_share_links,
+                    share,
+                    classification,
                     share_password,
                 ),
             )

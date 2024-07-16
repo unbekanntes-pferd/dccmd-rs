@@ -37,6 +37,7 @@ pub mod download;
 pub mod models;
 mod share;
 pub mod upload;
+pub mod transfer;
 
 #[allow(clippy::module_name_repetitions)]
 pub async fn list_nodes(

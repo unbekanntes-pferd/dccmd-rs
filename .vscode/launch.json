@@ -19,7 +19,7 @@
                     "kind": "bin"
                 }
             },
-            "args": ["--debug", "ls", "staging.dracoon.com/"],
+            "args": ["--debug", "upload", "-r", "/Users/octavio.simone/Downloads/Joomla_4.3.2-Stable-Full_Package", "demo-os.dracoon.com/DEMO_UBPF"],
             "cwd": "${workspaceFolder}"
         },
         {
