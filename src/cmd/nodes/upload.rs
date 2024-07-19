@@ -806,8 +806,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_list_files() {
-        let root_path = PathBuf::from("./src/cmd/nodes");
+        let root_path = PathBuf::from("./src/cmd/config");
         let files = list_files(root_path).await.unwrap();
-        assert_eq!(files.len(), 5);
+        assert_eq!(files.len(), 4);
     }
 }
