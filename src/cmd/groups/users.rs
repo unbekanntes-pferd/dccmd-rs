@@ -35,7 +35,6 @@ impl GroupCommandHandler {
         opts: GroupUsersOptions,
     ) -> Result<(), DcCmdError> {
         let groups = if let Some(group_name) = group_name.filter(|name| !name.is_empty()) {
-            dbg!(&group_name);
             vec![self.get_group_by_name(group_name).await?]
         } else {
             let mut groups = self.client.groups.get_groups(None).await?;
@@ -54,17 +53,29 @@ impl GroupCommandHandler {
         };
 
         for (idx, group) in groups.iter().enumerate() {
-            let mut users = self.client.groups.get_group_users(group.id, None).await?;
+            let params = build_params(
+                &opts.filter,
+                opts.offset.unwrap_or(0).into(),
+                opts.limit.unwrap_or(500).into(),
+            )?;
+            let mut users = self
+                .client
+                .groups
+                .get_group_users(group.id, Some(params))
+                .await?;
 
-            for offset in (500..users.range.total).step_by(500) {
-                let params = build_params(&opts.filter, offset, opts.limit.unwrap_or(500).into())?;
-                let mut new_users = self
-                    .client
-                    .groups
-                    .get_group_users(group.id, Some(params))
-                    .await?;
+            if opts.all {
+                for offset in (500..users.range.total).step_by(500) {
+                    let params =
+                        build_params(&opts.filter, offset, opts.limit.unwrap_or(500).into())?;
+                    let mut new_users = self
+                        .client
+                        .groups
+                        .get_group_users(group.id, Some(params))
+                        .await?;
 
-                users.items.append(&mut new_users.items);
+                    users.items.append(&mut new_users.items);
+                }
             }
 
             let is_first = idx == 0;
