@@ -125,6 +125,7 @@ fn to_readable_size(size: u64) -> String {
 type ParsedPath = (String, String, u64);
 pub fn parse_path(path: &str, base_url: &str) -> Result<ParsedPath, DcCmdError> {
     let base_url = base_url.trim_start_matches("https://");
+    let path = path.trim_start_matches("https://");
     let path = path.trim_start_matches(base_url).trim_start_matches('/');
 
     debug!("path: {}", path);
@@ -164,6 +165,26 @@ pub fn build_node_path(path: ParsedPath) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_parse_path_no_https() {
+        let path = "some.domain.com/test/folder/";
+        let base_url = "some.domain.com";
+        let (parent_path, name, depth) = parse_path(path, base_url).unwrap();
+        assert_eq!("/test/", parent_path);
+        assert_eq!("folder", name);
+        assert_eq!(1, depth);
+    }
+
+    #[test]
+    fn test_parse_path_https() {
+        let path = "https://some.domain.com/test/folder/";
+        let base_url = "some.domain.com";
+        let (parent_path, name, depth) = parse_path(path, base_url).unwrap();
+        assert_eq!("/test/", parent_path);
+        assert_eq!("folder", name);
+        assert_eq!(1, depth);
+    }
 
     #[test]
     #[ignore = "does not work without a terminal"]
