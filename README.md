@@ -155,6 +155,9 @@ dccmd-rs ls your.dracoon.domain/
 
 // for searches within the room
 dccmd-rs ls your.dracoon.domain/*.pdf 
+
+// only files
+dccmd-rs ls your.dracoon.domain/some/room --filter type:eq:file
 ```
 
 Options:
@@ -162,6 +165,7 @@ Options:
  - `-r`, `--human-readable` - prints size in human readable format
  -    `--managed` - shows room as room admin / room manager (rooms w/o permissions)       
  -    `--all` - fetches all items (default: first 500 items)
+ - `--filter` - filter for specific values (see API docs for filter info)
 
 
 ### Deleting nodes
@@ -215,10 +219,10 @@ To list users, you can use the `users ls some.dracoon.domain.com` command:
 
 ```bash
 # optional flags: --all (lists all users, default: 500, paging) --csv (csv format)
-# optional flags: --search (by username)
+# optional flags: --filter (see API docs for filter info)
 dccmd-rs users ls your.dracoon.domain/
 dccmd-rs users ls your.dracoon.domain/ --csv --all > userlist.csv
-dccmd-rs users ls your.dracoon.domain/ --search foo
+dccmd-rs users ls your.dracoon.domain/ --filter userName:cn:foo
 ```
 
 To create users, you can use the `users create some.dracoon.domain.com` command:
@@ -252,10 +256,10 @@ To list groups, you can use the `groups ls some.dracoon.domain.com` command:
 
 ```bash
 # optional flags: --all (lists all groups, default: 500, paging) --csv (csv format)
-# optional flags: --search (by username)
+# optional flags: --filter (see API docs for filter info)
 dccmd-rs groups ls your.dracoon.domain/
 dccmd-rs groups ls your.dracoon.domain/ --csv --all > grouplist.csv
-dccmd-rs groups ls your.dracoon.domain/ --search foo
+dccmd-rs groups ls your.dracoon.domain/ --filter name:eq:foo
 ```
 
 To create groups, you can use the `groups create some.dracoon.domain.com` command:
