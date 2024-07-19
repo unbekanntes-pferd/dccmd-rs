@@ -17,8 +17,7 @@ mod users;
 
 use super::{
     init_dracoon,
-    models::{DcCmdError, GroupsCommand},
-    users::UserCommandHandler,
+    models::{build_params, DcCmdError, GroupsCommand, ListOptions},
     utils::strings::format_success_message,
 };
 
@@ -62,7 +61,7 @@ impl GroupCommandHandler {
 
         self.client.groups.delete_group(group_id).await?;
 
-        let msg = format!("Group {} deleted", group_id);
+        let msg = format!("Group {group_id} deleted");
 
         self.term
             .write_line(format_success_message(&msg).as_str())
@@ -86,30 +85,24 @@ impl GroupCommandHandler {
         Ok(group.clone())
     }
 
-    async fn list_groups(
-        &self,
-        search: Option<String>,
-        offset: Option<u32>,
-        limit: Option<u32>,
-        all: bool,
-        csv: bool,
-    ) -> Result<(), DcCmdError> {
-        let params = UserCommandHandler::build_params(
-            &search,
-            offset.unwrap_or(0).into(),
-            limit.unwrap_or(500).into(),
-        );
+    async fn list_groups(&self, opts: ListOptions) -> Result<(), DcCmdError> {
+        let params = build_params(
+            opts.filter(),
+            opts.offset().unwrap_or(0).into(),
+            opts.limit().unwrap_or(500).into(),
+        )?;
 
         let groups = self.client.groups.get_groups(Some(params)).await?;
 
-        if all {
+        if opts.all() {
             let total = groups.range.total;
             let shared_results = Arc::new(Mutex::new(groups.clone()));
 
             let reqs = (500..=total)
                 .step_by(500)
                 .map(|offset| {
-                    let params = UserCommandHandler::build_params(&search, offset, 500);
+                    let params =
+                        build_params(opts.filter(), offset, 500).expect("failed to build params");
 
                     self.client.groups.get_groups(Some(params))
                 })
@@ -134,9 +127,9 @@ impl GroupCommandHandler {
 
             let results = shared_results.lock().await.clone();
 
-            self.print_groups(results, csv)?;
+            self.print_groups(results, opts.csv())?;
         } else {
-            self.print_groups(groups, csv)?;
+            self.print_groups(groups, opts.csv())?;
         }
 
         Ok(())
@@ -158,12 +151,16 @@ pub async fn handle_groups_cmd(cmd: GroupsCommand, term: Term) -> Result<(), DcC
         GroupsCommand::Create { target: _, name } => handler.create_group(name).await,
         GroupsCommand::Ls {
             target: _,
-            search,
+            filter,
             offset,
             limit,
             all,
             csv,
-        } => handler.list_groups(search, offset, limit, all, csv).await,
+        } => {
+            handler
+                .list_groups(ListOptions::new(filter, offset, limit, all, csv))
+                .await
+        }
         GroupsCommand::Rm {
             group_name,
             target: _,

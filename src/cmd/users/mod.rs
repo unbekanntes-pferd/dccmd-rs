@@ -17,7 +17,7 @@ mod print;
 
 use super::{
     init_dracoon,
-    models::{DcCmdError, UsersCommand},
+    models::{build_params, DcCmdError, ListOptions, UsersCommand},
     utils::strings::format_success_message,
 };
 
@@ -202,35 +202,12 @@ impl UserCommandHandler {
         Ok(())
     }
 
-    pub fn build_params(search: &Option<String>, offset: u64, limit: u64) -> ListAllParams {
-        if let Some(search) = search {
-            let filter = UsersFilter::username_contains(search);
-            ListAllParams::builder()
-                .with_filter(filter)
-                .with_offset(offset)
-                .with_limit(limit)
-                .build()
-        } else {
-            ListAllParams::builder()
-                .with_offset(offset)
-                .with_limit(limit)
-                .build()
-        }
-    }
-
-    async fn list_users(
-        &self,
-        search: Option<String>,
-        offset: Option<u32>,
-        limit: Option<u32>,
-        all: bool,
-        csv: bool,
-    ) -> Result<(), DcCmdError> {
-        let params = UserCommandHandler::build_params(
-            &search,
-            offset.unwrap_or(0).into(),
-            limit.unwrap_or(500).into(),
-        );
+    async fn list_users(&self, opts: ListOptions) -> Result<(), DcCmdError> {
+        let params = build_params(
+            opts.filter(),
+            opts.offset().unwrap_or(0).into(),
+            opts.limit().unwrap_or(500).into(),
+        )?;
 
         let results = self
             .client
@@ -238,14 +215,15 @@ impl UserCommandHandler {
             .get_users(Some(params), None, None)
             .await?;
 
-        if all {
+        if opts.all() {
             let total = results.range.total;
             let shared_results = Arc::new(Mutex::new(results.clone()));
 
             let reqs = (500..=total)
                 .step_by(500)
                 .map(|offset| {
-                    let params = UserCommandHandler::build_params(&search, offset, 500);
+                    let params =
+                        build_params(opts.filter(), offset, 500).expect("failed to build params");
                     self.client.users.get_users(Some(params), None, None)
                 })
                 .collect::<Vec<_>>();
@@ -269,9 +247,9 @@ impl UserCommandHandler {
 
             let results = shared_results.lock().await.clone();
 
-            self.print_users(results, csv)?;
+            self.print_users(results, opts.csv())?;
         } else {
-            self.print_users(results, csv)?;
+            self.print_users(results, opts.csv())?;
         }
 
         Ok(())
@@ -382,13 +360,15 @@ pub async fn handle_users_cmd(cmd: UsersCommand, term: Term) -> Result<(), DcCmd
         }
         UsersCommand::Ls {
             target: _,
-            search,
+            filter,
             offset,
             limit,
             all,
             csv,
         } => {
-            handler.list_users(search, offset, limit, all, csv).await?;
+            handler
+                .list_users(ListOptions::new(filter, offset, limit, all, csv))
+                .await?;
         }
         UsersCommand::Rm {
             target: _,

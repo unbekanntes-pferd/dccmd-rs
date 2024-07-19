@@ -1,3 +1,5 @@
+use std::cmp::min;
+
 use crate::cmd::models::DcCmdError;
 
 use dco3::nodes::models::{Node, NodeType};
@@ -108,46 +110,46 @@ fn to_printable_permissions(node: &Node) -> String {
     out_str
 }
 
-#[allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_precision_loss
-)]
 fn to_readable_size(size: u64) -> String {
     let units = ["B", "KB", "MB", "GB", "TB", "PB"];
 
     if size == 0 {
-        // size is 0, so this is safe
-        return format!("{size} {}", units[size as usize]);
+        return "0 B".to_string();
     }
 
-    // size is always positive, so this is safe
-    let exp = (size as f64).log(1024.0).floor() as u64;
+    let exp = min(
+        (size.saturating_sub(1)).ilog(1024) as usize,
+        units.len() - 1,
+    );
 
-    // precision loss is ok here because we are only interested in the integer part
-    let pot = 1024f64.powf(exp as f64);
+    let divisor = 1u64 << (exp * 10);
+    let size_whole = size / divisor;
+    let size_frac = ((size % divisor) * 10 + divisor / 2) / divisor;
 
-    // precision loss is ok here because we are only interested in the integer part
-    let res = size as f64 / pot;
-
-    // exp is always positive, so this is safe
-    format!("{res:.0} {}", units[exp as usize])
+    if exp == 0 {
+        format!("{:.0} {}", size, units[exp])
+    } else if size_frac == 0 {
+        format!("{:.0} {}", size_whole, units[exp])
+    } else {
+        format!("{:.0}.{} {}", size_whole, size_frac, units[exp])
+    }
 }
 
 type ParsedPath = (String, String, u64);
 pub fn parse_path(path: &str, base_url: &str) -> Result<ParsedPath, DcCmdError> {
     let base_url = base_url.trim_start_matches("https://");
+    let path = path.trim_start_matches("https://");
     let path = path.trim_start_matches(base_url).trim_start_matches('/');
 
     debug!("path: {}", path);
 
     let path_parts: Vec<&str> = path.trim_end_matches('/').split('/').collect();
-    debug!("path_parts: {:?}", path_parts);
+    debug!("path parts: {:?}", path_parts);
 
-    let name = path_parts
+    let name = (*path_parts
         .last()
-        .ok_or(DcCmdError::InvalidPath(path.to_string()))?
-        .to_string();
+        .ok_or(DcCmdError::InvalidPath(path.to_string()))?)
+    .to_string();
     let depth = path_parts.len().saturating_sub(1) as u64;
 
     let parent_path = if depth == 0 {
@@ -156,7 +158,7 @@ pub fn parse_path(path: &str, base_url: &str) -> Result<ParsedPath, DcCmdError> 
         format!("/{}/", path_parts[..path_parts.len() - 1].join("/"))
     };
 
-    debug!("parent_path: {}", parent_path);
+    debug!("parent path: {}", parent_path);
     debug!("name: {}", name);
     debug!("depth: {}", depth);
 
@@ -176,6 +178,26 @@ pub fn build_node_path(path: ParsedPath) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_parse_path_no_https() {
+        let path = "some.domain.com/test/folder/";
+        let base_url = "some.domain.com";
+        let (parent_path, name, depth) = parse_path(path, base_url).unwrap();
+        assert_eq!("/test/", parent_path);
+        assert_eq!("folder", name);
+        assert_eq!(1, depth);
+    }
+
+    #[test]
+    fn test_parse_path_https() {
+        let path = "https://some.domain.com/test/folder/";
+        let base_url = "some.domain.com";
+        let (parent_path, name, depth) = parse_path(path, base_url).unwrap();
+        assert_eq!("/test/", parent_path);
+        assert_eq!("folder", name);
+        assert_eq!(1, depth);
+    }
 
     #[test]
     #[ignore = "does not work without a terminal"]
@@ -211,32 +233,32 @@ mod tests {
 
     #[test]
     fn test_to_readable_kb() {
-        let size = 12500_u64;
+        let size = 1024 * 12;
         assert_eq!("12 KB", to_readable_size(size));
     }
 
     #[test]
     fn test_to_readable_mb() {
-        let size = 12_500_000_u64;
+        let size = 12 * 1024 * 1024;
         assert_eq!("12 MB", to_readable_size(size));
     }
 
     #[test]
     fn test_to_readable_gb() {
-        let size = 12_500_000_000_u64;
+        let size = 12 * 1024 * 1024 * 1024;
         assert_eq!("12 GB", to_readable_size(size));
     }
 
     #[test]
     fn test_to_readable_tb() {
-        let size = 12_500_000_000_000_u64;
-        assert_eq!("11 TB", to_readable_size(size));
+        let size = 12 * 1024 * 1024 * 1024 * 1024;
+        assert_eq!("12 TB", to_readable_size(size));
     }
 
     #[test]
     fn test_to_readable_pb() {
-        let size = 12_500_000_000_000_000_u64;
-        assert_eq!("11 PB", to_readable_size(size));
+        let size = 12 * 1024 * 1024 * 1024 * 1024 * 1024;
+        assert_eq!("12 PB", to_readable_size(size));
     }
 
     #[test]

@@ -240,7 +240,7 @@ async fn upload_file(
     let is_encrypted = node.is_encrypted.unwrap_or(false);
 
     if !is_encrypted && opts.share {
-        let link = share_node(dracoon, &node).await?;
+        let link = share_node(dracoon, &node, opts.share_password).await?;
         let success_msg =
             format_success_message(format!("Shared {file_name}.\n▶︎▶︎ {link}").as_str());
         let success_msg = format!("\n{success_msg}");
@@ -806,8 +806,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_list_files() {
-        let root_path = PathBuf::from("./src/cmd/nodes");
+        let root_path = PathBuf::from("./src/cmd/config");
         let files = list_files(root_path).await.unwrap();
-        assert_eq!(files.len(), 5);
+        assert_eq!(files.len(), 4);
     }
 }

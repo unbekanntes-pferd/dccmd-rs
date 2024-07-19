@@ -11,7 +11,7 @@ use tracing::{debug, error, info};
 
 use crate::cmd::{
     init_dracoon, init_encryption, init_public_dracoon,
-    models::DcCmdError,
+    models::{DcCmdError, ListOptions},
     nodes::{is_search_query, search_nodes},
     utils::strings::parse_path,
 };
@@ -65,7 +65,13 @@ pub async fn download(
 
     if is_search_query(&node_name) {
         info!("Attempting download of search query {}.", node_name);
-        let files = search_nodes(&dracoon, &node_name, Some(&parent_path), true, 0, 500).await?;
+        let files = search_nodes(
+            &dracoon,
+            &node_name,
+            Some(&parent_path),
+            &ListOptions::new(None, None, None, true, false),
+        )
+        .await?;
         let files = files.get_files();
 
         info!("Found {} files.", files.len());

@@ -7,6 +7,7 @@ use dco3::{
         models::{DracoonAuthErrorResponse, DracoonErrorResponse},
     },
     nodes::models::S3ErrorResponse,
+    FilterOperator, FilterQueryBuilder, ListAllParams,
 };
 
 use super::{
@@ -153,10 +154,41 @@ pub enum DcCmdCommand {
         #[clap(long)]
         share_password: Option<String>,
     },
+    /// Transfer files across DRACOON instances
+    Transfer {
+        /// Source file path in DRACOON
+        source: String,
+
+        /// Target file path in DRACOON
+        target: String,
+
+        /// Overwrite existing file in DRACOON
+        #[clap(long)]
+        overwrite: bool,
+
+        /// Preserve Download Share Links and point them to the new node in DRACOON
+        #[clap(long)]
+        keep_share_links: bool,
+
+        /// classification of the node (1-4)
+        #[clap(long)]
+        classification: Option<u8>,
+
+        /// share upload
+        #[clap(long)]
+        share: bool,
+
+        #[clap(long)]
+        share_password: Option<String>,
+    },
     /// List nodes in DRACOON
     Ls {
         /// Source file path in DRACOON
         source: String,
+
+        /// Filter nodes (e.g. by name)
+        #[clap(long)]
+        filter: Option<String>,
 
         /// Print node information (details)
         #[clap(short, long)]
@@ -254,9 +286,9 @@ pub enum UsersCommand {
         /// DRACOON url
         target: String,
 
-        /// search filter (username, first name, last name)
+        /// search filter (e.g. username, first name, last name)
         #[clap(long)]
-        search: Option<String>,
+        filter: Option<String>,
 
         /// skip n users (default offset: 0)
         #[clap(short, long)]
@@ -352,9 +384,9 @@ pub enum GroupsCommand {
         /// DRACOON url
         target: String,
 
-        /// search filter (group name)
+        /// search filter (e.g. group name)
         #[clap(long)]
-        search: Option<String>,
+        filter: Option<String>,
 
         /// skip n groups (default offset: 0)
         #[clap(short, long)]
@@ -422,4 +454,111 @@ pub enum ConfigCommand {
 pub enum PrintFormat {
     Pretty,
     Csv,
+}
+
+pub struct ListOptions {
+    filter: Option<String>,
+    offset: Option<u32>,
+    limit: Option<u32>,
+    all: bool,
+    csv: bool,
+}
+
+impl ListOptions {
+    pub fn new(
+        filter: Option<String>,
+        offset: Option<u32>,
+        limit: Option<u32>,
+        all: bool,
+        csv: bool,
+    ) -> Self {
+        Self {
+            filter,
+            offset,
+            limit,
+            all,
+            csv,
+        }
+    }
+
+    pub fn filter(&self) -> &Option<String> {
+        &self.filter
+    }
+
+    pub fn offset(&self) -> Option<u32> {
+        self.offset
+    }
+
+    pub fn limit(&self) -> Option<u32> {
+        self.limit
+    }
+
+    pub fn all(&self) -> bool {
+        self.all
+    }
+
+    pub fn csv(&self) -> bool {
+        self.csv
+    }
+}
+
+pub(crate) trait ToFilterOperator {
+    fn to_filter_operator(&self) -> Result<FilterOperator, DcCmdError>;
+}
+
+impl ToFilterOperator for &str {
+    fn to_filter_operator(&self) -> Result<FilterOperator, DcCmdError> {
+        match *self {
+            "eq" => Ok(FilterOperator::Eq),
+            "neq" => Ok(FilterOperator::Neq),
+            "cn" => Ok(FilterOperator::Cn),
+            "ge" => Ok(FilterOperator::Ge),
+            "le" => Ok(FilterOperator::Le),
+            _ => Err(DcCmdError::InvalidArgument(format!(
+                "Invalid filter operator: {self}"
+            ))),
+        }
+    }
+}
+
+pub fn build_params(
+    filter: &Option<String>,
+    offset: u64,
+    limit: u64,
+) -> Result<ListAllParams, DcCmdError> {
+    if let Some(search) = filter {
+        let params = {
+            let mut parts = search.split(':');
+
+            let error_msg =
+                format!("Invalid filter query ({search}) Expected format: field:operator:value");
+            let field = parts
+                .next()
+                .ok_or(DcCmdError::InvalidArgument(error_msg.clone()))?;
+            let operator = parts
+                .next()
+                .ok_or(DcCmdError::InvalidArgument(error_msg.clone()))?
+                .to_filter_operator()?;
+            let value = parts.next().ok_or(DcCmdError::InvalidArgument(error_msg))?;
+
+            let filter = FilterQueryBuilder::new()
+                .with_field(field)
+                .with_operator(operator)
+                .with_value(value)
+                .try_build()?;
+
+            ListAllParams::builder()
+                .with_filter(filter)
+                .with_offset(offset)
+                .with_limit(limit)
+                .build()
+        };
+
+        Ok(params)
+    } else {
+        Ok(ListAllParams::builder()
+            .with_offset(offset)
+            .with_limit(limit)
+            .build())
+    }
 }
