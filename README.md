@@ -126,6 +126,24 @@ In order to change this behavior, you can the pass the following flags / options
 - *--overwrite* - a file with the same name will be overwritten (essentially creating versions of the same file)
 - *--keep-share-links* - if *--overwrite* is used, you can additionally keep existing (download) share links for file(s)
 
+ ### Transfers
+
+ To transfer a file from DRACOON instance another instance, use the transfer command:
+
+```bash
+dccmd-rs transfer instance1.domain.com/some/file.pdf instance2.domain.com/some/target/path
+```
+
+### Transfer options
+These options are analogue to the upload options (see above).
+
+When uploading, the default resolution strategy is *autorename* - this means that if a file `foo.pdf` uploaded and already present, it is automatically renamed by DRACOON (e.g. to `foo (1).pdf`).
+
+In order to change this behavior, you can the pass the following flags / options:
+- *--overwrite* - a file with the same name will be overwritten (essentially creating versions of the same file)
+- *--keep-share-links* - if *--overwrite* is used, you can additionally keep existing (download) share links for file(s)
+
+
 ### Listing nodes
 To list nodes, use the `ls` command:
 
@@ -137,6 +155,9 @@ dccmd-rs ls your.dracoon.domain/
 
 // for searches within the room
 dccmd-rs ls your.dracoon.domain/*.pdf 
+
+// only files
+dccmd-rs ls your.dracoon.domain/some/room --filter type:eq:file
 ```
 
 Options:
@@ -144,6 +165,7 @@ Options:
  - `-r`, `--human-readable` - prints size in human readable format
  -    `--managed` - shows room as room admin / room manager (rooms w/o permissions)       
  -    `--all` - fetches all items (default: first 500 items)
+ - `--filter` - filter for specific values (see API docs for filter info)
 
 
 ### Deleting nodes
@@ -197,10 +219,10 @@ To list users, you can use the `users ls some.dracoon.domain.com` command:
 
 ```bash
 # optional flags: --all (lists all users, default: 500, paging) --csv (csv format)
-# optional flags: --search (by username)
+# optional flags: --filter (see API docs for filter info)
 dccmd-rs users ls your.dracoon.domain/
 dccmd-rs users ls your.dracoon.domain/ --csv --all > userlist.csv
-dccmd-rs users ls your.dracoon.domain/ --search foo
+dccmd-rs users ls your.dracoon.domain/ --filter userName:cn:foo
 ```
 
 To create users, you can use the `users create some.dracoon.domain.com` command:
@@ -234,10 +256,10 @@ To list groups, you can use the `groups ls some.dracoon.domain.com` command:
 
 ```bash
 # optional flags: --all (lists all groups, default: 500, paging) --csv (csv format)
-# optional flags: --search (by username)
+# optional flags: --filter (see API docs for filter info)
 dccmd-rs groups ls your.dracoon.domain/
 dccmd-rs groups ls your.dracoon.domain/ --csv --all > grouplist.csv
-dccmd-rs groups ls your.dracoon.domain/ --search foo
+dccmd-rs groups ls your.dracoon.domain/ --filter name:eq:foo
 ```
 
 To create groups, you can use the `groups create some.dracoon.domain.com` command:
