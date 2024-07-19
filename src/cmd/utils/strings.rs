@@ -127,11 +127,11 @@ fn to_readable_size(size: u64) -> String {
     let size_frac = ((size % divisor) * 10 + divisor / 2) / divisor;
 
     if exp == 0 {
-        format!("{:.0} {}", size, units[exp as usize])
+        format!("{:.0} {}", size, units[exp])
     } else if size_frac == 0 {
-        format!("{:.0} {}", size_whole, units[exp as usize])
+        format!("{:.0} {}", size_whole, units[exp])
     } else {
-        format!("{:.0}.{} {}", size_whole, size_frac, units[exp as usize])
+        format!("{:.0}.{} {}", size_whole, size_frac, units[exp])
     }
 }
 

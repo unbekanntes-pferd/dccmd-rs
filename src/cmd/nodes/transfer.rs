@@ -116,7 +116,7 @@ pub async fn transfer_node(
     let node = upload_res?;
 
     if !node.is_encrypted.unwrap_or(false) && opts.share {
-        let link = share_node(&target_dracoon, &node).await?;
+        let link = share_node(&target_dracoon, &node, opts.share_password).await?;
         let file_name = node.name.clone();
         let success_msg =
             format_success_message(format!("Shared {file_name}.\n▶︎▶︎ {link}").as_str());
