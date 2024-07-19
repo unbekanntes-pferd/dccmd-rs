@@ -21,10 +21,9 @@ pub async fn transfer_node(
     target: String,
     opts: CmdTransferOptions,
 ) -> Result<(), DcCmdError> {
-
     let (mut source_dracoon, mut target_dracoon) = init_transfer_clients(&source, &target).await?;
-    let (source_node, parent_node) = get_transfer_nodes(&source, &target, &source_dracoon, &target_dracoon).await?;
-
+    let (source_node, parent_node) =
+        get_transfer_nodes(&source, &target, &source_dracoon, &target_dracoon).await?;
 
     if parent_node.is_encrypted == Some(true) {
         target_dracoon = init_encryption(target_dracoon, None).await?;
@@ -93,7 +92,7 @@ pub async fn transfer_node(
         let res = source_dracoon
             .download(&source_node, &mut buf_writer, Some(Box::new(callback)))
             .await
-            .map_err( DcCmdError::from);
+            .map_err(DcCmdError::from);
 
         // flushing writer and shut down
         let _ = buf_writer.flush().await;
@@ -107,7 +106,7 @@ pub async fn transfer_node(
         target_dracoon_mv
             .upload(&parent_node, upload_options, buf_reader, None, None)
             .await
-            .map_err( DcCmdError::from)
+            .map_err(DcCmdError::from)
     });
 
     let (download_res, upload_res) = tokio::try_join!(download_task, upload_task)
@@ -127,10 +126,7 @@ pub async fn transfer_node(
             .expect("Error writing message to terminal.");
     }
 
-    let msg = format!(
-        "Node {} uploaded from {source} to {target}.",
-        node.name
-    );
+    let msg = format!("Node {} uploaded from {source} to {target}.", node.name);
     progress_bar.finish_with_message(msg);
 
     Ok(())
@@ -154,7 +150,10 @@ async fn get_node_from_path(path: &str, dracoon: &Dracoon<Connected>) -> Result<
     Ok(parent_node)
 }
 
-async fn init_transfer_clients(source: &str, target: &str) -> Result<(Dracoon<Connected>, Dracoon<Connected>), DcCmdError> {
+async fn init_transfer_clients(
+    source: &str,
+    target: &str,
+) -> Result<(Dracoon<Connected>, Dracoon<Connected>), DcCmdError> {
     let source_dracoon = init_dracoon(source, None, true).await?;
     let target_dracoon = init_dracoon(target, None, true).await?;
 

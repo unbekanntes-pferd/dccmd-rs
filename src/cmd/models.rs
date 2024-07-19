@@ -173,7 +173,7 @@ pub enum DcCmdCommand {
         /// classification of the node (1-4)
         #[clap(long)]
         classification: Option<u8>,
-        
+
         /// share upload
         #[clap(long)]
         share: bool,
@@ -530,9 +530,8 @@ pub fn build_params(
         let params = {
             let mut parts = search.split(':');
 
-            let error_msg = format!(
-                "Invalid filter query ({search}) Expected format: field:operator:value"
-            );
+            let error_msg =
+                format!("Invalid filter query ({search}) Expected format: field:operator:value");
             let field = parts
                 .next()
                 .ok_or(DcCmdError::InvalidArgument(error_msg.clone()))?;

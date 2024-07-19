@@ -1,7 +1,5 @@
 #![allow(clippy::struct_excessive_bools)]
 
-
-
 use crate::cmd::models::{ListOptions, PasswordAuth};
 
 pub struct CmdMkRoomOptions {

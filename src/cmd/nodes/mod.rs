@@ -36,8 +36,8 @@ use super::{
 pub mod download;
 pub mod models;
 mod share;
-pub mod upload;
 pub mod transfer;
+pub mod upload;
 
 #[allow(clippy::module_name_repetitions)]
 pub async fn list_nodes(
@@ -159,7 +159,7 @@ async fn search_nodes(
     let params = build_params(
         opts.filter(),
         u64::from(opts.offset().unwrap_or(0)),
-        u64::from(opts.limit().unwrap_or(500))
+        u64::from(opts.limit().unwrap_or(500)),
     )?;
 
     let mut node_list = dracoon
