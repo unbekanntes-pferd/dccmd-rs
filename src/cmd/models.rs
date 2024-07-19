@@ -515,8 +515,7 @@ impl ToFilterOperator for &str {
             "ge" => Ok(FilterOperator::Ge),
             "le" => Ok(FilterOperator::Le),
             _ => Err(DcCmdError::InvalidArgument(format!(
-                "Invalid filter operator: {}",
-                self
+                "Invalid filter operator: {self}"
             ))),
         }
     }
@@ -532,8 +531,7 @@ pub fn build_params(
             let mut parts = search.split(':');
 
             let error_msg = format!(
-                "Invalid filter query ({}) Expected format: field:operator:value",
-                search
+                "Invalid filter query ({search}) Expected format: field:operator:value"
             );
             let field = parts
                 .next()

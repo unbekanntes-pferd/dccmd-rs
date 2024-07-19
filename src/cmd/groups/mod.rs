@@ -61,7 +61,7 @@ impl GroupCommandHandler {
 
         self.client.groups.delete_group(group_id).await?;
 
-        let msg = format!("Group {} deleted", group_id);
+        let msg = format!("Group {group_id} deleted");
 
         self.term
             .write_line(format_success_message(&msg).as_str())

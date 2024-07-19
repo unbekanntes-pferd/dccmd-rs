@@ -100,8 +100,8 @@ async fn get_nodes(
         None
     };
 
-    let offset = opts.offset().unwrap_or(0) as u64;
-    let limit = opts.limit().unwrap_or(500) as u64;
+    let offset = u64::from(opts.offset().unwrap_or(0));
+    let limit = u64::from(opts.limit().unwrap_or(500));
 
     let params = build_params(opts.filter(), offset, limit)?;
 
@@ -158,8 +158,8 @@ async fn search_nodes(
 
     let params = build_params(
         opts.filter(),
-        opts.offset().unwrap_or(0) as u64,
-        opts.limit().unwrap_or(500) as u64,
+        u64::from(opts.offset().unwrap_or(0)),
+        u64::from(opts.limit().unwrap_or(500))
     )?;
 
     let mut node_list = dracoon

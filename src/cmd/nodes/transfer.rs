@@ -67,7 +67,7 @@ pub async fn transfer_node(
         ResolutionStrategy::AutoRename
     };
 
-    let progress_bar = ProgressBar::new(source_node.size.unwrap_or(0) as u64);
+    let progress_bar = ProgressBar::new(source_node.size.unwrap_or(0));
     progress_bar.set_style(
     ProgressStyle::default_bar()
     .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}) {msg}").unwrap()
@@ -83,7 +83,7 @@ pub async fn transfer_node(
     let progress_bar_mv = progress_bar.clone();
 
     let callback = move |read_bytes: u64, _total: u64| {
-        progress_bar_mv.inc(read_bytes as u64);
+        progress_bar_mv.inc(read_bytes);
     };
 
     let (writer, reader) = duplex(MAX_BUFFER_SIZE);
@@ -93,7 +93,7 @@ pub async fn transfer_node(
         let res = source_dracoon
             .download(&source_node, &mut buf_writer, Some(Box::new(callback)))
             .await
-            .map_err(|e| DcCmdError::from(e));
+            .map_err( DcCmdError::from);
 
         // flushing writer and shut down
         let _ = buf_writer.flush().await;
@@ -107,7 +107,7 @@ pub async fn transfer_node(
         target_dracoon_mv
             .upload(&parent_node, upload_options, buf_reader, None, None)
             .await
-            .map_err(|e| DcCmdError::from(e))
+            .map_err( DcCmdError::from)
     });
 
     let (download_res, upload_res) = tokio::try_join!(download_task, upload_task)
