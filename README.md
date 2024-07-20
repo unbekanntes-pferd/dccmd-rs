@@ -60,6 +60,8 @@ For the sake of clarity, the usage of the binary is called `dccmd-rs`, regardles
 
 ### Downloads
 
+![dccmd-rs ls](./assets/dccmd-download-0.7.0.gif)
+
 To download a file, use the download command:
 
 ```bash
@@ -88,6 +90,8 @@ dccmd-rs download your.dracoon.domain/public/download-shares/someLongAccessKey /
 **Note**: This essentially means you need to copy the created share link
 
 ### Uploads
+
+![dccmd-rs ls](./assets/dccmd-upload-0.7.0.gif)
 
 To upload a file, use the upload command:
 
@@ -145,6 +149,9 @@ In order to change this behavior, you can the pass the following flags / options
 
 
 ### Listing nodes
+
+![dccmd-rs ls](./assets/dccmd-ls-0.7.0.gif)
+
 To list nodes, use the `ls` command:
 
 ```bash
