@@ -60,7 +60,7 @@ For the sake of clarity, the usage of the binary is called `dccmd-rs`, regardles
 
 ### Downloads
 
-![dccmd-rs ls](./assets/dccmd-download-0.7.0.gif)
+![dccmd-rs ls](./assets/dccmd-download-0.8.0.gif)
 
 To download a file, use the download command:
 
@@ -91,7 +91,7 @@ dccmd-rs download your.dracoon.domain/public/download-shares/someLongAccessKey /
 
 ### Uploads
 
-![dccmd-rs ls](./assets/dccmd-upload-0.7.0.gif)
+![dccmd-rs ls](./assets/dccmd-upload-0.8.0.gif)
 
 To upload a file, use the upload command:
 
