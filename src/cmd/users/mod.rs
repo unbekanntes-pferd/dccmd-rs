@@ -256,10 +256,8 @@ impl UserCommandHandler {
             if print {
                 self.print_users(&results, opts.csv())?;
             }
-        } else {
-            if print {
-                self.print_users(&results, opts.csv())?;
-            }
+        } else if print {
+            self.print_users(&results, opts.csv())?;
         }
 
         Ok(results)

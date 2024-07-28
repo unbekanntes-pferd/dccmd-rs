@@ -112,6 +112,7 @@ pub struct UsersSwitchAuthOptions {
 }
 
 impl UsersSwitchAuthOptions {
+    #[allow(clippy::too_many_arguments)]
     pub fn try_new(
         curr_method: String,
         new_method: String,
@@ -178,10 +179,8 @@ impl UsersSwitchAuthOptions {
             l if l.contains(first_name_str) || l.contains(last_name_str) => {
                 let first_name = user.first_name.to_lowercase();
                 let last_name = user.last_name.to_lowercase();
-                let login = l
-                    .replace(first_name_str, &first_name)
-                    .replace(last_name_str, &last_name);
-                login
+                l.replace(first_name_str, &first_name)
+                    .replace(last_name_str, &last_name)
             }
             "email" => user
                 .email

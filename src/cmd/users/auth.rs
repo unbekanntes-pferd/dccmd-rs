@@ -102,11 +102,11 @@ impl UserCommandHandler {
                 let auth_method = match &new_method {
                     AuthMethod::Local => dco3::users::AuthMethod::new_basic(),
                     AuthMethod::Oidc => dco3::users::AuthMethod::new_open_id_connect(
-                        opts.new_oidc_id().unwrap().into(),
+                        opts.new_oidc_id().unwrap(),
                         login.clone(),
                     ),
                     AuthMethod::Ad => dco3::users::AuthMethod::new_active_directory(
-                        opts.new_ad_id().unwrap().into(),
+                        opts.new_ad_id().unwrap(),
                         login.clone(),
                     ),
                 };
