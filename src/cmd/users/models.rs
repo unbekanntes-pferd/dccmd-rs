@@ -150,7 +150,12 @@ impl UsersSwitchAuthOptions {
         // build transform login function
         let login_fn = match login {
             Some(l) => UsersSwitchAuthOptions::build_login_fn(l),
-            None => Box::new(|user: &UserData| user.email.as_deref().unwrap_or(user.user_name.as_str()).to_string()),
+            None => Box::new(|user: &UserData| {
+                user.email
+                    .as_deref()
+                    .unwrap_or(user.user_name.as_str())
+                    .to_string()
+            }),
         };
 
         Ok(Self {
@@ -178,9 +183,17 @@ impl UsersSwitchAuthOptions {
                     .replace(last_name_str, &last_name);
                 login
             }
-            "email" => user.email.as_deref().expect("User email is required").to_string(),
+            "email" => user
+                .email
+                .as_deref()
+                .expect("User email is required")
+                .to_string(),
             "username" => user.user_name.clone(),
-            _ => user.email.as_deref().unwrap_or(user.user_name.as_str()).to_string(),
+            _ => user
+                .email
+                .as_deref()
+                .unwrap_or(user.user_name.as_str())
+                .to_string(),
         })
     }
 

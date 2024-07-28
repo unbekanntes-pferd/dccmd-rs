@@ -85,29 +85,40 @@ impl ConfigCommandHandler {
         let dracoon = self.get_dracoon_client(target).await?;
 
         let oidc_info = dracoon.system.auth.get_openid_idp_configurations().await?;
-        let ad_info = dracoon.system.auth.get_active_directory_configurations().await?;
+        let ad_info = dracoon
+            .system
+            .auth
+            .get_active_directory_configurations()
+            .await?;
         let customer_info = dracoon.user.get_customer_info().await?;
 
         self.term
             .write_line(&format!("► System info for: {target}"))
             .map_err(|_| DcCmdError::IoError)?;
 
-        // Customer info 
+        // Customer info
         self.term
             .write_line(&format!("► Customer: {}", customer_info.name))
             .map_err(|_| DcCmdError::IoError)?;
 
-        let percent_space_used = (customer_info.space_used as f64 / customer_info.space_limit as f64)  * 100.0;
-        let percent_users_used = (customer_info.accounts_used as f64 / customer_info.accounts_limit as f64) * 100.0;
+        let percent_space_used =
+            (customer_info.space_used as f64 / customer_info.space_limit as f64) * 100.0;
+        let percent_users_used =
+            (customer_info.accounts_used as f64 / customer_info.accounts_limit as f64) * 100.0;
         let space_used = to_readable_size(customer_info.space_used);
         let space_limit = to_readable_size(customer_info.space_limit);
 
         self.term
-            .write_line(&format!("► Space used: {space_used} / {space_limit} ({percent_space_used:.2}%)"))
+            .write_line(&format!(
+                "► Space used: {space_used} / {space_limit} ({percent_space_used:.2}%)"
+            ))
             .map_err(|_| DcCmdError::IoError)?;
 
         self.term
-            .write_line(&format!("► Users used: {} / {} ({percent_users_used:.2}%)", customer_info.accounts_used, customer_info.accounts_limit))
+            .write_line(&format!(
+                "► Users used: {} / {} ({percent_users_used:.2}%)",
+                customer_info.accounts_used, customer_info.accounts_limit
+            ))
             .map_err(|_| DcCmdError::IoError)?;
 
         // Authentication methods
@@ -234,7 +245,6 @@ pub async fn handle_config_cmd(cmd: ConfigCommand, term: Term) -> Result<(), DcC
             handler.get_system_info(&target).await?;
 
             Ok(())
-
         }
     }
 }
