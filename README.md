@@ -256,6 +256,28 @@ dccmd-rs users info your.dracoon.domain/ --user-id 2
 dccmd-rs users info your.dracoon.domain/ --user-name foo # short: -u
 ```
 
+#### Switch auth methods
+
+You can switch the auth method for a specific subset (or all users) belonging to a current auth method.
+In order to use it, you need to pass the following parameters:
+- *current-method* - current auth method in DRACOON - valid options: basic (or local), openid (or oidc), active-directory (or ad)
+- *new-method* - new auth method in DRACOON - valid options see above
+- *current-oidc-id* - optional current OIDC config id - must be provided if current method is openid
+- *new-oidc-id* - optional new OIDC config id - must be provided if new method is openid
+- *current-ad-id* - optional current AD config id - must be provided if current method is active-directory
+- *new-ad-id* - optional new AD config id - must be provided if new method is active-directory
+- *filter* - optional user filter - see API docs for details (e.g. email:cn:somedomain.com)
+- *login* - optional login transformation (e.g. email, username, firstname.lastname) default: email
+
+```bash
+# in order to identify AD or openid ids, use the config system-info command (see below)
+
+# switch from basic auth (local) to openid if local user email contains somedomain.com
+dccmd-rs users switch-auth --current-method basic --new-method openid --new-oidc-id 99 --filter email:cn:somedomain.com your.dracoon.domain/
+
+# switch from openid with id 88 to openid with id 99 while setting the login as firstname.lastname (replaced by user values)
+dccmd-rs users switch-auth --current-method openid --new-method openid --current-oidc-id 88 --new-oidc-id 99 --filter email:cn:somedomain.com your.dracoon.domain/ --login "firstname.lastname"
+```
 
 ### Managing groups
 
@@ -325,6 +347,17 @@ dccmd-rs config crypto ls your.dracoon.domain/
 # removes stored crypto secret for given domain
 dccmd-rs config crypto rm your.dracoon.domain/ 
 ```
+
+#### System info
+
+You can fetch the system info (OpenID config, AD config, used users and storage) via the `config system-info` command.
+
+```bash
+# displays system information
+# requires config manager role
+dccmd-rs config system-info your.dracoon.domain/
+```
+
 
 ### CLI mode
 
