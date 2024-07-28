@@ -42,9 +42,7 @@ pub async fn transfer_node(
         ));
     }
 
-    let file_meta = FileMeta::builder()
-        .with_name(source_node.name.clone())
-        .with_size(source_node.size.unwrap_or(0));
+    let file_meta = FileMeta::builder(source_node.name.clone(), source_node.size.unwrap_or(0));
 
     let file_meta = if let Some(timestamp_modification) = source_node.timestamp_modification {
         file_meta.with_timestamp_modification(timestamp_modification)

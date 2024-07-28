@@ -375,6 +375,46 @@ pub enum UsersCommand {
         #[clap(long)]
         user_id: Option<u64>,
     },
+
+    /// swith auth method for users in DRACOON
+    SwitchAuth {
+        /// DRACOON url
+        target: String,
+
+        /// current auth method in DRACOON
+        #[clap(long)]
+        current_method: String,
+
+        /// new auth method in DRACOON
+        #[clap(long)]
+        new_method: String,
+
+        /// optional current OIDC config id
+        #[clap(long)]
+        current_oidc_id: Option<u64>,
+
+        /// optional new OIDC config id
+        #[clap(long)]
+        new_oidc_id: Option<u64>,
+
+        /// optional current AD config id
+        #[clap(long)]
+        current_ad_id: Option<u64>,
+
+        /// optional new AD config id
+        #[clap(long)]
+        new_ad_id: Option<u64>,
+
+        /// optional user filter
+        #[clap(long)]
+        filter: Option<String>,
+
+        /// optional login transformation
+        /// (e.g. email, username, firstname.lastname)
+        /// default: email
+        #[clap(long)]
+        login: Option<String>,
+    },
 }
 
 #[derive(Parser)]

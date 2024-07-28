@@ -34,9 +34,7 @@ use dco3::{
 
 use super::models::CmdUploadOptions;
 
-// this is currently set low to display progress
-// TODO: fix dco3 chunk progress for uploads
-pub const DEFAULT_CHUNK_SIZE: usize = 1024 * 1024 * 5; // 5 MB
+pub const DEFAULT_CHUNK_SIZE: usize = 1024 * 1024 * 32; // 32 MB (standard S3 chunk)
 
 pub async fn upload(
     term: Term,
@@ -130,7 +128,7 @@ async fn upload_public_file(source: PathBuf, target: String) -> Result<(), DcCmd
 
     let file_meta = get_file_meta(&file_meta, &source)?;
 
-    let file_size = file_meta.1;
+    let file_size = file_meta.size;
 
     let progress_bar = ProgressBar::new(file_size);
     progress_bar.set_style(
@@ -156,7 +154,7 @@ async fn upload_public_file(source: PathBuf, target: String) -> Result<(), DcCmd
             upload_opts,
             reader,
             Some(Box::new(move |progress, _| {
-                progress_bar_mv.set_position(progress);
+                progress_bar_mv.inc(progress);
             })),
             Some(DEFAULT_CHUNK_SIZE),
         )
@@ -187,9 +185,9 @@ async fn upload_file(
     }
 
     let file_meta = get_file_meta(&file_meta, &source)?;
-    let file_name = file_meta.0.clone();
+    let file_name = file_meta.name.clone();
 
-    let progress_bar = ProgressBar::new(file_meta.1);
+    let progress_bar = ProgressBar::new(file_meta.size);
     progress_bar.set_style(
     ProgressStyle::default_bar()
     .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}) {msg}").unwrap()
@@ -199,7 +197,7 @@ async fn upload_file(
     let progress_bar_mv = progress_bar.clone();
 
     progress_bar_mv.set_message("Uploading");
-    progress_bar_mv.set_length(file_meta.1);
+    progress_bar_mv.set_length(file_meta.size);
 
     let classification = opts.classification.unwrap_or(2);
     let resolution_strategy = if opts.overwrite {
@@ -228,7 +226,7 @@ async fn upload_file(
             upload_options,
             reader,
             Some(Box::new(move |progress, _| {
-                progress_bar_mv.set_position(progress);
+                progress_bar_mv.inc(progress);
             })),
             Some(DEFAULT_CHUNK_SIZE),
         )
@@ -648,7 +646,7 @@ async fn upload_files(
                 let file_meta = file.metadata().await.or(Err(DcCmdError::IoError))?;
                 let file_meta = get_file_meta(&file_meta, source)?;
 
-                let file_name = file_meta.0.clone();
+                let file_name = file_meta.name.clone();
 
                 let classification = opts.classification.unwrap_or(2);
                 let resolution_strategy = if opts.overwrite {
@@ -784,9 +782,7 @@ fn get_file_meta(file_meta: &Metadata, file_path: &Path) -> Result<FileMeta, DcC
 
     let timestamp_creation = to_datetime_utc(timestamp_creation);
 
-    Ok(FileMeta::builder()
-        .with_name(file_name)
-        .with_size(file_meta.len())
+    Ok(FileMeta::builder(file_name, file_meta.len())
         .with_timestamp_modification(timestamp_modification)
         .with_timestamp_creation(timestamp_creation)
         .build())

@@ -5,13 +5,15 @@ use dco3::{
     auth::Connected,
     user::UserAuthData,
     users::{CreateUserRequest, UserItem, UsersFilter},
-    Dracoon, ListAllParams, Users,
+    Dracoon, ListAllParams, RangedItems, Users,
 };
 use futures_util::{future::join_all, stream, StreamExt};
 use indicatif::{ProgressBar, ProgressStyle};
+use models::UsersSwitchAuthOptions;
 use tokio::sync::Mutex;
 use tracing::{error, info};
 
+mod auth;
 mod models;
 mod print;
 
@@ -202,7 +204,11 @@ impl UserCommandHandler {
         Ok(())
     }
 
-    async fn list_users(&self, opts: ListOptions) -> Result<(), DcCmdError> {
+    async fn list_users(
+        &self,
+        opts: ListOptions,
+        print: bool,
+    ) -> Result<RangedItems<UserItem>, DcCmdError> {
         let params = build_params(
             opts.filter(),
             opts.offset().unwrap_or(0).into(),
@@ -247,12 +253,16 @@ impl UserCommandHandler {
 
             let results = shared_results.lock().await.clone();
 
-            self.print_users(results, opts.csv())?;
+            if print {
+                self.print_users(&results, opts.csv())?;
+            }
         } else {
-            self.print_users(results, opts.csv())?;
+            if print {
+                self.print_users(&results, opts.csv())?;
+            }
         }
 
-        Ok(())
+        Ok(results)
     }
 
     async fn delete_user(
@@ -328,7 +338,8 @@ pub async fn handle_users_cmd(cmd: UsersCommand, term: Term) -> Result<(), DcCmd
         | UsersCommand::Ls { target, .. }
         | UsersCommand::Rm { target, .. }
         | UsersCommand::Import { target, .. }
-        | UsersCommand::Info { target, .. } => target,
+        | UsersCommand::Info { target, .. }
+        | UsersCommand::SwitchAuth { target, .. } => target,
     };
 
     let handler = match &cmd {
@@ -367,7 +378,7 @@ pub async fn handle_users_cmd(cmd: UsersCommand, term: Term) -> Result<(), DcCmd
             csv,
         } => {
             handler
-                .list_users(ListOptions::new(filter, offset, limit, all, csv))
+                .list_users(ListOptions::new(filter, offset, limit, all, csv), true)
                 .await?;
         }
         UsersCommand::Rm {
@@ -390,6 +401,29 @@ pub async fn handle_users_cmd(cmd: UsersCommand, term: Term) -> Result<(), DcCmd
             user_id,
         } => {
             handler.get_user_info(user_name, user_id).await?;
+        }
+        UsersCommand::SwitchAuth {
+            target: _,
+            current_method,
+            new_method,
+            current_oidc_id,
+            new_oidc_id,
+            current_ad_id,
+            new_ad_id,
+            filter,
+            login,
+        } => {
+            let opts = UsersSwitchAuthOptions::try_new(
+                current_method,
+                new_method,
+                current_oidc_id,
+                new_oidc_id,
+                current_ad_id,
+                new_ad_id,
+                filter,
+                login,
+            )?;
+            handler.switch_auth(opts).await?;
         }
     }
     Ok(())
