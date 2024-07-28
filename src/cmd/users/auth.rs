@@ -103,19 +103,21 @@ impl UserCommandHandler {
                     AuthMethod::Local => dco3::users::AuthMethod::new_basic(),
                     AuthMethod::Oidc => dco3::users::AuthMethod::new_open_id_connect(
                         opts.new_oidc_id().unwrap().into(),
-                        login,
+                        login.clone(),
                     ),
                     AuthMethod::Ad => dco3::users::AuthMethod::new_active_directory(
                         opts.new_ad_id().unwrap().into(),
-                        login,
+                        login.clone(),
                     ),
                 };
 
                 let auth_update_req = UserAuthDataUpdateRequest::auth_method(auth_method);
-
-                let user_update_req = UpdateUserRequest::builder()
-                    .with_auth_data(auth_update_req)
-                    .build();
+                let user_update_req = UpdateUserRequest::builder().with_auth_data(auth_update_req);
+                let user_update_req = if new_method == AuthMethod::Local {
+                    user_update_req.with_user_name(login).build()
+                } else {
+                    user_update_req.build()
+                };
 
                 self.client.users.update_user(id, user_update_req)
             })
