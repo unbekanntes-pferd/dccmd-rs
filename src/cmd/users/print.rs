@@ -53,7 +53,7 @@ impl UserCommandHandler {
         Ok(())
     }
 
-    pub fn print_users(&self, users: RangedItems<UserItem>, csv: bool) -> Result<(), DcCmdError> {
+    pub fn print_users(&self, users: &RangedItems<UserItem>, csv: bool) -> Result<(), DcCmdError> {
         let print_mode = if csv {
             PrintFormat::Csv
         } else {
@@ -62,17 +62,24 @@ impl UserCommandHandler {
 
         match print_mode {
             PrintFormat::Csv => {
+                const NOT_AVAILABLE: &str = "N/A";
                 let header = "id,first_name,last_name,user_name,email,expire_at,is_locked,is_encryption_enabled,has_manageable_rooms,last_login_success_at";
                 self.term
                     .write_line(header)
                     .map_err(|_| DcCmdError::IoError)?;
 
-                for user_item in users.items {
+                for user_item in &users.items {
                     let expire_at = if let Some(expire_at) = user_item.expire_at {
                         expire_at.to_string()
                     } else {
                         "N/A".to_string()
                     };
+
+                    let email = user_item.email.as_deref().unwrap_or(NOT_AVAILABLE);
+                    let last_login_success_at = user_item
+                        .last_login_success_at
+                        .as_deref()
+                        .unwrap_or(NOT_AVAILABLE);
 
                     self.term
                         .write_line(&format!(
@@ -81,21 +88,23 @@ impl UserCommandHandler {
                             user_item.first_name,
                             user_item.last_name,
                             user_item.user_name,
-                            user_item.email.unwrap_or_else(|| "N/A".to_string()),
+                            email,
                             expire_at,
                             user_item.is_locked,
                             user_item.is_encryption_enabled.unwrap_or(false),
                             user_item.has_manageable_rooms.unwrap_or(false),
-                            user_item
-                                .last_login_success_at
-                                .unwrap_or_else(|| "N/A".to_string())
+                            last_login_success_at
                         ))
                         .map_err(|_| DcCmdError::IoError)?;
                 }
             }
             PrintFormat::Pretty => {
                 let total = users.range.total;
-                let users: Vec<_> = users.items.into_iter().map(UserInfo::from).collect();
+                let users: Vec<_> = users
+                    .items
+                    .iter()
+                    .map(|user| UserInfo::from(user.clone()))
+                    .collect();
                 let displayed = users.len();
                 let mut user_table = Table::new(users);
                 user_table
