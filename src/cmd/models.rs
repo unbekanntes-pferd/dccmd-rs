@@ -488,6 +488,11 @@ pub enum ConfigCommand {
         #[clap(subcommand)]
         cmd: ConfigCryptoCommand,
     },
+
+    SystemInfo {
+        /// DRACOON url
+        target: String,
+    },
 }
 
 #[derive(Clone, Copy)]

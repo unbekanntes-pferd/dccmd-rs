@@ -110,7 +110,7 @@ fn to_printable_permissions(node: &Node) -> String {
     out_str
 }
 
-fn to_readable_size(size: u64) -> String {
+pub fn to_readable_size(size: u64) -> String {
     let units = ["B", "KB", "MB", "GB", "TB", "PB"];
 
     if size == 0 {
