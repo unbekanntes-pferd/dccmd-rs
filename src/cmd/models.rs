@@ -275,6 +275,12 @@ pub enum DcCmdCommand {
         cmd: ConfigCommand,
     },
 
+    /// Generate reports from DRACOON
+    Reports {
+        #[clap(subcommand)]
+        cmd: ReportsCommand
+    },
+
     /// Print current dccmd-rs version
     Version,
 }
@@ -473,6 +479,34 @@ pub enum GroupsCommand {
         #[clap(subcommand)]
         cmd: GroupsUsersCommand,
     },
+}
+
+#[derive(Parser)]
+pub enum ReportsCommand {
+    Events {
+        /// DRACOON url
+        target: String,
+
+        /// search filter (e.g. group name)
+        #[clap(long)]
+        filter: Option<String>,
+
+        /// skip n groups (default offset: 0)
+        #[clap(short, long)]
+        offset: Option<u32>,
+
+        /// limit n groups (default limit: 500)
+        #[clap(long)]
+        limit: Option<u32>,
+
+        /// fetch all groups (default: 500)
+        #[clap(long)]
+        all: bool,
+
+        /// print user information in CSV format
+        #[clap(long)]
+        csv: bool,
+    }
 }
 
 #[derive(Parser)]

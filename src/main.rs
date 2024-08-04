@@ -3,11 +3,7 @@
 
 use clap::Parser;
 use cmd::{
-    config::{handle_config_cmd, logs::init_logging},
-    groups::handle_groups_cmd,
-    handle_error,
-    models::{DcCmd, DcCmdCommand, ListOptions, PasswordAuth},
-    nodes::{
+    config::{handle_config_cmd, logs::init_logging}, groups::handle_groups_cmd, handle_error, models::{DcCmd, DcCmdCommand, ListOptions, PasswordAuth}, nodes::{
         create_folder, create_room, delete_node,
         download::download,
         list_nodes,
@@ -17,9 +13,7 @@ use cmd::{
         },
         transfer::transfer_node,
         upload::upload,
-    },
-    print_version,
-    users::handle_users_cmd,
+    }, print_version, reports::handle_reports_cmd, users::handle_users_cmd
 };
 use console::Term;
 
@@ -161,6 +155,7 @@ async fn main() {
         DcCmdCommand::Groups { cmd } => handle_groups_cmd(cmd, term).await,
         DcCmdCommand::Version => print_version(&term),
         DcCmdCommand::Config { cmd } => handle_config_cmd(cmd, term).await,
+        DcCmdCommand::Reports { cmd } => handle_reports_cmd(cmd, term).await,
     };
 
     if let Err(e) = res {
