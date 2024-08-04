@@ -506,6 +506,26 @@ pub enum ReportsCommand {
         /// print user information in CSV format
         #[clap(long)]
         csv: bool,
+
+        /// operation id (see DRACOON API documentation)
+        #[clap(long)]
+        operation_type: Option<u64>,
+
+        /// user id for filtering events
+        #[clap(long)]
+        user_id: Option<u64>,
+
+        /// status (0 for success, 2 for failure)
+        #[clap(long)]
+        status: Option<u8>,
+
+        /// start date (format: yyyy-mm-dd)
+        #[clap(long)]
+        start_date: Option<String>,
+
+        /// end date (format: yyyy-mm-dd)
+        #[clap(long)]
+        end_date: Option<String>,
     }
 }
 
@@ -535,6 +555,7 @@ pub enum PrintFormat {
     Csv,
 }
 
+#[derive(Clone, Default)]
 pub struct ListOptions {
     filter: Option<String>,
     offset: Option<u32>,
