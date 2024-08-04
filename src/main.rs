@@ -3,7 +3,11 @@
 
 use clap::Parser;
 use cmd::{
-    config::{handle_config_cmd, logs::init_logging}, groups::handle_groups_cmd, handle_error, models::{DcCmd, DcCmdCommand, ListOptions, PasswordAuth}, nodes::{
+    config::{handle_config_cmd, logs::init_logging},
+    groups::handle_groups_cmd,
+    handle_error,
+    models::{DcCmd, DcCmdCommand, ListOptions, PasswordAuth},
+    nodes::{
         create_folder, create_room, delete_node,
         download::download,
         list_nodes,
@@ -13,7 +17,10 @@ use cmd::{
         },
         transfer::transfer_node,
         upload::upload,
-    }, print_version, reports::handle_reports_cmd, users::handle_users_cmd
+    },
+    print_version,
+    reports::handle_reports_cmd,
+    users::handle_users_cmd,
 };
 use console::Term;
 

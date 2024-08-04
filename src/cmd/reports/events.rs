@@ -13,7 +13,7 @@ impl ReportsCommandHandler {
             let reqs = (500..event_list.range.total)
                 .step_by(500)
                 .map(|offset| {
-                    let params = opts.new_params_with_offset(offset as u64);
+                    let params = opts.new_params_with_offset(offset);
                     self.client.eventlog.get_events(params)
                 })
                 .collect::<Vec<_>>();

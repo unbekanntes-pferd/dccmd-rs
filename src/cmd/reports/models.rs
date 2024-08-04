@@ -26,13 +26,10 @@ impl EventOptions {
             .map(|s| {
                 NaiveDate::parse_from_str(&s, "%Y-%m-%d")
                     .map_err(|e| DcCmdError::InvalidArgument(format!("Invalid start date: {}", e)))
-                    .and_then(|date| {
+                    .map(|date| {
                         let time = NaiveTime::from_hms_opt(0, 0, 0).unwrap(); // Midnight
                         let naive_datetime = date.and_time(time);
-                        Ok(DateTime::<Utc>::from_naive_utc_and_offset(
-                            naive_datetime,
-                            Utc,
-                        ))
+                        DateTime::<Utc>::from_naive_utc_and_offset(naive_datetime, Utc)
                     })
             })
             .transpose()?;
@@ -41,13 +38,10 @@ impl EventOptions {
             .map(|s| {
                 NaiveDate::parse_from_str(&s, "%Y-%m-%d")
                     .map_err(|e| DcCmdError::InvalidArgument(format!("Invalid end date: {}", e)))
-                    .and_then(|date| {
+                    .map(|date| {
                         let time = NaiveTime::from_hms_opt(23, 59, 59).unwrap(); // End of day
                         let naive_datetime = date.and_time(time);
-                        Ok(DateTime::<Utc>::from_naive_utc_and_offset(
-                            naive_datetime,
-                            Utc,
-                        ))
+                        DateTime::<Utc>::from_naive_utc_and_offset(naive_datetime, Utc)
                     })
             })
             .transpose()?;
@@ -78,7 +72,6 @@ impl EventOptions {
 
 impl From<EventOptions> for EventlogParams {
     fn from(value: EventOptions) -> Self {
-
         let params_builder = EventlogParams::builder();
 
         let params_builder = if let Some(start_date) = value.start_date {
@@ -124,8 +117,6 @@ impl From<EventOptions> for EventlogParams {
         };
 
         params_builder.build()
-
-    
     }
 }
 
@@ -170,7 +161,8 @@ mod tests {
 
     #[test]
     fn test_create_params_with_new_offset() {
-        let event_options = EventOptions::new(Default::default(), None, None, None, None, None).unwrap();
+        let event_options =
+            EventOptions::new(Default::default(), None, None, None, None, None).unwrap();
 
         let params = event_options.new_params_with_offset(500);
 

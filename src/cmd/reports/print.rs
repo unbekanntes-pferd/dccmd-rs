@@ -135,9 +135,11 @@ impl ReportsCommandHandler {
             })
             .collect::<Vec<_>>();
 
-
         let mut table = tabled::Table::new(events);
-        table.with(Style::modern()).with(Panel::footer(format!("{} events ({} total)", event_count, total_events)));
+        table.with(Style::modern()).with(Panel::footer(format!(
+            "{} events ({} total)",
+            event_count, total_events
+        )));
 
         self.term
             .write_line(&table.to_string())

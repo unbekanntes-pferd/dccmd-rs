@@ -278,7 +278,7 @@ pub enum DcCmdCommand {
     /// Generate reports from DRACOON
     Reports {
         #[clap(subcommand)]
-        cmd: ReportsCommand
+        cmd: ReportsCommand,
     },
 
     /// Print current dccmd-rs version
@@ -526,7 +526,7 @@ pub enum ReportsCommand {
         /// end date (format: yyyy-mm-dd)
         #[clap(long)]
         end_date: Option<String>,
-    }
+    },
 }
 
 #[derive(Parser)]
