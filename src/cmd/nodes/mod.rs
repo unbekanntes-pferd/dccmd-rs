@@ -100,10 +100,14 @@ async fn get_nodes(
         None
     };
 
-    let offset = u64::from(opts.offset().unwrap_or(0));
-    let limit = u64::from(opts.limit().unwrap_or(500));
+    let offset = opts.offset().unwrap_or(0);
+    let limit = u64::from(opts.limit().unwrap_or(500))
+        .try_into()
+        .map_err(|_| {
+            DcCmdError::InvalidArgument("Limit must be a positive integer.".to_string())
+        })?;
 
-    let params = build_params(opts.filter(), offset, limit)?;
+    let params = build_params(opts.filter(), offset, Some(limit))?;
 
     let mut node_list = dracoon
         .nodes
@@ -118,7 +122,7 @@ async fn get_nodes(
             let mut futures = vec![];
 
             while offset < node_list.range.total {
-                let params = build_params(opts.filter(), offset, limit)?;
+                let params = build_params(opts.filter(), offset, None)?;
 
                 let next_node_list_req = dracoon.nodes.get_nodes(parent_id, managed, Some(params));
                 futures.push(next_node_list_req);
@@ -158,8 +162,14 @@ async fn search_nodes(
 
     let params = build_params(
         opts.filter(),
-        u64::from(opts.offset().unwrap_or(0)),
-        u64::from(opts.limit().unwrap_or(500)),
+        opts.offset().unwrap_or(0),
+        Some(
+            u64::from(opts.limit().unwrap_or(500))
+                .try_into()
+                .map_err(|_| {
+                    DcCmdError::InvalidArgument("Limit must be a positive integer.".to_string())
+                })?,
+        ),
     )?;
 
     let mut node_list = dracoon
@@ -175,7 +185,7 @@ async fn search_nodes(
             let mut futures = vec![];
 
             while offset < node_list.range.total {
-                let params = build_params(opts.filter(), offset, limit)?;
+                let params = build_params(opts.filter(), offset, None)?;
 
                 let next_node_list_req =
                     dracoon

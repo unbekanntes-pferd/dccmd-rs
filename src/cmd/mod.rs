@@ -16,6 +16,7 @@ pub mod config;
 pub mod groups;
 pub mod models;
 pub mod nodes;
+pub mod reports;
 pub mod users;
 pub mod utils;
 

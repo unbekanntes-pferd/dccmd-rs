@@ -88,7 +88,7 @@ impl GroupCommandHandler {
     async fn list_groups(&self, opts: ListOptions) -> Result<(), DcCmdError> {
         let params = build_params(
             opts.filter(),
-            opts.offset().unwrap_or(0).into(),
+            opts.offset().unwrap_or(0),
             opts.limit().unwrap_or(500).into(),
         )?;
 
@@ -102,7 +102,7 @@ impl GroupCommandHandler {
                 .step_by(500)
                 .map(|offset| {
                     let params =
-                        build_params(opts.filter(), offset, 500).expect("failed to build params");
+                        build_params(opts.filter(), offset, None).expect("failed to build params");
 
                     self.client.groups.get_groups(Some(params))
                 })

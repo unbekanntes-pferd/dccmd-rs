@@ -19,6 +19,7 @@ use cmd::{
         upload::upload,
     },
     print_version,
+    reports::handle_reports_cmd,
     users::handle_users_cmd,
 };
 use console::Term;
@@ -161,6 +162,7 @@ async fn main() {
         DcCmdCommand::Groups { cmd } => handle_groups_cmd(cmd, term).await,
         DcCmdCommand::Version => print_version(&term),
         DcCmdCommand::Config { cmd } => handle_config_cmd(cmd, term).await,
+        DcCmdCommand::Reports { cmd } => handle_reports_cmd(cmd, term).await,
     };
 
     if let Err(e) = res {

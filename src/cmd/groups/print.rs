@@ -60,7 +60,9 @@ impl GroupCommandHandler {
                     .with(Style::modern())
                     .with(Modify::new(Segment::all()).with(Width::wrap(16)));
 
-                println!("{user_table}");
+                self.term
+                    .write_line(&format!("{user_table}"))
+                    .map_err(|_| DcCmdError::IoError)?;
 
                 Ok(())
             }
