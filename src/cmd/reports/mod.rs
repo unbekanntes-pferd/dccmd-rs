@@ -60,7 +60,7 @@ pub async fn handle_reports_cmd(cmd: ReportsCommand, term: Term) -> Result<(), D
         | ReportsCommand::OperationTypes { target } => target,
     };
 
-    let client = init_dracoon(&target, None, false).await?;
+    let client = init_dracoon(target, None, false).await?;
     let handler = ReportsCommandHandler::new(term, client);
 
     match cmd {

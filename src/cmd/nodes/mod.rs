@@ -100,10 +100,12 @@ async fn get_nodes(
         None
     };
 
-    let offset = u64::from(opts.offset().unwrap_or(0));
-    let limit = u64::from(opts.limit().unwrap_or(500)).try_into().map_err(|_| {
-        DcCmdError::InvalidArgument("Limit must be a positive integer.".to_string())
-    })?;
+    let offset = opts.offset().unwrap_or(0);
+    let limit = u64::from(opts.limit().unwrap_or(500))
+        .try_into()
+        .map_err(|_| {
+            DcCmdError::InvalidArgument("Limit must be a positive integer.".to_string())
+        })?;
 
     let params = build_params(opts.filter(), offset, Some(limit))?;
 
@@ -160,10 +162,14 @@ async fn search_nodes(
 
     let params = build_params(
         opts.filter(),
-        u64::from(opts.offset().unwrap_or(0)),
-        Some(u64::from(opts.limit().unwrap_or(500)).try_into().map_err(|_| {
-            DcCmdError::InvalidArgument("Limit must be a positive integer.".to_string())
-        })?),
+        opts.offset().unwrap_or(0),
+        Some(
+            u64::from(opts.limit().unwrap_or(500))
+                .try_into()
+                .map_err(|_| {
+                    DcCmdError::InvalidArgument("Limit must be a positive integer.".to_string())
+                })?,
+        ),
     )?;
 
     let mut node_list = dracoon

@@ -211,7 +211,7 @@ impl UserCommandHandler {
     ) -> Result<RangedItems<UserItem>, DcCmdError> {
         let params = build_params(
             opts.filter(),
-            opts.offset().unwrap_or(0).into(),
+            opts.offset().unwrap_or(0),
             opts.limit().unwrap_or(500).into(),
         )?;
 
@@ -228,8 +228,8 @@ impl UserCommandHandler {
             let reqs = (500..=total)
                 .step_by(500)
                 .map(|offset| {
-                    let params =
-                        build_params(opts.filter(), offset, opts.limit()).expect("failed to build params");
+                    let params = build_params(opts.filter(), offset, opts.limit())
+                        .expect("failed to build params");
                     self.client.users.get_users(Some(params), None, None)
                 })
                 .collect::<Vec<_>>();

@@ -797,7 +797,7 @@ mod tests {
     async fn test_list_directories() {
         let root_path = PathBuf::from("./src");
         let folders = list_directories(root_path).await.unwrap();
-        assert_eq!(folders.len(), 6);
+        assert_eq!(folders.len(), 7);
     }
 
     #[tokio::test]

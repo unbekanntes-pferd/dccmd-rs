@@ -1,5 +1,8 @@
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
-use dco3::{eventlog::{EventStatus, EventlogParams, LogOperation}, nodes::NodePermissions};
+use dco3::{
+    eventlog::{EventStatus, EventlogParams, LogOperation},
+    nodes::NodePermissions,
+};
 use tabled::Tabled;
 
 use crate::cmd::models::{DcCmdError, ListOptions};
@@ -106,7 +109,7 @@ impl From<EventOptions> for EventlogParams {
         };
 
         let params_builder = if let Some(offset) = value.list_options.offset() {
-            params_builder.with_offset(offset.into())
+            params_builder.with_offset(offset)
         } else {
             params_builder
         };
@@ -239,4 +242,3 @@ mod tests {
         assert_eq!(params.offset, Some(500));
     }
 }
-

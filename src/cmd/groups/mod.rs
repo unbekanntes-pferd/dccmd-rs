@@ -88,7 +88,7 @@ impl GroupCommandHandler {
     async fn list_groups(&self, opts: ListOptions) -> Result<(), DcCmdError> {
         let params = build_params(
             opts.filter(),
-            opts.offset().unwrap_or(0).into(),
+            opts.offset().unwrap_or(0),
             opts.limit().unwrap_or(500).into(),
         )?;
 
