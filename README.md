@@ -322,6 +322,59 @@ dccmd-rs groups users ls your.dracoon.domain/ --csv --all > groupusers.csv
 dccmd-rs groups users ls your.dracoon.domain/YourGroupName --csv --all
 ```
 
+### Reports
+
+To fetch reports (either table live view or CSV) of events or permissions, use the respective `reports` command:
+
+#### Events (audit log)
+**This command only works for DRACOON Server and is not supported for DRACOON Cloud!**
+For DRACOON Cloud, please use the built-in reports.
+
+```bash
+# lists first 500 events of your domain
+dccmd-rs reports events your.dracoon.domain/ 
+# list all events of your domain (will *not* parallelize and might take a long time to conclude!)
+dccmd-rs reports events your.dracoon.domain/ --all
+# list events as CSV format
+dccmd-rs reports events your.dracoon.domain/ --csv > events.csv # store in CSV
+
+# provide optional start date or end date
+dccmd-rs reports events your.dracoon.domain/ --start-date 2021-01-01
+dccmd-rs reports events your.dracoon.domain/ --end-date 2024-01-01
+
+# filter by event status (failure: 2, success: 0)
+dccmd-rs reports events your.dracoon.domain/ --status 0 # all success operations
+
+# filter by user id (only display events from user 99)
+dccmd-rs reports events your.dracoon.domain/ --user-id 99
+
+# list eventlog operations (needed for filtering by operation id)
+dccmd-rs reports operation-types your.dracoon.domain/
+
+# filter by operation id (type) 
+dccmd-rs reports events your.dracoon.domain/ --operation-type 125
+```
+
+#### Permissions (node permissions)
+**This command only works for DRACOON Server and is not supported for DRACOON Cloud!**
+For DRACOON Cloud, please use the built-in reports.
+
+```bash
+# list all permissions of your domain (will *not* parallelize and might take a long time to conclude!)
+# note: if you call this, in order to reduce load, first, all users are fetched and then all permissions generated per user
+# there is no pagination in this, so you can ommit offset and limit
+dccmd-rs reports permissions your.dracoon.domain/ 
+# list permissions as CSV format
+dccmd-rs reports permissions your.dracoon.domain/ --csv > events.csv # store in CSV
+
+# list permissions for a specific user
+dccmd-rs reports permissions your.dracoon.domain/ --filter userId:eq:99
+
+# list permissions for a specific room
+dccmd-rs reports permissions your.dracoon.domain/ --filter nodeId:eq:99
+# for a full list of available filters, check the API documentation
+```
+
 ### Config
 
 #### Stored authorization

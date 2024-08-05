@@ -1,5 +1,6 @@
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
-use dco3::eventlog::{EventStatus, EventlogParams};
+use dco3::{eventlog::{EventStatus, EventlogParams, LogOperation}, nodes::NodePermissions};
+use tabled::Tabled;
 
 use crate::cmd::models::{DcCmdError, ListOptions};
 
@@ -120,6 +121,75 @@ impl From<EventOptions> for EventlogParams {
     }
 }
 
+#[derive(Tabled)]
+pub struct LogEventInfo {
+    id: i64,
+    time: String,
+    user_id: i64,
+    message: String,
+}
+
+impl LogEventInfo {
+    pub fn new(id: i64, time: String, user_id: i64, message: String) -> Self {
+        Self {
+            id,
+            time,
+            user_id,
+            message,
+        }
+    }
+}
+
+#[derive(Tabled)]
+pub struct UserPermissionInfo {
+    user_id: i64,
+    user_login: String,
+    user_full_name: String,
+    node_id: i64,
+    node_name: String,
+    node_parent_path: String,
+    permissions: String,
+}
+
+impl UserPermissionInfo {
+    pub fn new(
+        user_id: i64,
+        user_login: String,
+        user_full_name: String,
+        node_id: i64,
+        node_name: String,
+        node_parent_path: String,
+        permissions: NodePermissions,
+    ) -> Self {
+        Self {
+            user_id,
+            user_login,
+            user_full_name,
+            node_id,
+            node_name,
+            node_parent_path,
+            permissions: permissions.to_string(),
+        }
+    }
+}
+
+#[derive(Tabled)]
+pub struct EventOperationInfo {
+    id: i64,
+    name: String,
+    deprecated: bool,
+}
+
+impl From<LogOperation> for EventOperationInfo {
+    fn from(op: LogOperation) -> Self {
+        Self {
+            id: op.id,
+            name: op.name,
+            deprecated: op.is_deprecated,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use chrono::Datelike;
@@ -169,3 +239,4 @@ mod tests {
         assert_eq!(params.offset, Some(500));
     }
 }
+

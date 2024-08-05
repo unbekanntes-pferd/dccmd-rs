@@ -200,7 +200,7 @@ pub enum DcCmdCommand {
 
         /// skip n nodes (default offset: 0)
         #[clap(short, long)]
-        offset: Option<u32>,
+        offset: Option<u64>,
 
         /// limit n nodes (default limit: 500)
         #[clap(long)]
@@ -298,7 +298,7 @@ pub enum UsersCommand {
 
         /// skip n users (default offset: 0)
         #[clap(short, long)]
-        offset: Option<u32>,
+        offset: Option<u64>,
 
         /// limit n users (default limit: 500)
         #[clap(long)]
@@ -436,7 +436,7 @@ pub enum GroupsCommand {
 
         /// skip n groups (default offset: 0)
         #[clap(short, long)]
-        offset: Option<u32>,
+        offset: Option<u64>,
 
         /// limit n groups (default limit: 500)
         #[clap(long)]
@@ -493,7 +493,7 @@ pub enum ReportsCommand {
 
         /// skip n groups (default offset: 0)
         #[clap(short, long)]
-        offset: Option<u32>,
+        offset: Option<u64>,
 
         /// limit n groups (default limit: 500)
         #[clap(long)]
@@ -527,6 +527,34 @@ pub enum ReportsCommand {
         #[clap(long)]
         end_date: Option<String>,
     },
+    OperationTypes {
+        /// DRACOON url
+        target: String,
+    },
+    Permissions {
+        /// DRACOON url
+        target: String,
+
+        /// search filter (e.g. group name)
+        #[clap(long)]
+        filter: Option<String>,
+
+        /// skip n groups (default offset: 0)
+        #[clap(short, long)]
+        offset: Option<u64>,
+
+        /// limit n groups (default limit: 500)
+        #[clap(long)]
+        limit: Option<u32>,
+
+        /// fetch all groups (default: 500)
+        #[clap(long)]
+        all: bool,
+
+        /// print user information in CSV format
+        #[clap(long)]
+        csv: bool,
+    },
 }
 
 #[derive(Parser)]
@@ -558,7 +586,7 @@ pub enum PrintFormat {
 #[derive(Clone, Default)]
 pub struct ListOptions {
     filter: Option<String>,
-    offset: Option<u32>,
+    offset: Option<u64>,
     limit: Option<u32>,
     all: bool,
     csv: bool,
@@ -567,7 +595,7 @@ pub struct ListOptions {
 impl ListOptions {
     pub fn new(
         filter: Option<String>,
-        offset: Option<u32>,
+        offset: Option<u64>,
         limit: Option<u32>,
         all: bool,
         csv: bool,
@@ -585,7 +613,7 @@ impl ListOptions {
         &self.filter
     }
 
-    pub fn offset(&self) -> Option<u32> {
+    pub fn offset(&self) -> Option<u64> {
         self.offset
     }
 
@@ -624,7 +652,7 @@ impl ToFilterOperator for &str {
 pub fn build_params(
     filter: &Option<String>,
     offset: u64,
-    limit: u64,
+    limit: Option<u32>,
 ) -> Result<ListAllParams, DcCmdError> {
     if let Some(search) = filter {
         let params = {
@@ -647,18 +675,29 @@ pub fn build_params(
                 .with_value(value)
                 .try_build()?;
 
-            ListAllParams::builder()
+            let params = ListAllParams::builder()
                 .with_filter(filter)
-                .with_offset(offset)
-                .with_limit(limit)
-                .build()
+                .with_offset(offset);
+
+            let params = if let Some(limit) = limit {
+                params.with_limit(limit as u64)
+            } else {
+                params
+            };
+
+            params.build()
         };
 
         Ok(params)
     } else {
-        Ok(ListAllParams::builder()
-            .with_offset(offset)
-            .with_limit(limit)
-            .build())
+        let params = ListAllParams::builder().with_offset(offset);
+
+        let params = if let Some(limit) = limit {
+            params.with_limit(limit as u64)
+        } else {
+            params
+        };
+
+        Ok(params.build())
     }
 }

@@ -229,7 +229,7 @@ impl UserCommandHandler {
                 .step_by(500)
                 .map(|offset| {
                     let params =
-                        build_params(opts.filter(), offset, 500).expect("failed to build params");
+                        build_params(opts.filter(), offset, opts.limit()).expect("failed to build params");
                     self.client.users.get_users(Some(params), None, None)
                 })
                 .collect::<Vec<_>>();
