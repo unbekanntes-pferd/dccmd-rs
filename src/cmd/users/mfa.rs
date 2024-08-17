@@ -18,7 +18,7 @@ impl UserCommandHandler {
         auth_method_id: Option<u64>,
         group_id: Option<u64>,
     ) -> Result<(), DcCmdError> {
-        let auth_method = auth_method.map(|m| AuthMethod::try_from(m)).transpose()?;
+        let auth_method = auth_method.map(AuthMethod::try_from).transpose()?;
 
         // bail if oidc / ad and no auth method id
         if let Some(ref auth_method) = auth_method {
