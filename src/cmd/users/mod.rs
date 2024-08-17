@@ -14,6 +14,7 @@ use tokio::sync::Mutex;
 use tracing::{error, info};
 
 mod auth;
+mod mfa;
 mod models;
 mod print;
 
@@ -337,7 +338,8 @@ pub async fn handle_users_cmd(cmd: UsersCommand, term: Term) -> Result<(), DcCmd
         | UsersCommand::Rm { target, .. }
         | UsersCommand::Import { target, .. }
         | UsersCommand::Info { target, .. }
-        | UsersCommand::SwitchAuth { target, .. } => target,
+        | UsersCommand::SwitchAuth { target, .. }
+        | UsersCommand::EnforceMfa { target, .. } => target,
     };
 
     let handler = match &cmd {
@@ -422,6 +424,17 @@ pub async fn handle_users_cmd(cmd: UsersCommand, term: Term) -> Result<(), DcCmd
                 login,
             )?;
             handler.switch_auth(opts).await?;
+        }
+        UsersCommand::EnforceMfa {
+            target: _,
+            auth_method,
+            filter,
+            auth_method_id,
+            group_id,
+        } => {
+            handler
+                .enforce_mfa(auth_method, filter, auth_method_id, group_id)
+                .await?;
         }
     }
     Ok(())

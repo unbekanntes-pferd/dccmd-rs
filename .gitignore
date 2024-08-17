@@ -1,3 +1,4 @@
 /target
 .env
 dccmd-rs.log
+.DS_Store
