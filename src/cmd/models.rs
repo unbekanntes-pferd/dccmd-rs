@@ -420,7 +420,29 @@ pub enum UsersCommand {
         /// default: email
         #[clap(long)]
         login: Option<String>,
+
     },
+
+    EnforceMfa {
+        /// DRACOON url
+        target: String,
+
+        /// optional auth method
+        #[clap(long)]
+        auth_method: Option<String>,
+
+        /// optional user filter
+        #[clap(long)]
+        filter: Option<String>,
+
+        /// optional auth method id (required for oidc / ad)
+        #[clap(long)]
+        auth_method_id: Option<u64>,
+
+        /// optional group id
+        #[clap(long)]
+        group_id: Option<u64>,
+    }
 }
 
 #[derive(Parser)]
