@@ -21,8 +21,12 @@ For all DRACOON operations `dco3` is used.
 
 ## Installation
 
+### Regular installation
+
 You can download precompiled binaries on the Github releases page: 
 [Releases](https://github.com/unbekanntes-pferd/dccmd-rs/releases)
+
+### Rust toolchain
 
 If you have the Rust toolchain installed, you can install this using cargo like so:
 
@@ -52,6 +56,7 @@ Currently, the following commands are working:
 - `rm` - removes a node by given path in DRACOON
 - `upload` - uploads a file or folder to a parent in DRACOON (encrypted, unencrypted)
 - `users` - user management in DRACOON (see subcommands below)
+- `groups` - group management in DRACOON (see subcommands below)
 
 
 ## Example usage
@@ -277,6 +282,22 @@ dccmd-rs users switch-auth --current-method basic --new-method openid --new-oidc
 
 # switch from openid with id 88 to openid with id 99 while setting the login as firstname.lastname (replaced by user values)
 dccmd-rs users switch-auth --current-method openid --new-method openid --current-oidc-id 88 --new-oidc-id 99 --filter email:cn:somedomain.com your.dracoon.domain/ --login "firstname.lastname"
+```
+
+#### Enforce MFA (multi-factor authentication)
+In order to enforce MFA for a subset of users, you can (e.g. periodically) run the following commands:
+
+```bash
+# enforce only for local users 
+dccmd-rs users enforce-mfa your.dracoon.domain/ --auth-method local
+# enforce only for local users with specific filter (for filter details see API docs)
+dccmd-rs users enforce-mfa your.dracoon.domain/ --auth-method local --filter email:cn:somedomain.com
+# enforce only for a given filter
+dccmd-rs users enforce-mfa your.dracoon.domain/ --filter userName:cn:testuser
+# enforce for a specific group id (list groups via groups ls command for id)
+dccmd-rs users enforce-mfa your.dracoon.domain/ --group-id 99
+# combine all: all local users in group 99 with somedomain.com in email
+dccmd-rs users enforce-mfa your.dracoon.domain/ --auth-method local --group-id 99 --filter email:cn:somedomain.com
 ```
 
 ### Managing groups
