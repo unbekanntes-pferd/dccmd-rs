@@ -152,26 +152,27 @@ impl UserCommandHandler {
             CreateUserRequest::builder(first_name, last_name)
                 .with_auth_data(user_auth_data)
                 .with_email(email)
-                .with_mfa_enforced(mfa_enforced)
-                .build()
         } else if let (None, Some(oidc_id)) = (login, oidc_id) {
             let user_auth_data = UserAuthData::new_oidc(email, oidc_id.into());
             CreateUserRequest::builder(first_name, last_name)
                 .with_auth_data(user_auth_data)
                 .with_email(email)
-                .with_mfa_enforced(mfa_enforced)
-                .build()
         } else {
             let user_auth_data = UserAuthData::builder(dco3::users::AuthMethod::Basic)
                 .with_must_change_password(true)
                 .build();
+
             CreateUserRequest::builder(first_name, last_name)
                 .with_auth_data(user_auth_data)
                 .with_user_name(login.unwrap_or(email))
                 .with_email(email)
                 .with_notify_user(true)
-                .with_mfa_enforced(mfa_enforced)
-                .build()
+        };
+
+        let payload = if mfa_enforced {
+            payload.with_mfa_enforced(true).build()
+        } else {
+            payload.build()
         };
 
         let user = self.client.users.create_user(payload).await?;
