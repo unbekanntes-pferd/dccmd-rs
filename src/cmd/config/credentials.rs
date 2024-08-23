@@ -35,20 +35,21 @@ impl HandleCredentials for Entry {
 
 #[allow(clippy::module_name_repetitions)]
 pub fn get_client_credentials() -> (String, String) {
-    let client_id = include_str!("../../../.env")
-        .split('\n')
-        .next()
-        .expect("env file has more than one line")
-        .split("CLIENT_ID=")
-        .nth(1)
-        .expect("CLIENT_ID MUST be provided");
-    let client_secret = include_str!("../../../.env")
-        .split('\n')
-        .nth(1)
-        .expect("env file has more than one line")
-        .split("CLIENT_SECRET=")
-        .nth(1)
-        .expect("CLIENT_SECRET MUST be provided");
+    let env_content = std::fs::read_to_string("../../../.env").unwrap_or_default();
 
-    (client_id.into(), client_secret.into())
+    let client_id = env_content
+        .lines()
+        .find(|line| line.starts_with("CLIENT_ID="))
+        .and_then(|line| line.split("CLIENT_ID=").nth(1))
+        .unwrap_or("dccmd_rs_unbekanntes-pferd")
+        .to_string();
+
+    let client_secret = env_content
+        .lines()
+        .find(|line| line.starts_with("CLIENT_SECRET="))
+        .and_then(|line| line.split("CLIENT_SECRET=").nth(1))
+        .unwrap_or("LspjGm1S3EGgyC4NhtQcvGHzjzMOAv5b")
+        .to_string();
+
+    (client_id, client_secret)
 }
