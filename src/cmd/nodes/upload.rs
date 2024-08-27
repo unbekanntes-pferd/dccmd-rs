@@ -412,7 +412,10 @@ async fn upload_container(
             let parent_path = folder
                 .parent()
                 .ok_or_else(|| {
-                    error!("Error getting parent path from: {}", folder.to_string_lossy());
+                    error!(
+                        "Error getting parent path from: {}",
+                        folder.to_string_lossy()
+                    );
                     DcCmdError::IoError
                 })?
                 .to_path_buf();
@@ -423,8 +426,7 @@ async fn upload_container(
             let root_path_str = root_path.to_string_lossy().to_string();
             debug!("Root path: {}", root_path_str);
 
-            let parent_path = parent_path
-                .trim_start_matches(&root_path_str);
+            let parent_path = parent_path.trim_start_matches(&root_path_str);
 
             debug!("Parent path: {}", parent_path);
             debug!("{:?}", created_nodes);
@@ -599,18 +601,19 @@ fn create_file_map(
                 Path::new("/").join(file_rel_path)
             };
 
-            let file_rel_path = file_rel_path.to_string_lossy().to_string().replace("\\", "/");
+            let file_rel_path = file_rel_path
+                .to_string_lossy()
+                .to_string()
+                .replace('\\', "/");
 
             // get node id of parent folder
-            let node_id = *created_nodes
-                .get(&file_rel_path)
-                .ok_or_else(|| {
-                    error!("Error getting node id for file path: {}", file_rel_path);
-                    debug!("Processed file: {}", file.to_string_lossy());
-                    debug!("Created nodes: {:?}", created_nodes);
-                    debug!("Root path: {}", root_path.to_string_lossy());
-                    DcCmdError::InvalidPath(file_rel_path)
-                })?;
+            let node_id = *created_nodes.get(&file_rel_path).ok_or_else(|| {
+                error!("Error getting node id for file path: {}", file_rel_path);
+                debug!("Processed file: {}", file.to_string_lossy());
+                debug!("Created nodes: {:?}", created_nodes);
+                debug!("Root path: {}", root_path.to_string_lossy());
+                DcCmdError::InvalidPath(file_rel_path)
+            })?;
 
             // get file size
             let file_meta = std::fs::metadata(&file).map_err(|_| DcCmdError::IoError)?;
@@ -661,12 +664,10 @@ async fn upload_files(
             debug!("Uploading file: {}", source.to_string_lossy());
 
             let upload_task = async move {
-                let file = tokio::fs::File::open(&source)
-                    .await
-                    .map_err(|err| {
-                        error!("Error opening file: {}", err);
-                        DcCmdError::IoError
-                    })?;
+                let file = tokio::fs::File::open(&source).await.map_err(|err| {
+                    error!("Error opening file: {}", err);
+                    DcCmdError::IoError
+                })?;
 
                 let parent_node = client.nodes.get_node(*node_id).await?;
 

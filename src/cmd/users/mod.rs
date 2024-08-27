@@ -2,7 +2,10 @@ use std::sync::{atomic::AtomicU32, Arc};
 
 use console::Term;
 use dco3::{
-    auth::Connected, user::UserAuthData, users::{CreateUserRequest, UserItem, UsersFilter}, Dracoon, Groups, ListAllParams, RangedItems, Users
+    auth::Connected,
+    user::UserAuthData,
+    users::{CreateUserRequest, UserItem, UsersFilter},
+    Dracoon, Groups, ListAllParams, RangedItems, Users,
 };
 use futures_util::{future::join_all, stream, StreamExt};
 use indicatif::{ProgressBar, ProgressStyle};
@@ -81,7 +84,7 @@ impl UserCommandHandler {
                     oidc_id,
                     import.mfa_enabled.unwrap_or(false),
                     true,
-                    None
+                    None,
                 ))
             })
             .collect::<Vec<_>>();
@@ -166,7 +169,8 @@ impl UserCommandHandler {
         let user = self.client.users.create_user(payload).await?;
 
         if let Some(group_id) = opts.first_group_id {
-            let result = self.client
+            let result = self
+                .client
                 .groups
                 .add_group_users(group_id, vec![user.id].into())
                 .await;
@@ -356,7 +360,7 @@ pub async fn handle_users_cmd(cmd: UsersCommand, term: Term) -> Result<(), DcCmd
             login,
             oidc_id,
             mfa_enforced,
-            group_id
+            group_id,
         } => {
             handler
                 .create_user(CreateUserOptions::new(
@@ -367,7 +371,7 @@ pub async fn handle_users_cmd(cmd: UsersCommand, term: Term) -> Result<(), DcCmd
                     oidc_id,
                     mfa_enforced,
                     false,
-                    group_id
+                    group_id,
                 ))
                 .await?;
         }

@@ -424,7 +424,6 @@ pub enum UsersCommand {
         /// default: email
         #[clap(long)]
         login: Option<String>,
-
     },
 
     EnforceMfa {
@@ -446,7 +445,7 @@ pub enum UsersCommand {
         /// optional group id
         #[clap(long)]
         group_id: Option<u64>,
-    }
+    },
 }
 
 #[derive(Parser)]

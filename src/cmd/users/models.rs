@@ -20,7 +20,8 @@ pub struct CreateUserOptions<'o> {
     pub first_group_id: Option<u64>,
 }
 
-impl <'o> CreateUserOptions<'o> {
+impl<'o> CreateUserOptions<'o> {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         first_name: &'o str,
         last_name: &'o str,
