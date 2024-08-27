@@ -341,6 +341,10 @@ pub enum UsersCommand {
         /// OIDC config id
         #[clap(long)]
         mfa_enforced: bool,
+
+        /// group id for first group assignment
+        #[clap(long)]
+        group_id: Option<u64>,
     },
 
     /// delete a user in DRACOON
