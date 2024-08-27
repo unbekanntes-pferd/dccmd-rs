@@ -114,11 +114,15 @@ async fn upload_public_file(source: PathBuf, target: String) -> Result<(), DcCmd
 
     let upload_share = dracoon.public.get_public_upload_share(access_key).await?;
 
-    let file = tokio::fs::File::open(&source)
-        .await
-        .or(Err(DcCmdError::IoError))?;
+    let file = tokio::fs::File::open(&source).await.map_err(|err| {
+        error!("Error opening file: {}", err);
+        DcCmdError::IoError
+    })?;
 
-    let file_meta = file.metadata().await.or(Err(DcCmdError::IoError))?;
+    let file_meta = file.metadata().await.map_err(|err| {
+        error!("Error getting file metadata for {:?}: {}", file, err);
+        DcCmdError::IoError
+    })?;
 
     if !file_meta.is_file() {
         return Err(DcCmdError::InvalidPath(
@@ -172,11 +176,15 @@ async fn upload_file(
 ) -> Result<(), DcCmdError> {
     info!("Attempting upload of file: {}.", source.to_string_lossy());
     info!("Target node: {}.", target_node.name);
-    let file = tokio::fs::File::open(&source)
-        .await
-        .or(Err(DcCmdError::IoError))?;
+    let file = tokio::fs::File::open(&source).await.map_err(|err| {
+        error!("Error opening file: {}", err);
+        DcCmdError::IoError
+    })?;
 
-    let file_meta = file.metadata().await.or(Err(DcCmdError::IoError))?;
+    let file_meta = file.metadata().await.map_err(|err| {
+        error!("Error getting file metadata for {:?}: {}", file, err);
+        DcCmdError::IoError
+    })?;
 
     if !file_meta.is_file() {
         return Err(DcCmdError::InvalidPath(
@@ -401,7 +409,16 @@ async fn upload_container(
             // we need to find the parent id from the created_nodes map
             // we assume that the parent folder has already been created and is present in the map
             debug!("Processing sub folder: {}", folder.to_string_lossy());
-            let parent_path = folder.parent().ok_or(DcCmdError::IoError)?.to_path_buf();
+            let parent_path = folder
+                .parent()
+                .ok_or_else(|| {
+                    error!(
+                        "Error getting parent path from: {}",
+                        folder.to_string_lossy()
+                    );
+                    DcCmdError::IoError
+                })?
+                .to_path_buf();
             let parent_path = parent_path.to_string_lossy();
             debug!("Parent path: {}", parent_path);
             let parent_path = parent_path.trim_start_matches('.');
@@ -409,9 +426,7 @@ async fn upload_container(
             let root_path_str = root_path.to_string_lossy().to_string();
             debug!("Root path: {}", root_path_str);
 
-            let parent_path = parent_path
-                .strip_prefix(&root_path_str)
-                .ok_or(DcCmdError::IoError)?;
+            let parent_path = parent_path.trim_start_matches(&root_path_str);
 
             debug!("Parent path: {}", parent_path);
             debug!("{:?}", created_nodes);
@@ -422,7 +437,10 @@ async fn upload_container(
                 let node = dracoon.nodes.get_node_from_path(&path).await?;
                 node.ok_or(DcCmdError::Unknown)?.id
             } else {
-                *created_nodes.get(parent_path).ok_or(DcCmdError::IoError)?
+                *created_nodes.get(parent_path).ok_or_else(|| {
+                    error!("Parent folder not found: {}", parent_path);
+                    DcCmdError::InvalidPath(parent_path.to_string())
+                })?
             }
         };
 
@@ -583,12 +601,19 @@ fn create_file_map(
                 Path::new("/").join(file_rel_path)
             };
 
-            let file_rel_path = file_rel_path.to_string_lossy().to_string();
+            let file_rel_path = file_rel_path
+                .to_string_lossy()
+                .to_string()
+                .replace('\\', "/");
 
             // get node id of parent folder
-            let node_id = *created_nodes
-                .get(&file_rel_path)
-                .ok_or(DcCmdError::IoError)?;
+            let node_id = *created_nodes.get(&file_rel_path).ok_or_else(|| {
+                error!("Error getting node id for file path: {}", file_rel_path);
+                debug!("Processed file: {}", file.to_string_lossy());
+                debug!("Created nodes: {:?}", created_nodes);
+                debug!("Root path: {}", root_path.to_string_lossy());
+                DcCmdError::InvalidPath(file_rel_path)
+            })?;
 
             // get file size
             let file_meta = std::fs::metadata(&file).map_err(|_| DcCmdError::IoError)?;
@@ -636,10 +661,13 @@ async fn upload_files(
             let progress_bar_inc = progress_bar.clone();
             let client = dracoon.clone();
 
+            debug!("Uploading file: {}", source.to_string_lossy());
+
             let upload_task = async move {
-                let file = tokio::fs::File::open(&source)
-                    .await
-                    .or(Err(DcCmdError::IoError))?;
+                let file = tokio::fs::File::open(&source).await.map_err(|err| {
+                    error!("Error opening file: {}", err);
+                    DcCmdError::IoError
+                })?;
 
                 let parent_node = client.nodes.get_node(*node_id).await?;
 

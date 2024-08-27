@@ -9,6 +9,42 @@ use crate::cmd::models::DcCmdError;
 
 use super::auth::AuthMethod;
 
+pub struct CreateUserOptions<'o> {
+    pub first_name: &'o str,
+    pub last_name: &'o str,
+    pub email: &'o str,
+    pub login: Option<&'o str>,
+    pub oidc_id: Option<u32>,
+    pub mfa_enforced: bool,
+    pub is_import: bool,
+    pub first_group_id: Option<u64>,
+}
+
+impl<'o> CreateUserOptions<'o> {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        first_name: &'o str,
+        last_name: &'o str,
+        email: &'o str,
+        login: Option<&'o str>,
+        oidc_id: Option<u32>,
+        mfa_enforced: bool,
+        is_import: bool,
+        first_group_id: Option<u64>,
+    ) -> CreateUserOptions<'o> {
+        CreateUserOptions {
+            first_name,
+            last_name,
+            email,
+            login,
+            oidc_id,
+            mfa_enforced,
+            is_import,
+            first_group_id,
+        }
+    }
+}
+
 #[derive(Tabled)]
 pub struct UserInfo {
     pub id: u64,

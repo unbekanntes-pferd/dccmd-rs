@@ -5,11 +5,11 @@ use dco3::{
     auth::Connected,
     user::UserAuthData,
     users::{CreateUserRequest, UserItem, UsersFilter},
-    Dracoon, ListAllParams, RangedItems, Users,
+    Dracoon, Groups, ListAllParams, RangedItems, Users,
 };
 use futures_util::{future::join_all, stream, StreamExt};
 use indicatif::{ProgressBar, ProgressStyle};
-use models::UsersSwitchAuthOptions;
+use models::{CreateUserOptions, UsersSwitchAuthOptions};
 use tokio::sync::Mutex;
 use tracing::{error, info};
 
@@ -76,7 +76,7 @@ impl UserCommandHandler {
         let reqs = imports
             .iter()
             .map(|import| {
-                self.create_user(
+                self.create_user(CreateUserOptions::new(
                     &import.first_name,
                     &import.last_name,
                     &import.email,
@@ -84,7 +84,8 @@ impl UserCommandHandler {
                     oidc_id,
                     import.mfa_enabled.unwrap_or(false),
                     true,
-                )
+                    None,
+                ))
             })
             .collect::<Vec<_>>();
 
@@ -136,52 +137,55 @@ impl UserCommandHandler {
         Ok(())
     }
 
-    #[allow(clippy::too_many_arguments)]
-    async fn create_user(
-        &self,
-        first_name: &str,
-        last_name: &str,
-        email: &str,
-        login: Option<&str>,
-        oidc_id: Option<u32>,
-        mfa_enforced: bool,
-        is_import: bool,
-    ) -> Result<(), DcCmdError> {
-        let payload = if let (Some(login), Some(oidc_id)) = (login, oidc_id) {
+    async fn create_user<'o>(&self, opts: CreateUserOptions<'o>) -> Result<(), DcCmdError> {
+        let payload = if let (Some(login), Some(oidc_id)) = (opts.login, opts.oidc_id) {
             let user_auth_data = UserAuthData::new_oidc(login, oidc_id.into());
-            CreateUserRequest::builder(first_name, last_name)
+            CreateUserRequest::builder(opts.first_name, opts.last_name)
                 .with_auth_data(user_auth_data)
-                .with_email(email)
-                .with_mfa_enforced(mfa_enforced)
-                .build()
-        } else if let (None, Some(oidc_id)) = (login, oidc_id) {
-            let user_auth_data = UserAuthData::new_oidc(email, oidc_id.into());
-            CreateUserRequest::builder(first_name, last_name)
+                .with_email(opts.email)
+        } else if let (None, Some(oidc_id)) = (opts.login, opts.oidc_id) {
+            let user_auth_data = UserAuthData::new_oidc(opts.email, oidc_id.into());
+            CreateUserRequest::builder(opts.first_name, opts.last_name)
                 .with_auth_data(user_auth_data)
-                .with_email(email)
-                .with_mfa_enforced(mfa_enforced)
-                .build()
+                .with_email(opts.email)
         } else {
             let user_auth_data = UserAuthData::builder(dco3::users::AuthMethod::Basic)
                 .with_must_change_password(true)
                 .build();
-            CreateUserRequest::builder(first_name, last_name)
+
+            CreateUserRequest::builder(opts.first_name, opts.last_name)
                 .with_auth_data(user_auth_data)
-                .with_user_name(login.unwrap_or(email))
-                .with_email(email)
+                .with_user_name(opts.login.unwrap_or(opts.email))
+                .with_email(opts.email)
                 .with_notify_user(true)
-                .with_mfa_enforced(mfa_enforced)
-                .build()
+        };
+
+        let payload = if opts.mfa_enforced {
+            payload.with_mfa_enforced(true).build()
+        } else {
+            payload.build()
         };
 
         let user = self.client.users.create_user(payload).await?;
+
+        if let Some(group_id) = opts.first_group_id {
+            let result = self
+                .client
+                .groups
+                .add_group_users(group_id, vec![user.id].into())
+                .await;
+
+            if let Err(e) = result {
+                error!("Failed to add user to group: {}", e);
+            }
+        }
 
         info!(
             "User {} created (id: {} | auth: {})",
             user.user_name, user.id, user.auth_data.method
         );
 
-        if !is_import {
+        if !opts.is_import {
             self.term
                 .write_line(
                     format_success_message(format!("User {} created", user.user_name).as_str())
@@ -356,9 +360,10 @@ pub async fn handle_users_cmd(cmd: UsersCommand, term: Term) -> Result<(), DcCmd
             login,
             oidc_id,
             mfa_enforced,
+            group_id,
         } => {
             handler
-                .create_user(
+                .create_user(CreateUserOptions::new(
                     &first_name,
                     &last_name,
                     &email,
@@ -366,7 +371,8 @@ pub async fn handle_users_cmd(cmd: UsersCommand, term: Term) -> Result<(), DcCmd
                     oidc_id,
                     mfa_enforced,
                     false,
-                )
+                    group_id,
+                ))
                 .await?;
         }
         UsersCommand::Ls {

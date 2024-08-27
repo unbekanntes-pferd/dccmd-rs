@@ -1,6 +1,6 @@
 [package]
 name = "dccmd-rs"
-version = "0.10.0"
+version = "0.11.0"
 edition = "2021"
 description = "A command line client for DRACOON"
 authors = ["Octavio Simone"]
@@ -22,7 +22,7 @@ clap = { version = "4", features = ["derive"] }
 indicatif = "0.17"
 console = "0.15"
 dialoguer = "0.11"
-tabled = "0.15"
+tabled = "0.16.0"
 
 # async runtime and utils
 tokio = { version = "1", features = ["full"] }
@@ -36,7 +36,6 @@ tracing-subscriber = {version = "0.3", features = ["env-filter"]}
 # utils
 chrono = "0.4"
 thiserror = "1"
-dotenv = "0.15"
 serde = {version = "1", features = ["derive"]}
 csv = "1"
 
