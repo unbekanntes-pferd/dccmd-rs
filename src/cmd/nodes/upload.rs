@@ -545,7 +545,10 @@ async fn update_folder_map(
                     .get_node_from_path(&path)
                     .await?
                     .ok_or_else(|| {
-                        error!("Error finding path {path} - creating root folder failed: {}", e);
+                        error!(
+                            "Error finding path {path} - creating root folder failed: {}",
+                            e
+                        );
                         e
                     })?
             }
@@ -588,21 +591,27 @@ async fn update_folder_map(
 }
 
 #[allow(dead_code)]
-fn build_remote_path(local_path: &Path, remote_base: &str, target_folder: &str, parent_folder: &str) -> String {
-    //TODO: this is broken and works up to 1 level deep 
+fn build_remote_path(
+    local_path: &Path,
+    remote_base: &str,
+    target_folder: &str,
+    parent_folder: &str,
+) -> String {
+    //TODO: this is broken and works up to 1 level deep
     let components: Vec<_> = local_path.components().collect();
-    
+
     // Find the index where parent_folder and target_folder appear consecutively
-    let (parent_index, _) = components.windows(2)
+    let (parent_index, _) = components
+        .windows(2)
         .enumerate()
         .find(|(_, window)| {
-            window.get(0).and_then(|c| c.as_os_str().to_str()) == Some(parent_folder) &&
-            window.get(1).and_then(|c| c.as_os_str().to_str()) == Some(target_folder)
+            window.first().and_then(|c| c.as_os_str().to_str()) == Some(parent_folder)
+                && window.get(1).and_then(|c| c.as_os_str().to_str()) == Some(target_folder)
         })
         .expect("Parent folder followed by target folder not found in path");
 
     let mut remote_path = PathBuf::from(remote_base);
-    
+
     // Add components from parent_folder to the end
     for component in &components[parent_index..] {
         remote_path.push(component.as_os_str());
