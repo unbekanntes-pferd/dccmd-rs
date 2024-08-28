@@ -15,7 +15,9 @@ pub fn init_logging(err_term: &Term, debug: bool, log_file: Option<String>) {
         .compact();
 
     let env_filter = if debug {
-        EnvFilter::from_default_env().add_directive(LevelFilter::DEBUG.into())
+        EnvFilter::from_default_env()
+            .add_directive(LevelFilter::DEBUG.into())
+            .add_directive("hyper_utils=warn".parse().expect("invalid crate setup"))
     } else {
         EnvFilter::from_default_env().add_directive(LevelFilter::INFO.into())
     };

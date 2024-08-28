@@ -309,12 +309,13 @@ async fn upload_container(
                     .get_node_from_path(&path)
                     .await?
                     .ok_or_else(|| {
-                        error!("Error creating root folder: {}", e);
+                        error!("Failed to get path. Error creating root folder: {:?}", e);
                         e
                     })?
             }
             Err(e) => {
-                error!("Error creating root folder: {}", e);
+                error!("Not a conflict - error creating root folder: {:?}", e);
+                debug!("Is conflict: {}", e.is_conflict());
                 return Err(e.into());
             }
         };
@@ -426,7 +427,9 @@ async fn upload_container(
             let root_path_str = root_path.to_string_lossy().to_string();
             debug!("Root path: {}", root_path_str);
 
-            let parent_path = parent_path.trim_start_matches(&root_path_str);
+            let parent_path = parent_path
+                .trim_start_matches(&root_path_str)
+                .replace('\\', "/");
 
             debug!("Parent path: {}", parent_path);
             debug!("{:?}", created_nodes);
@@ -437,7 +440,7 @@ async fn upload_container(
                 let node = dracoon.nodes.get_node_from_path(&path).await?;
                 node.ok_or(DcCmdError::Unknown)?.id
             } else {
-                *created_nodes.get(parent_path).ok_or_else(|| {
+                *created_nodes.get(&parent_path).ok_or_else(|| {
                     error!("Parent folder not found: {}", parent_path);
                     DcCmdError::InvalidPath(parent_path.to_string())
                 })?
@@ -496,6 +499,7 @@ async fn update_folder_map(
         let folder = match folder {
             Ok(folder) => folder,
             Err(e) if e.is_conflict() => {
+                // TODO: this is broken - conflict case is not handled
                 let DracoonClientError::Http(error_details) = &e else {
                     unreachable!("Error is http - checked and is conflict");
                 };
@@ -503,14 +507,17 @@ async fn update_folder_map(
                 let mut found_start = false;
                 let mut result_path = PathBuf::new();
 
-                let name = error_details.debug_info().ok_or(DcCmdError::IoError)?;
-                let name = name
+                debug!("Error details: {:?}", error_details);
+
+                let name = error_details
+                    .debug_info()
+                    .ok_or(DcCmdError::DracoonError(error_details.clone()))?
                     .split('\'')
                     .nth(1)
                     .map(std::string::ToString::to_string)
-                    .ok_or(DcCmdError::IoError)?;
+                    .ok_or(DcCmdError::DracoonError(error_details.clone()))?;
 
-                debug!("Name: {}", name);
+                debug!("Name of current folder: {}", name);
 
                 for component in folder_path.components() {
                     if let Some(segment) = component.as_os_str().to_str() {
@@ -531,19 +538,23 @@ async fn update_folder_map(
                 }
 
                 let path = result_path.to_str().ok_or(DcCmdError::IoError)?;
-                let path = format!("{target_parent}{path}");
+                let path = format!("{target_parent}{path}/");
                 debug!("Path: {}", path);
                 dracoon
                     .nodes
                     .get_node_from_path(&path)
                     .await?
                     .ok_or_else(|| {
-                        error!("Error creating root folder: {}", e);
+                        error!(
+                            "Error finding path {path} - creating root folder failed: {}",
+                            e
+                        );
                         e
                     })?
             }
             Err(e) => {
-                error!("Error creating root folder: {}", e);
+                error!("Not a conflict - error creating root folder: {:?}", e);
+                debug!("Is conflict: {}", e.is_conflict());
                 return Err(e.into());
             }
         };
@@ -577,6 +588,36 @@ async fn update_folder_map(
     }
 
     Ok(())
+}
+
+#[allow(dead_code)]
+fn build_remote_path(
+    local_path: &Path,
+    remote_base: &str,
+    target_folder: &str,
+    parent_folder: &str,
+) -> String {
+    //TODO: this is broken and works up to 1 level deep
+    let components: Vec<_> = local_path.components().collect();
+
+    // Find the index where parent_folder and target_folder appear consecutively
+    let (parent_index, _) = components
+        .windows(2)
+        .enumerate()
+        .find(|(_, window)| {
+            window.first().and_then(|c| c.as_os_str().to_str()) == Some(parent_folder)
+                && window.get(1).and_then(|c| c.as_os_str().to_str()) == Some(target_folder)
+        })
+        .expect("Parent folder followed by target folder not found in path");
+
+    let mut remote_path = PathBuf::from(remote_base);
+
+    // Add components from parent_folder to the end
+    for component in &components[parent_index..] {
+        remote_path.push(component.as_os_str());
+    }
+
+    remote_path.to_string_lossy().into_owned()
 }
 
 fn create_file_map(
@@ -833,5 +874,15 @@ mod tests {
         let root_path = PathBuf::from("./src/cmd/config");
         let files = list_files(root_path).await.unwrap();
         assert_eq!(files.len(), 4);
+    }
+
+    #[test]
+    fn test_build_remote_path_basic() {
+        let local_path = Path::new("/some/path/on/some/level/here/is/target");
+        let remote_base = "/remote/target";
+        let target_folder = "target";
+        let expected = "/remote/target/is/target";
+        let result = build_remote_path(local_path, remote_base, target_folder, "is");
+        assert_eq!(result, expected);
     }
 }
