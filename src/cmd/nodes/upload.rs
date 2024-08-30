@@ -60,7 +60,7 @@ pub async fn upload(
         .or(Err(DcCmdError::InvalidPath(target.clone())))?;
     let node_path = format!("{parent_path}{node_name}/");
 
-    let parent_node = dracoon.nodes.get_node_from_path(&node_path).await?;
+    let parent_node = dracoon.nodes().get_node_from_path(&node_path).await?;
 
     let Some(parent_node) = parent_node else {
         error!("Target path not found: {}", target);
@@ -112,7 +112,7 @@ async fn upload_public_file(source: PathBuf, target: String) -> Result<(), DcCmd
         .last()
         .ok_or(DcCmdError::InvalidPath(target.clone()))?;
 
-    let upload_share = dracoon.public.get_public_upload_share(access_key).await?;
+    let upload_share = dracoon.public().get_public_upload_share(access_key).await?;
 
     let file = tokio::fs::File::open(&source).await.map_err(|err| {
         error!("Error opening file: {}", err);
@@ -151,7 +151,7 @@ async fn upload_public_file(source: PathBuf, target: String) -> Result<(), DcCmd
     progress_bar_mv.set_length(file_size);
 
     dracoon
-        .public
+        .public()
         .upload(
             access_key,
             upload_share,
@@ -299,13 +299,13 @@ async fn upload_container(
     } else {
         let root_folder = CreateFolderRequest::builder(&name, target.id).build();
 
-        let root_folder = match dracoon.nodes.create_folder(root_folder).await {
+        let root_folder = match dracoon.nodes().create_folder(root_folder).await {
             Ok(folder) => folder,
             Err(e) if e.is_conflict() => {
                 let path = format!("{target_parent}{name}");
                 debug!("Path: {}", path);
                 dracoon
-                    .nodes
+                    .nodes()
                     .get_node_from_path(&path)
                     .await?
                     .ok_or_else(|| {
@@ -437,7 +437,7 @@ async fn upload_container(
             if opts.overwrite {
                 //TODO: broken - does not work, entry not present
                 let path = format!("{target_parent}{parent_path}");
-                let node = dracoon.nodes.get_node_from_path(&path).await?;
+                let node = dracoon.nodes().get_node_from_path(&path).await?;
                 node.ok_or(DcCmdError::Unknown)?.id
             } else {
                 *created_nodes.get(&parent_path).ok_or_else(|| {
@@ -448,7 +448,7 @@ async fn upload_container(
         };
 
         let folder_req = CreateFolderRequest::builder(name, parent_id).build();
-        folder_reqs.push(dracoon.nodes.create_folder(folder_req));
+        folder_reqs.push(dracoon.nodes().create_folder(folder_req));
     }
 
     let created_folders = join_all(folder_reqs).await;
@@ -541,7 +541,7 @@ async fn update_folder_map(
                 let path = format!("{target_parent}{path}/");
                 debug!("Path: {}", path);
                 dracoon
-                    .nodes
+                    .nodes()
                     .get_node_from_path(&path)
                     .await?
                     .ok_or_else(|| {
@@ -710,7 +710,7 @@ async fn upload_files(
                     DcCmdError::IoError
                 })?;
 
-                let parent_node = client.nodes.get_node(*node_id).await?;
+                let parent_node = client.nodes().get_node(*node_id).await?;
 
                 let file_meta = file.metadata().await.or(Err(DcCmdError::IoError))?;
                 let file_meta = get_file_meta(&file_meta, source)?;

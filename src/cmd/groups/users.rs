@@ -37,14 +37,14 @@ impl GroupCommandHandler {
         let groups = if let Some(group_name) = group_name.filter(|name| !name.is_empty()) {
             vec![self.get_group_by_name(group_name).await?]
         } else {
-            let mut groups = self.client.groups.get_groups(None).await?;
+            let mut groups = self.client.groups().get_groups(None).await?;
 
             for offset in (500..groups.range.total).step_by(500) {
                 let params = ListAllParams::builder()
                     .with_offset(offset)
                     .with_limit(500)
                     .build();
-                let mut new_groups = self.client.groups.get_groups(Some(params)).await?;
+                let mut new_groups = self.client.groups().get_groups(Some(params)).await?;
 
                 groups.items.append(&mut new_groups.items);
             }
@@ -60,7 +60,7 @@ impl GroupCommandHandler {
             )?;
             let mut users = self
                 .client
-                .groups
+                .groups()
                 .get_group_users(group.id, Some(params))
                 .await?;
 
@@ -70,7 +70,7 @@ impl GroupCommandHandler {
                         build_params(&opts.filter, offset, opts.limit.unwrap_or(500).into())?;
                     let mut new_users = self
                         .client
-                        .groups
+                        .groups()
                         .get_group_users(group.id, Some(params))
                         .await?;
 
@@ -89,7 +89,7 @@ impl GroupCommandHandler {
     async fn get_group_by_name(&self, group_name: &str) -> Result<Group, DcCmdError> {
         let filter = GroupsFilter::name_contains(group_name);
         let params = ListAllParams::builder().with_filter(filter).build();
-        let group_results = self.client.groups.get_groups(Some(params)).await?;
+        let group_results = self.client.groups().get_groups(Some(params)).await?;
 
         let Some(group) = group_results
             .items

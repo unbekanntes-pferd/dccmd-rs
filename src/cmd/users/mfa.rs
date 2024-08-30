@@ -41,7 +41,7 @@ impl UserCommandHandler {
             let params = build_params(&filter, 0, None)?;
             let mut users = self
                 .client
-                .groups
+                .groups()
                 .get_group_users(group_id, Some(params))
                 .await?;
             if users.range.total > 500 {
@@ -49,7 +49,7 @@ impl UserCommandHandler {
                     let params = build_params(&filter, offset, None)?;
                     let mut new_users = self
                         .client
-                        .groups
+                        .groups()
                         .get_group_users(group_id, Some(params))
                         .await?;
                     users.items.append(&mut new_users.items);
@@ -72,7 +72,7 @@ impl UserCommandHandler {
         // filter out users if auth method is provided
         let user_ids = if auth_method.is_some() {
             stream::iter(user_ids)
-                .map(|id| self.client.users.get_user(id, None))
+                .map(|id| self.client.users().get_user(id, None))
                 .buffer_unordered(5)
                 .collect::<Vec<_>>()
                 .await
@@ -103,7 +103,7 @@ impl UserCommandHandler {
         let update_results = stream::iter(user_ids)
             .map(|id| {
                 let update_user_req = UpdateUserRequest::builder().with_mfa_enforced(true).build();
-                self.client.users.update_user(id, update_user_req)
+                self.client.users().update_user(id, update_user_req)
             })
             .buffer_unordered(5)
             .collect::<Vec<_>>()

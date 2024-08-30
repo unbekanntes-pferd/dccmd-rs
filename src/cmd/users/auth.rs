@@ -69,7 +69,7 @@ impl UserCommandHandler {
             .collect();
 
         let current_user_infos = stream::iter(user_ids)
-            .map(|id| self.client.users.get_user(id, None))
+            .map(|id| self.client.users().get_user(id, None))
             .buffer_unordered(5)
             .collect::<Vec<_>>()
             .await
@@ -119,7 +119,7 @@ impl UserCommandHandler {
                     user_update_req.build()
                 };
 
-                self.client.users.update_user(id, user_update_req)
+                self.client.users().update_user(id, user_update_req)
             })
             .buffer_unordered(5)
             .collect::<Vec<_>>()

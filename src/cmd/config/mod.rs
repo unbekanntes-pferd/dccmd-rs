@@ -84,13 +84,13 @@ impl ConfigCommandHandler {
     pub async fn get_system_info(&self, target: &str) -> Result<(), DcCmdError> {
         let dracoon = self.get_dracoon_client(target).await?;
 
-        let oidc_info = dracoon.system.auth.get_openid_idp_configurations().await?;
+        let oidc_info = dracoon.system().auth.get_openid_idp_configurations().await?;
         let ad_info = dracoon
-            .system
+            .system()
             .auth
             .get_active_directory_configurations()
             .await?;
-        let customer_info = dracoon.user.get_customer_info().await?;
+        let customer_info = dracoon.user().get_customer_info().await?;
 
         self.term
             .write_line(&format!("► System info for: {target}"))

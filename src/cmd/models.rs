@@ -2,10 +2,8 @@ use clap::Parser;
 use thiserror::Error;
 
 use dco3::{
-    auth::{
-        errors::DracoonClientError,
-        models::{DracoonAuthErrorResponse, DracoonErrorResponse},
-    },
+    auth::models::{DracoonAuthErrorResponse, DracoonErrorResponse},
+    errors::DracoonClientError,
     nodes::models::S3ErrorResponse,
     FilterOperator, FilterQueryBuilder, ListAllParams,
 };

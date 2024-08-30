@@ -138,7 +138,7 @@ async fn get_node_from_path(path: &str, dracoon: &Dracoon<Connected>) -> Result<
     let parent_node_path = format!("{parent_path}{node_name}/");
     debug!("Parent node path: {}", parent_node_path);
 
-    let parent_node = dracoon.nodes.get_node_from_path(&parent_node_path).await?;
+    let parent_node = dracoon.nodes().get_node_from_path(&parent_node_path).await?;
 
     let Some(parent_node) = parent_node else {
         error!("Target path not found: {}", path);

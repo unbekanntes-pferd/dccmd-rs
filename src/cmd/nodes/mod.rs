@@ -89,7 +89,7 @@ async fn get_nodes(
     opts: &ListOptions,
 ) -> Result<NodeList, DcCmdError> {
     let parent_id = if let Some(node_path) = node_path {
-        let node = dracoon.nodes.get_node_from_path(node_path).await?;
+        let node = dracoon.nodes().get_node_from_path(node_path).await?;
 
         let Some(node) = node else {
             return Err(DcCmdError::InvalidPath(node_path.to_string()));
@@ -110,7 +110,7 @@ async fn get_nodes(
     let params = build_params(opts.filter(), offset, Some(limit))?;
 
     let mut node_list = dracoon
-        .nodes
+        .nodes()
         .get_nodes(parent_id, managed, Some(params))
         .await?;
 
@@ -124,7 +124,7 @@ async fn get_nodes(
             while offset < node_list.range.total {
                 let params = build_params(opts.filter(), offset, None)?;
 
-                let next_node_list_req = dracoon.nodes.get_nodes(parent_id, managed, Some(params));
+                let next_node_list_req = dracoon.nodes().get_nodes(parent_id, managed, Some(params));
                 futures.push(next_node_list_req);
                 offset += limit;
             }
@@ -149,7 +149,7 @@ async fn search_nodes(
     opts: &ListOptions,
 ) -> Result<NodeList, DcCmdError> {
     let parent_id = if let Some(node_path) = node_path {
-        let node = dracoon.nodes.get_node_from_path(node_path).await?;
+        let node = dracoon.nodes().get_node_from_path(node_path).await?;
 
         let Some(node) = node else {
             return Err(DcCmdError::InvalidPath(node_path.to_string()));
@@ -173,7 +173,7 @@ async fn search_nodes(
     )?;
 
     let mut node_list = dracoon
-        .nodes
+        .nodes()
         .search_nodes(search_string, parent_id, Some(0), Some(params))
         .await?;
 
@@ -189,7 +189,7 @@ async fn search_nodes(
 
                 let next_node_list_req =
                     dracoon
-                        .nodes
+                        .nodes()
                         .search_nodes(search_string, parent_id, Some(0), Some(params));
                 futures.push(next_node_list_req);
                 offset += limit;
@@ -236,7 +236,7 @@ pub async fn delete_node(
 
     let node_path = build_node_path((parent_path.clone(), node_name.clone(), depth));
     let node = dracoon
-        .nodes
+        .nodes()
         .get_node_from_path(&node_path)
         .await?
         .ok_or(DcCmdError::InvalidPath(source.clone()))?;
@@ -252,7 +252,7 @@ pub async fn delete_node(
 
     // define async block to delete node
     let delete_node = async {
-        dracoon.nodes.delete_node(node.id).await?;
+        dracoon.nodes().delete_node(node.id).await?;
         let msg = format!("Node {node_name} deleted.");
         info!("{}", msg);
         let msg = format_success_message(&msg);
@@ -313,7 +313,7 @@ async fn delete_node_content(
         .expect("Error reading user input.");
 
     if confirmed {
-        dracoon.nodes.delete_nodes(node_ids.into()).await?;
+        dracoon.nodes().delete_nodes(node_ids.into()).await?;
     }
 
     Ok(())
@@ -333,7 +333,7 @@ pub async fn create_folder(
     debug!("base_url: {}", dracoon.get_base_url().as_ref());
 
     let parent_node = dracoon
-        .nodes
+        .nodes()
         .get_node_from_path(&parent_path)
         .await?
         .ok_or(DcCmdError::InvalidPath(source.clone()))?;
@@ -352,7 +352,7 @@ pub async fn create_folder(
 
     let req = req.build();
 
-    let _folder = dracoon.nodes.create_folder(req).await?;
+    let _folder = dracoon.nodes().create_folder(req).await?;
 
     let msg = format!("Folder {node_name} created.");
     info!("{}", msg);
@@ -372,7 +372,7 @@ pub async fn create_room(
     let (parent_path, node_name, _) = parse_path(&source, dracoon.get_base_url().as_ref())?;
 
     let parent_node = dracoon
-        .nodes
+        .nodes()
         .get_node_from_path(&parent_path)
         .await?
         .ok_or(DcCmdError::InvalidPath(source.clone()))?;
@@ -436,7 +436,7 @@ pub async fn create_room(
             .build(),
     };
 
-    let _room = dracoon.nodes.create_room(req).await?;
+    let _room = dracoon.nodes().create_room(req).await?;
 
     let msg = format!("Room {node_name} created.");
     info!("{}", msg);

@@ -19,7 +19,7 @@ pub async fn share_node(
         CreateDownloadShareRequest::builder(node.id).build()
     };
 
-    let share = client.shares.create_download_share(share_request).await?;
+    let share = client.shares().create_download_share(share_request).await?;
 
     let share_link = format!("{}{}{}", client.get_base_url(), SHARE_URL, share.access_key);
 
