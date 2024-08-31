@@ -324,7 +324,7 @@ async fn upload_container(
     };
 
     let (files, folders) =
-        tokio::join!(list_files(source.clone()), list_directories(source.clone()));
+        tokio::join!(list_files(&source), list_directories(&source));
 
     let files = files?;
     let folders = folders?;
@@ -786,7 +786,7 @@ async fn upload_files(
 }
 
 #[async_recursion]
-async fn list_directories(root_path: PathBuf) -> Result<Vec<PathBuf>, DcCmdError> {
+async fn list_directories(root_path: &Path) -> Result<Vec<PathBuf>, DcCmdError> {
     let mut folder_paths: Vec<PathBuf> = Vec::new();
 
     let mut folders = tokio::fs::read_dir(root_path)
@@ -797,7 +797,7 @@ async fn list_directories(root_path: PathBuf) -> Result<Vec<PathBuf>, DcCmdError
         let path = entry.path();
         if path.is_dir() {
             folder_paths.push(path.clone());
-            let next_folders = list_directories(path).await?;
+            let next_folders = list_directories(&path).await?;
             folder_paths.extend(next_folders);
         }
     }
@@ -806,7 +806,7 @@ async fn list_directories(root_path: PathBuf) -> Result<Vec<PathBuf>, DcCmdError
 }
 
 #[async_recursion]
-async fn list_files(root_path: PathBuf) -> Result<Vec<PathBuf>, DcCmdError> {
+async fn list_files(root_path: &Path) -> Result<Vec<PathBuf>, DcCmdError> {
     let mut file_paths: Vec<PathBuf> = Vec::new();
 
     let mut files = tokio::fs::read_dir(root_path)
@@ -818,7 +818,7 @@ async fn list_files(root_path: PathBuf) -> Result<Vec<PathBuf>, DcCmdError> {
         if path.is_file() {
             file_paths.push(path.clone());
         } else if path.is_dir() {
-            let next_files = list_files(path).await?;
+            let next_files = list_files(&path).await?;
             file_paths.extend(next_files);
         }
     }
@@ -865,14 +865,14 @@ mod tests {
     #[tokio::test]
     async fn test_list_directories() {
         let root_path = PathBuf::from("./src");
-        let folders = list_directories(root_path).await.unwrap();
+        let folders = list_directories(&root_path).await.unwrap();
         assert_eq!(folders.len(), 7);
     }
 
     #[tokio::test]
     async fn test_list_files() {
         let root_path = PathBuf::from("./src/cmd/config");
-        let files = list_files(root_path).await.unwrap();
+        let files = list_files(&root_path).await.unwrap();
         assert_eq!(files.len(), 4);
     }
 
