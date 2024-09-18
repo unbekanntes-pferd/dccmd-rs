@@ -88,7 +88,7 @@ pub async fn transfer_node(
     let download_task = tokio::spawn(async move {
         let mut buf_writer = BufWriter::new(writer);
         let res = source_dracoon
-            .download(&source_node, &mut buf_writer, Some(Box::new(callback)))
+            .download(&source_node, &mut buf_writer, Some(Box::new(callback)), None)
             .await
             .map_err(DcCmdError::from);
 

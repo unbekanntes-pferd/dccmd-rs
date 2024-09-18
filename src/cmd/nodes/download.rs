@@ -217,6 +217,7 @@ async fn download_file(
                 progress_bar_mv.set_message(node_name_clone.clone());
                 progress_bar_mv.inc(progress);
             })),
+            None
         )
         .await?;
 
@@ -290,6 +291,7 @@ async fn download_files(
                         Some(Box::new(move |progress, _| {
                             progress_bar_mv.inc(progress);
                         })),
+                        None,
                     )
                     .await
                     .map_err(|e| {
