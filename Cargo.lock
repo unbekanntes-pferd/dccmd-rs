@@ -595,7 +595,7 @@ dependencies = [
 
 [[package]]
 name = "dccmd-rs"
-version = "0.12.0-SNAPSHOT"
+version = "0.12.0"
 dependencies = [
  "async-recursion",
  "chrono",
@@ -659,8 +659,6 @@ dependencies = [
 [[package]]
 name = "dco3_derive"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c187bdd32d9663b1ffe0ef5e1132bbf1f252f8e4d8679c0ef987aaa16f7ebd6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9c187bdd32d9663b1ffe0ef5e1132bbf1f252f8e4d8679c0ef987aaa16f7ebd6"
 dependencies = [
