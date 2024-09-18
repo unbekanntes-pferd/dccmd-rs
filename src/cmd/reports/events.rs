@@ -7,14 +7,14 @@ impl ReportsCommandHandler {
     pub async fn get_events(&self, opts: EventOptions) -> Result<LogEventList, DcCmdError> {
         let params = opts.clone().into();
 
-        let mut event_list = self.client.eventlog.get_events(params).await?;
+        let mut event_list = self.client.eventlog().get_events(params).await?;
 
         if opts.list_options.all() {
             let reqs = (500..event_list.range.total)
                 .step_by(500)
                 .map(|offset| {
                     let params = opts.new_params_with_offset(offset);
-                    self.client.eventlog.get_events(params)
+                    self.client.eventlog().get_events(params)
                 })
                 .collect::<Vec<_>>();
 

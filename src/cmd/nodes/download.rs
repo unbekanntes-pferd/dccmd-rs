@@ -49,9 +49,9 @@ pub async fn download(
     let node = if is_search_query(&node_name) {
         debug!("Searching for query {}", node_name);
         debug!("Parent path {}", parent_path);
-        dracoon.nodes.get_node_from_path(&parent_path).await?
+        dracoon.nodes().get_node_from_path(&parent_path).await?
     } else {
-        dracoon.nodes.get_node_from_path(&node_path).await?
+        dracoon.nodes().get_node_from_path(&node_path).await?
     };
 
     let Some(node) = node else {
@@ -111,7 +111,10 @@ async fn download_public_file(
 
     let dracoon = init_public_dracoon(&source).await?;
 
-    let public_download_share = dracoon.public.get_public_download_share(access_key).await?;
+    let public_download_share = dracoon
+        .public()
+        .get_public_download_share(access_key)
+        .await?;
     let file_name = public_download_share.file_name.clone();
 
     let original_target = target.to_string();
@@ -146,7 +149,7 @@ async fn download_public_file(
     let progress_bar_mv = progress_bar.clone();
 
     dracoon
-        .public
+        .public()
         .download(
             access_key,
             public_download_share.clone(),
@@ -217,6 +220,7 @@ async fn download_file(
                 progress_bar_mv.set_message(node_name_clone.clone());
                 progress_bar_mv.inc(progress);
             })),
+            None,
         )
         .await?;
 
@@ -290,6 +294,7 @@ async fn download_files(
                         Some(Box::new(move |progress, _| {
                             progress_bar_mv.inc(progress);
                         })),
+                        None,
                     )
                     .await
                     .map_err(|e| {
@@ -410,7 +415,7 @@ async fn get_files(
         .build();
 
     let mut files = dracoon
-        .nodes
+        .nodes()
         .search_nodes("*", Some(parent_node.id), Some(-1), Some(params))
         .await?;
 
@@ -429,7 +434,7 @@ async fn get_files(
                     .build();
 
                 let files = dracoon_client
-                    .nodes
+                    .nodes()
                     .search_nodes("*", Some(parent_node.id), Some(-1), Some(params))
                     .await?;
 
@@ -468,7 +473,7 @@ async fn filter_files_in_sub_rooms(
 
     // ignore files in sub rooms
     let sub_rooms = dracoon
-        .nodes
+        .nodes()
         .search_nodes("*", Some(parent_node.id), None, Some(params))
         .await?;
 
@@ -502,7 +507,7 @@ async fn get_folders(
         .build();
 
     let mut folders = dracoon
-        .nodes
+        .nodes()
         .search_nodes("*", Some(parent_node.id), Some(-1), Some(params))
         .await?;
 
@@ -521,7 +526,7 @@ async fn get_folders(
                     .build();
 
                 let folders = dracoon_client
-                    .nodes
+                    .nodes()
                     .search_nodes("*", Some(parent_node.id), Some(-1), Some(params))
                     .await?;
 

@@ -15,7 +15,7 @@ impl ReportsCommandHandler {
         if let Some(filter) = opts.filter() {
             let params = build_params(&Some(filter.to_string()), offset, None)?;
 
-            return Ok(self.client.eventlog.get_node_permissions(params).await?);
+            return Ok(self.client.eventlog().get_node_permissions(params).await?);
         }
 
         let user_ids = self.get_all_user_ids().await?;
@@ -27,7 +27,7 @@ impl ReportsCommandHandler {
 
             let params = build_params(&Some(user_filter), offset, None)?;
 
-            let next_perms = self.client.eventlog.get_node_permissions(params).await?;
+            let next_perms = self.client.eventlog().get_node_permissions(params).await?;
 
             perms.extend(next_perms);
         }
@@ -36,13 +36,13 @@ impl ReportsCommandHandler {
     }
 
     async fn get_all_user_ids(&self) -> Result<Vec<u64>, DcCmdError> {
-        let mut users = self.client.users.get_users(None, None, None).await?;
+        let mut users = self.client.users().get_users(None, None, None).await?;
 
         let user_reqs = (500..users.range.total)
             .step_by(500)
             .map(|offset| {
                 let params = ListAllParams::builder().with_offset(offset).build();
-                self.client.users.get_users(Some(params), None, None)
+                self.client.users().get_users(Some(params), None, None)
             })
             .collect::<Vec<_>>();
 

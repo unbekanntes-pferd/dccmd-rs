@@ -37,7 +37,7 @@ impl GroupCommandHandler {
 
     async fn create_group(&self, name: String) -> Result<(), DcCmdError> {
         let req = CreateGroupRequest::new(name, None);
-        let group = self.client.groups.create_group(req).await?;
+        let group = self.client.groups().create_group(req).await?;
 
         let msg = format!("Group {} ({}) created", group.name, group.id);
 
@@ -59,7 +59,7 @@ impl GroupCommandHandler {
             }
         };
 
-        self.client.groups.delete_group(group_id).await?;
+        self.client.groups().delete_group(group_id).await?;
 
         let msg = format!("Group {group_id} deleted");
 
@@ -74,7 +74,7 @@ impl GroupCommandHandler {
         let params = ListAllParams::builder()
             .with_filter(GroupsFilter::name_contains(&name))
             .build();
-        let groups = self.client.groups.get_groups(Some(params)).await?;
+        let groups = self.client.groups().get_groups(Some(params)).await?;
 
         let Some(group) = groups.items.iter().find(|g| g.name == name) else {
             error!("No group found with name: {name}");
@@ -92,7 +92,7 @@ impl GroupCommandHandler {
             opts.limit().unwrap_or(500).into(),
         )?;
 
-        let groups = self.client.groups.get_groups(Some(params)).await?;
+        let groups = self.client.groups().get_groups(Some(params)).await?;
 
         if opts.all() {
             let total = groups.range.total;
@@ -104,7 +104,7 @@ impl GroupCommandHandler {
                     let params =
                         build_params(opts.filter(), offset, None).expect("failed to build params");
 
-                    self.client.groups.get_groups(Some(params))
+                    self.client.groups().get_groups(Some(params))
                 })
                 .collect::<Vec<_>>();
 

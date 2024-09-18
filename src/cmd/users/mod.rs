@@ -166,12 +166,12 @@ impl UserCommandHandler {
             payload.build()
         };
 
-        let user = self.client.users.create_user(payload).await?;
+        let user = self.client.users().create_user(payload).await?;
 
         if let Some(group_id) = opts.first_group_id {
             let result = self
                 .client
-                .groups
+                .groups()
                 .add_group_users(group_id, vec![user.id].into())
                 .await;
 
@@ -222,7 +222,7 @@ impl UserCommandHandler {
 
         let results = self
             .client
-            .users
+            .users()
             .get_users(Some(params), None, None)
             .await?;
 
@@ -235,7 +235,7 @@ impl UserCommandHandler {
                 .map(|offset| {
                     let params = build_params(opts.filter(), offset, opts.limit())
                         .expect("failed to build params");
-                    self.client.users.get_users(Some(params), None, None)
+                    self.client.users().get_users(Some(params), None, None)
                 })
                 .collect::<Vec<_>>();
 
@@ -275,10 +275,10 @@ impl UserCommandHandler {
     ) -> Result<(), DcCmdError> {
         let confirm_msg = if let Some(user_name) = user_name {
             let user = self.find_user_by_username(&user_name).await?;
-            self.client.users.delete_user(user.id).await?;
+            self.client.users().delete_user(user.id).await?;
             format!("User {user_name} deleted",)
         } else if let Some(user_id) = user_id {
-            self.client.users.delete_user(user_id).await?;
+            self.client.users().delete_user(user_id).await?;
             format!("User {user_id} (id) deleted",)
         } else {
             error!("User name or user id must be provided");
@@ -302,7 +302,7 @@ impl UserCommandHandler {
         let user: UserInfo = if let Some(user_name) = user_name {
             self.find_user_by_username(&user_name).await?.into()
         } else if let Some(user_id) = user_id {
-            self.client.users.get_user(user_id, None).await?.into()
+            self.client.users().get_user(user_id, None).await?.into()
         } else {
             error!("User name or user id must be provided");
             return Err(DcCmdError::InvalidArgument(
@@ -321,7 +321,7 @@ impl UserCommandHandler {
 
         let results = self
             .client
-            .users
+            .users()
             .get_users(Some(params), None, None)
             .await?;
 

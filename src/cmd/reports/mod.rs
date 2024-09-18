@@ -29,7 +29,7 @@ impl ReportsCommandHandler {
     pub async fn check_dracoon_api_version(&self) -> Result<(), DcCmdError> {
         if let Some(major_version) = self
             .client
-            .public
+            .public()
             .get_software_version()
             .await?
             .rest_api_version
@@ -38,7 +38,7 @@ impl ReportsCommandHandler {
         {
             if let Ok(num) = major_version.parse::<u8>() {
                 if num > 4 {
-                    error!("Permissions report is only available for API version 4.x (DRACOON Server) - used version: {}", self.client.public.get_software_version().await?.rest_api_version);
+                    error!("Permissions report is only available for API version 4.x (DRACOON Server) - used version: {}", self.client.public().get_software_version().await?.rest_api_version);
                     return Err(DcCmdError::InvalidArgument(
                         "Permissions report is only available for API version 4.x (DRACOON Server)"
                             .to_string(),
@@ -100,7 +100,7 @@ pub async fn handle_reports_cmd(cmd: ReportsCommand, term: Term) -> Result<(), D
             Ok(())
         }
         ReportsCommand::OperationTypes { target: _ } => {
-            let event_types = handler.client.eventlog.get_event_operations().await?;
+            let event_types = handler.client.eventlog().get_event_operations().await?;
 
             handler.print_event_types(event_types)?;
 
