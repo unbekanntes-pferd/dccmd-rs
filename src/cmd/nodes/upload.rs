@@ -323,8 +323,7 @@ async fn upload_container(
         root_folder.id
     };
 
-    let (files, folders) =
-        tokio::join!(list_files(&source), list_directories(&source));
+    let (files, folders) = tokio::join!(list_files(&source), list_directories(&source));
 
     let files = files?;
     let folders = folders?;

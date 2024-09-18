@@ -84,7 +84,11 @@ impl ConfigCommandHandler {
     pub async fn get_system_info(&self, target: &str) -> Result<(), DcCmdError> {
         let dracoon = self.get_dracoon_client(target).await?;
 
-        let oidc_info = dracoon.system().auth.get_openid_idp_configurations().await?;
+        let oidc_info = dracoon
+            .system()
+            .auth
+            .get_openid_idp_configurations()
+            .await?;
         let ad_info = dracoon
             .system()
             .auth

@@ -111,7 +111,10 @@ async fn download_public_file(
 
     let dracoon = init_public_dracoon(&source).await?;
 
-    let public_download_share = dracoon.public().get_public_download_share(access_key).await?;
+    let public_download_share = dracoon
+        .public()
+        .get_public_download_share(access_key)
+        .await?;
     let file_name = public_download_share.file_name.clone();
 
     let original_target = target.to_string();
@@ -217,7 +220,7 @@ async fn download_file(
                 progress_bar_mv.set_message(node_name_clone.clone());
                 progress_bar_mv.inc(progress);
             })),
-            None
+            None,
         )
         .await?;
 

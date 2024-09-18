@@ -88,7 +88,12 @@ pub async fn transfer_node(
     let download_task = tokio::spawn(async move {
         let mut buf_writer = BufWriter::new(writer);
         let res = source_dracoon
-            .download(&source_node, &mut buf_writer, Some(Box::new(callback)), None)
+            .download(
+                &source_node,
+                &mut buf_writer,
+                Some(Box::new(callback)),
+                None,
+            )
             .await
             .map_err(DcCmdError::from);
 
@@ -138,7 +143,10 @@ async fn get_node_from_path(path: &str, dracoon: &Dracoon<Connected>) -> Result<
     let parent_node_path = format!("{parent_path}{node_name}/");
     debug!("Parent node path: {}", parent_node_path);
 
-    let parent_node = dracoon.nodes().get_node_from_path(&parent_node_path).await?;
+    let parent_node = dracoon
+        .nodes()
+        .get_node_from_path(&parent_node_path)
+        .await?;
 
     let Some(parent_node) = parent_node else {
         error!("Target path not found: {}", path);

@@ -124,7 +124,8 @@ async fn get_nodes(
             while offset < node_list.range.total {
                 let params = build_params(opts.filter(), offset, None)?;
 
-                let next_node_list_req = dracoon.nodes().get_nodes(parent_id, managed, Some(params));
+                let next_node_list_req =
+                    dracoon.nodes().get_nodes(parent_id, managed, Some(params));
                 futures.push(next_node_list_req);
                 offset += limit;
             }
