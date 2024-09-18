@@ -129,7 +129,6 @@ impl UserCommandHandler {
                 if let Err(err) = &r {
                     error!("Failed to update user: {}", err);
                 }
-                r
             })
             .filter_map(|r| r.ok())
             .collect::<Vec<_>>();

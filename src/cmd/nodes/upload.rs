@@ -748,9 +748,8 @@ async fn upload_files(
                         None,
                     )
                     .await
-                    .inspect_err(|e| {
+                    .inspect_err(|_e| {
                         error!("Error uploading file: {}", file_name);
-                        e
                     })?;
 
                 _ = &rm_files.fetch_sub(1, Ordering::Relaxed);
