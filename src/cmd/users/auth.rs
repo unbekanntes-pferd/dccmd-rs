@@ -125,7 +125,7 @@ impl UserCommandHandler {
             .collect::<Vec<_>>()
             .await
             .into_iter()
-            .map(|r| {
+            .inspect(|r| {
                 if let Err(err) = &r {
                     error!("Failed to update user: {}", err);
                 }

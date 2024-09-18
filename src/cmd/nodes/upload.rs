@@ -748,7 +748,7 @@ async fn upload_files(
                         None,
                     )
                     .await
-                    .map_err(|e| {
+                    .inspect_err(|e| {
                         error!("Error uploading file: {}", file_name);
                         e
                     })?;
