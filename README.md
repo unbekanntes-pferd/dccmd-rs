@@ -6,6 +6,7 @@ The project serves as a demo client implementation using `dco3` - an API wrapper
 
 ### Built with
 This project makes use of several awesome crates and uses async Rust throughout the project.
+
 Crates used:
 - [reqwest](https://crates.io/crates/reqwest)
 - [clap](https://crates.io/crates/clap)
@@ -50,13 +51,15 @@ Currently, the following commands are working:
 
 - `config` - config management of DRACOON Commander (see subcommands below)
 - `download` - downloads a file or folder / room from DRACOON to a desired location on disk (encrypted, unencrypted)
+- `upload` - uploads a file or folder to a parent in DRACOON (encrypted, unencrypted)
 - `ls` - lists all nodes for a given path in DRACOON
 - `mkdir` - creates a folder in given path in DRACOON
 - `mkroom` - creates a room (inherits permissions) in given path in DRACOON
 - `rm` - removes a node by given path in DRACOON
-- `upload` - uploads a file or folder to a parent in DRACOON (encrypted, unencrypted)
+- `cp` - copies node(s) by given path (or search) in DRACOON
 - `users` - user management in DRACOON (see subcommands below)
 - `groups` - group management in DRACOON (see subcommands below)
+- `reports` - DRACOON Server specific reports 
 
 
 ## Example usage
@@ -214,6 +217,22 @@ dccmd-rs mkroom your.dracoon.domain/some/path/newroom -a foo1 --inherit-permissi
 # you can also set the default classification (example sets to confidential)
 dccmd-rs mkroom your.dracoon.domain/some/path/newroom --classification 3
 ```
+
+### Copying nodes
+
+To copy nodes, use the `cp` command:
+
+```bash
+dccmd-rs cp your.dracoon.domain/some/path /other/path/new/target
+
+# you can pass a search to copy e.g. only csv files
+dccmd-rs cp "your.dracoon.domain/some/path/*.csv" /other/path/new/target
+
+# note: if you need to copy to another instance, use *transfer* instead of *cp* 
+# in that case, the full path is required
+```
+
+
 
 ### Managing users
 
