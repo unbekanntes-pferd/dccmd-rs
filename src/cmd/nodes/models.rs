@@ -2,6 +2,16 @@
 
 use crate::cmd::models::{ListOptions, PasswordAuth};
 
+pub struct CmdCopyOptions {
+    pub auth: Option<PasswordAuth>,
+}
+
+impl CmdCopyOptions {
+    pub fn new(auth: Option<PasswordAuth>) -> Self {
+        Self { auth }
+    }
+}
+
 pub struct CmdMkRoomOptions {
     pub inherit_permissions: bool,
     pub classification: Option<u8>,

@@ -6,7 +6,7 @@ use futures_util::{
     future::{join_all, try_join_all},
     stream, StreamExt,
 };
-use models::CmdListNodesOptions;
+use models::{CmdCopyOptions, CmdListNodesOptions};
 use tokio::sync::Mutex;
 use tracing::{debug, error, info};
 
@@ -440,6 +440,66 @@ pub async fn create_room(
     let _room = dracoon.nodes().create_room(req).await?;
 
     let msg = format!("Room {node_name} created.");
+    info!("{}", msg);
+    let msg = format_success_message(&msg);
+    term.write_line(&msg)
+        .expect("Error writing message to terminal.");
+
+    Ok(())
+}
+
+pub async fn copy_nodes(
+    term: Term,
+    source: String,
+    target: String,
+    opts: CmdCopyOptions,
+) -> Result<(), DcCmdError> {
+    let client = init_dracoon(&source, opts.auth, false).await?;
+
+    let (source_parent_path, source_node_name, source_depth) =
+        parse_path(&source, client.get_base_url().as_ref())?;
+
+    let source_path = build_node_path((
+        source_parent_path.clone(),
+        source_node_name.clone(),
+        source_depth,
+    ));
+
+    let nodes = if source.contains('*') {
+        let nodes = search_nodes(
+            &client,
+            &source_node_name,
+            Some(&source_parent_path),
+            &ListOptions::new(None, None, None, true, false),
+        )
+        .await?;
+
+        nodes.items
+    } else {
+        let source_node = client
+            .nodes()
+            .get_node_from_path(&source_path)
+            .await?
+            .ok_or(DcCmdError::InvalidPath(source.clone()))?;
+
+        vec![source_node]
+    };
+
+    let source_node_ids = nodes.iter().map(|node| node.id).collect::<Vec<u64>>();
+    let count_nodes = source_node_ids.len();
+
+    let target_node = client
+        .nodes()
+        .get_node_from_path(&target)
+        .await?
+        .ok_or(DcCmdError::InvalidPath(target.clone()))?;
+
+    client
+        .nodes()
+        .copy_nodes(source_node_ids.into(), target_node.id)
+        .await?;
+
+    let msg = format!("Copied {count_nodes} node(s) from {source_parent_path} to {target}.");
     info!("{}", msg);
     let msg = format_success_message(&msg);
     term.write_line(&msg)

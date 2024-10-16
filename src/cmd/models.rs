@@ -213,6 +213,14 @@ pub enum DcCmdCommand {
         all: bool,
     },
 
+    Cp {
+        /// Source file path in DRACOON
+        source: String,
+
+        /// Target file path in DRACOON
+        target: String,
+    },
+
     /// Create a folder in DRACOON
     Mkdir {
         /// Source file path in DRACOON

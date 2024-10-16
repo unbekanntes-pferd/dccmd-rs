@@ -8,12 +8,12 @@ use cmd::{
     handle_error,
     models::{DcCmd, DcCmdCommand, ListOptions, PasswordAuth},
     nodes::{
-        create_folder, create_room, delete_node,
+        copy_nodes, create_folder, create_room, delete_node,
         download::download,
         list_nodes,
         models::{
-            CmdDownloadOptions, CmdListNodesOptions, CmdMkRoomOptions, CmdTransferOptions,
-            CmdUploadOptions,
+            CmdCopyOptions, CmdDownloadOptions, CmdListNodesOptions, CmdMkRoomOptions,
+            CmdTransferOptions, CmdUploadOptions,
         },
         transfer::transfer_node,
         upload::upload,
@@ -131,6 +131,10 @@ async fn main() {
                 CmdListNodesOptions::new(list_opts, human_readable, long, managed, password_auth);
 
             list_nodes(term, source, opts).await
+        }
+        DcCmdCommand::Cp { source, target } => {
+            let opts = CmdCopyOptions::new(password_auth);
+            copy_nodes(term, source, target, opts).await
         }
         DcCmdCommand::Mkdir {
             source,
