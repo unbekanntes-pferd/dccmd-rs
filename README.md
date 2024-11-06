@@ -264,6 +264,15 @@ dccmd-rs users create your.dracoon.domain/ -f foo -l bar -e foo@bar.com # local 
 dccmd-rs users create your.dracoon.domain/ -f foo -l bar -e foo@bar.com --oidc-id 2 # OIDC user
 ```
 
+To invite guest users, you can use the `users invite some.dracoon.domain.com/some/room/or/folder` command:
+
+```bash
+# params: --first-name, --last-name, --email
+dccmd-rs users invite your.dracoon.domain/some/room -f foo -l bar -e foo@bar.com
+# if you provide a folder, you invite into the corresponding parent room
+dccmd-rs users invite your.dracoon.domain/some/room/folder -f foo -l bar -e foo@bar.com
+```
+
 To delete users, you can use the `users some.dracoon.domain.com rm` command:
 
 ```bash
