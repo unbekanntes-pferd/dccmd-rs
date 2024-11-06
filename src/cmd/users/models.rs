@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use dco3::users::{UserData, UserItem};
 use serde::Deserialize;
 use tabled::Tabled;
+use tracing::debug;
 
 use crate::cmd::models::DcCmdError;
 
@@ -163,6 +164,9 @@ impl UsersSwitchAuthOptions {
         let is_same_oidc_id = curr_oidc_id == new_oidc_id;
         let is_same_ad_id = curr_ad_id == new_ad_id;
 
+        debug!("Switching auth method from {} to {}", curr_method, new_method);
+        debug!("Login transformation: {:?}", login);
+
         // local to local not allowed
         if curr_method == AuthMethod::Local.to_string() && is_same_method {
             return Err(DcCmdError::InvalidArgument(
@@ -210,14 +214,20 @@ impl UsersSwitchAuthOptions {
     fn build_login_fn(login: String) -> Box<dyn Fn(&UserData) -> String> {
         let first_name_str = "firstname";
         let last_name_str = "lastname";
+        let user_name_str = "username";
 
         Box::new(move |user| match login.as_str().to_lowercase().trim() {
             l if l.contains(first_name_str) || l.contains(last_name_str) => {
+                debug!("Transforming login using: {}", l);
                 let first_name = user.first_name.to_lowercase();
                 let last_name = user.last_name.to_lowercase();
                 l.replace(first_name_str, &first_name)
                     .replace(last_name_str, &last_name)
-            }
+            },
+            l if l.contains(user_name_str) => {
+                let user_name = &user.user_name;
+                l.replace(user_name_str, user_name)
+            },
             "email" => user
                 .email
                 .as_deref()

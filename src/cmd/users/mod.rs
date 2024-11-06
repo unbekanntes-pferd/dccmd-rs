@@ -3,9 +3,10 @@ use std::sync::{atomic::AtomicU32, Arc};
 use console::Term;
 use dco3::{
     auth::Connected,
+    nodes::{NodeType, RoomGuestUserInvitation},
     user::UserAuthData,
     users::{CreateUserRequest, UserItem, UsersFilter},
-    Dracoon, Groups, ListAllParams, RangedItems, Users,
+    Dracoon, Groups, ListAllParams, Nodes, RangedItems, Rooms, Users,
 };
 use futures_util::{future::join_all, stream, StreamExt};
 use indicatif::{ProgressBar, ProgressStyle};
@@ -21,7 +22,7 @@ mod print;
 use super::{
     init_dracoon,
     models::{build_params, DcCmdError, ListOptions, UsersCommand},
-    utils::strings::format_success_message,
+    utils::strings::{build_node_path, format_success_message, parse_path},
 };
 
 pub use models::display_option;
@@ -209,6 +210,30 @@ impl UserCommandHandler {
         Ok(())
     }
 
+    async fn invite_user(
+        &self,
+        room_id: u64,
+        first_name: &str,
+        last_name: &str,
+        email: &str,
+    ) -> Result<(), DcCmdError> {
+        let payload = RoomGuestUserInvitation::new(email, first_name, last_name);
+
+        self.client
+            .nodes()
+            .invite_guest_users(room_id, vec![payload].into())
+            .await?;
+
+        self.term
+            .write_line(
+                format_success_message(format!("User {first_name} {last_name} invited").as_str())
+                    .as_str(),
+            )
+            .map_err(|_| DcCmdError::IoError)?;
+
+        Ok(())
+    }
+
     async fn list_users(
         &self,
         opts: ListOptions,
@@ -343,7 +368,8 @@ pub async fn handle_users_cmd(cmd: UsersCommand, term: Term) -> Result<(), DcCmd
         | UsersCommand::Import { target, .. }
         | UsersCommand::Info { target, .. }
         | UsersCommand::SwitchAuth { target, .. }
-        | UsersCommand::EnforceMfa { target, .. } => target,
+        | UsersCommand::EnforceMfa { target, .. }
+        | UsersCommand::Invite { target, .. } => target,
     };
 
     let handler = match &cmd {
@@ -373,6 +399,36 @@ pub async fn handle_users_cmd(cmd: UsersCommand, term: Term) -> Result<(), DcCmd
                     false,
                     group_id,
                 ))
+                .await?;
+        }
+        UsersCommand::Invite {
+            target: _,
+            ref first_name,
+            ref last_name,
+            ref email,
+        } => {
+            let (parent_path, node_name, depth) =
+                parse_path(&target, handler.client.get_base_url().as_ref())?;
+            let node_path = build_node_path((parent_path.clone(), node_name.clone(), depth));
+
+            let node = handler
+                .client
+                .nodes()
+                .get_node_from_path(&node_path)
+                .await?
+                .ok_or(DcCmdError::InvalidPath(target.to_string()))?;
+
+            let room_id = match node.node_type {
+                NodeType::Room => node.id,
+                NodeType::Folder => node.auth_parent_id.expect("Folder must have parent room"),
+                _ => {
+                    error!("Target must be a room or a folder: {target}");
+                    return Err(DcCmdError::InvalidPath(target.to_string()));
+                }
+            };
+
+            handler
+                .invite_user(room_id, first_name, last_name, email)
                 .await?;
         }
         UsersCommand::Ls {

@@ -133,7 +133,7 @@ impl ConfigCommandHandler {
 
             for info in oidc_info {
                 self.term
-                    .write_line(&format!("► {} ({})", info.name, info.id))
+                    .write_line(&format!("► {} ({})", info.name.unwrap_or_default(), info.id))
                     .map_err(|_| DcCmdError::IoError)?;
             }
         } else {
