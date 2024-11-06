@@ -1,6 +1,6 @@
 use console::Term;
 use keyring::Entry;
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 
 use self::{
     config::credentials::{get_client_credentials, HandleCredentials},
@@ -9,7 +9,7 @@ use self::{
 };
 use dco3::{
     auth::{Connected, Disconnected, OAuth2Flow},
-    Dracoon, DracoonBuilder,
+    Dracoon, DracoonBuilder, DracoonClientError,
 };
 
 pub mod config;
@@ -114,15 +114,32 @@ async fn init_dracoon(
 
     // Attempt to use refresh token if exists
     if let Ok(refresh_token) = entry.get_dracoon_env() {
-        if let Ok(dracoon) = dracoon
+        match dracoon
             .clone()
             .connect(OAuth2Flow::RefreshToken(refresh_token))
             .await
         {
-            return Ok(dracoon);
+            Ok(dracoon) => return Ok(dracoon),
+            Err(ref e @ DracoonClientError::Http(ref res)) => {
+                error!("Error connecting with refresh token: {}", e);
+                debug!("Response: {:?}", res);
+                if res.is_bad_request() {
+                    // Refresh token didn't work, delete it
+                    let _ = entry.delete_dracoon_env();
+                    warn!("Removed invalid refresh token.");
+                }
+            }
+            Err(ref e @ DracoonClientError::Auth(ref res)) => {
+                error!("Error connecting with refresh token: {}", e);
+                debug!("Response: {:?}", res);
+                // Refresh token didn't work, delete it
+                let _ = entry.delete_dracoon_env();
+                warn!("Removed invalid refresh token.");
+            }
+            Err(e) => {
+                error!("Error connecting with refresh token: {}", e);
+            }
         }
-        // Refresh token didn't work, delete it
-        let _ = entry.delete_dracoon_env();
     }
 
     // Final resort: auth code flow

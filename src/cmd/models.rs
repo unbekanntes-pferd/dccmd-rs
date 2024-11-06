@@ -353,6 +353,24 @@ pub enum UsersCommand {
         group_id: Option<u64>,
     },
 
+    /// Invite a guest user into DRACOON
+    Invite {
+        /// DRACOON url and path
+        target: String,
+
+        /// User first name
+        #[clap(long, short)]
+        first_name: String,
+
+        /// User last name
+        #[clap(long, short)]
+        last_name: String,
+
+        /// User email
+        #[clap(long, short)]
+        email: String,
+    },
+
     /// delete a user in DRACOON
     Rm {
         /// DRACOON url
