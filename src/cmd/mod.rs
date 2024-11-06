@@ -128,14 +128,14 @@ async fn init_dracoon(
                     let _ = entry.delete_dracoon_env();
                     warn!("Removed invalid refresh token.");
                 }
-            },
+            }
             Err(ref e @ DracoonClientError::Auth(ref res)) => {
                 error!("Error connecting with refresh token: {}", e);
                 debug!("Response: {:?}", res);
-                    // Refresh token didn't work, delete it
-                    let _ = entry.delete_dracoon_env();
+                // Refresh token didn't work, delete it
+                let _ = entry.delete_dracoon_env();
                 warn!("Removed invalid refresh token.");
-            },
+            }
             Err(e) => {
                 error!("Error connecting with refresh token: {}", e);
             }

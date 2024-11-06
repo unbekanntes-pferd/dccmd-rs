@@ -408,7 +408,7 @@ pub async fn handle_users_cmd(cmd: UsersCommand, term: Term) -> Result<(), DcCmd
             ref email,
         } => {
             let (parent_path, node_name, depth) =
-                parse_path(&target, handler.client.get_base_url().as_ref())?;
+                parse_path(target, handler.client.get_base_url().as_ref())?;
             let node_path = build_node_path((parent_path.clone(), node_name.clone(), depth));
 
             let node = handler
