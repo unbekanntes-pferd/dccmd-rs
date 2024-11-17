@@ -618,6 +618,8 @@ dependencies = [
 [[package]]
 name = "dco3"
 version = "0.17.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da8d878df4a52135df372cce3acf92c10c25a736abcd4404dfb6f198a792598f"
 dependencies = [
  "async-stream",
  "async-trait",
@@ -657,6 +659,8 @@ dependencies = [
 [[package]]
 name = "dco3_derive"
 version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9c187bdd32d9663b1ffe0ef5e1132bbf1f252f8e4d8679c0ef987aaa16f7ebd6"
 dependencies = [
  "quote",
  "syn 2.0.87",
