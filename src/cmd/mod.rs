@@ -119,7 +119,13 @@ async fn init_dracoon(
             .connect(OAuth2Flow::RefreshToken(refresh_token))
             .await
         {
-            Ok(dracoon) => return Ok(dracoon),
+            Ok(dracoon) => {
+                if let Err(err) = entry.set_dracoon_env(&dracoon.get_refresh_token().await) {
+                    debug!("Error storing refresh token: {}", err);
+                    error!("Failed to store refresh token.");
+                }
+                return Ok(dracoon)
+            },
             Err(ref e @ DracoonClientError::Http(ref res)) => {
                 error!("Error connecting with refresh token: {}", e);
                 debug!("Response: {:?}", res);

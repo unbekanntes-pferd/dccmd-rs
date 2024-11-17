@@ -7,9 +7,10 @@ use std::{
 
 use futures_util::future::join_all;
 use indicatif::{ProgressBar, ProgressStyle};
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 use crate::cmd::{
+    config::MAX_CONCURRENT_REQUESTS,
     init_dracoon, init_encryption, init_public_dracoon,
     models::{DcCmdError, ListOptions},
     nodes::{is_search_query, search_nodes},
@@ -82,7 +83,14 @@ pub async fn download(
             NodeType::File => download_file(&dracoon, &node, &target).await,
             _ => {
                 if download_opts.recursive {
-                    download_container(&dracoon, &node, &target, download_opts.velocity).await
+                    download_container(
+                        &dracoon,
+                        &node,
+                        &target,
+                        download_opts.velocity,
+                        download_opts.include_rooms,
+                    )
+                    .await
                 } else {
                     Err(DcCmdError::InvalidArgument(
                         "Container download requires recursive flag".to_string(),
@@ -332,6 +340,7 @@ async fn download_container(
     node: &Node,
     target: &str,
     velocity: Option<u8>,
+    include_rooms: bool,
 ) -> Result<(), DcCmdError> {
     info!("Attempting download of container {}.", node.name);
     info!("Target: {}", target);
@@ -342,7 +351,7 @@ async fn download_container(
     progress_spinner.enable_steady_tick(Duration::from_millis(100));
 
     // first get all folders below parent
-    let folders = get_folders(dracoon, node).await?;
+    let folders = get_folders(dracoon, node, include_rooms).await?;
 
     // create root directory on target
     let target = std::path::PathBuf::from(target);
@@ -363,7 +372,11 @@ async fn download_container(
     let files = get_files(dracoon, node).await?;
 
     // remove files in sub rooms
-    let files = filter_files_in_sub_rooms(dracoon, node, files).await?;
+    let files = if include_rooms {
+        files
+    } else {
+        filter_files_in_sub_rooms(dracoon, node, files).await?
+    };
 
     progress_spinner.finish_and_clear();
 
@@ -408,10 +421,9 @@ async fn get_files(
     dracoon: &Dracoon<Connected>,
     parent_node: &Node,
 ) -> Result<Vec<Node>, DcCmdError> {
-    // get all the files
     let params = ListAllParams::builder()
         .with_filter(NodesSearchFilter::is_file())
-        .with_sort(NodesSearchSortBy::parent_path(SortOrder::Asc))
+        .with_sort(NodesSearchSortBy::size(SortOrder::Desc))
         .build();
 
     let mut files = dracoon
@@ -419,41 +431,66 @@ async fn get_files(
         .search_nodes("*", Some(parent_node.id), Some(-1), Some(params))
         .await?;
 
-    // TODO: refactor to max velocity (currently all reqs are run in parallel)
     if files.range.total > 500 {
-        let mut file_reqs = vec![];
+        let (tx, mut rx) = tokio::sync::mpsc::channel(MAX_CONCURRENT_REQUESTS);
+        let mut handles = Vec::new();
 
-        (500..files.range.total).step_by(500).for_each(|offset| {
+        (500..=files.range.total).step_by(500).for_each(|offset| {
             let dracoon_client = dracoon.clone();
             let parent_node = parent_node.clone();
-            let get_task = async move {
+            let tx = tx.clone();
+            let handle = tokio::spawn(async move {
                 let params = ListAllParams::builder()
                     .with_filter(NodesSearchFilter::is_file())
-                    .with_sort(NodesSearchSortBy::parent_path(SortOrder::Asc))
+                    .with_sort(NodesSearchSortBy::size(SortOrder::Desc))
                     .with_offset(offset)
                     .build();
 
-                let files = dracoon_client
+                match dracoon_client
                     .nodes()
                     .search_nodes("*", Some(parent_node.id), Some(-1), Some(params))
-                    .await?;
+                    .await
+                {
+                    Ok(batch_items) => {
+                        if let Err(e) = tx.send(batch_items.items).await {
+                            error!("Error processing files: {}", e);
+                            return Err(DcCmdError::IoError);
+                        }
+                    }
+                    Err(e) => {
+                        error!("Error getting files: {}", e);
+                        return Err(e.into());
+                    }
+                }
 
-                Ok(files.items)
-            };
-            file_reqs.push(get_task);
+                Ok(())
+            });
+
+            handles.push(handle);
         });
 
-        let results: Vec<Result<Vec<Node>, DcCmdError>> = join_all(file_reqs).await;
+        drop(tx);
 
-        for result in results {
-            match result {
-                Ok(new_files) => files.items.extend(new_files),
-                Err(e) => {
-                    error!("Error getting files: {}", e);
-                    return Err(e);
-                }
+        while let Some(next_files) = rx.recv().await {
+            files.items.extend(next_files);
+        }
+
+        for handle in handles {
+            if let Err(e) = handle.await {
+                error!("Error getting files: {}", e);
+                return Err(DcCmdError::IoError);
             }
         }
+    }
+
+    let actual_count = files.items.len() as u64;
+    if files.range.total != actual_count {
+        warn!(
+            "Total file count mismatch - expected: {}, actual: {}, difference: {} (check error logs)", 
+            files.range.total,
+            actual_count,
+            files.range.total - actual_count
+        );
     }
 
     Ok(files.get_files())
@@ -500,9 +537,16 @@ async fn filter_files_in_sub_rooms(
 async fn get_folders(
     dracoon: &Dracoon<Connected>,
     parent_node: &Node,
+    include_rooms: bool,
 ) -> Result<Vec<Node>, DcCmdError> {
+    let filter = if include_rooms {
+        NodesSearchFilter::is_types(vec![NodeType::Folder, NodeType::Room])
+    } else {
+        NodesSearchFilter::is_folder()
+    };
+
     let params = ListAllParams::builder()
-        .with_filter(NodesSearchFilter::is_folder())
+        .with_filter(filter.clone())
         .with_sort(NodesSearchSortBy::parent_path(SortOrder::Asc))
         .build();
 
@@ -511,45 +555,66 @@ async fn get_folders(
         .search_nodes("*", Some(parent_node.id), Some(-1), Some(params))
         .await?;
 
-    // TODO: refactor to max velocity (currently all reqs are run in parallel)
     if folders.range.total > 500 {
-        let mut folder_reqs = vec![];
+        let (tx, mut rx) = tokio::sync::mpsc::channel(MAX_CONCURRENT_REQUESTS);
+        let mut handles = Vec::new();
 
-        (500..folders.range.total).step_by(500).for_each(|offset| {
+        (500..=folders.range.total).step_by(500).for_each(|offset| {
+            let tx = tx.clone();
             let dracoon_client = dracoon.clone();
             let parent_node = parent_node.clone();
-            let get_task = async move {
+            let filter = filter.clone();
+            let handle = tokio::spawn(async move {
                 let params = ListAllParams::builder()
-                    .with_filter(NodesSearchFilter::is_folder())
+                    .with_filter(filter)
                     .with_sort(NodesSearchSortBy::parent_path(SortOrder::Asc))
                     .with_offset(offset)
                     .build();
 
-                let folders = dracoon_client
+                match dracoon_client
                     .nodes()
                     .search_nodes("*", Some(parent_node.id), Some(-1), Some(params))
-                    .await?;
-
-                Ok(folders.items)
-            };
-
-            folder_reqs.push(get_task);
+                    .await
+                {
+                    Ok(batch_items) => {
+                        if let Err(e) = tx.send(batch_items.items).await {
+                            error!("Error sending folders: {}", e);
+                        }
+                    }
+                    Err(e) => {
+                        error!("Error getting folders: {}", e);
+                    }
+                }
+            });
+            handles.push(handle);
         });
 
-        let results: Vec<Result<Vec<Node>, DcCmdError>> = join_all(folder_reqs).await;
+        drop(tx);
 
-        for result in results {
-            match result {
-                Ok(new_folders) => folders.items.extend(new_folders),
-                Err(e) => {
-                    error!("Error getting folders: {}", e);
-                    return Err(e);
-                }
+        while let Some(next_folders) = rx.recv().await {
+            folders.items.extend(next_folders);
+        }
+
+        for handle in handles {
+            if let Err(e) = handle.await {
+                error!("Error getting folders: {}", e);
+                return Err(DcCmdError::IoError);
             }
         }
     }
 
-    Ok(folders.get_folders())
+    let node_filter = if include_rooms {
+        |node: &Node| node.node_type == NodeType::Folder || node.node_type == NodeType::Room
+    } else {
+        |node: &Node| node.node_type == NodeType::Folder
+    };
+
+    Ok(folders
+        .items
+        .iter()
+        .filter(|node| node_filter(node))
+        .map(|node| node.clone())
+        .collect())
 }
 
 fn create_folders(
@@ -565,7 +630,7 @@ fn create_folders(
         let folder_base_path = folder
             .clone()
             .parent_path
-            .expect("Folder has no parent path")
+            .unwrap_or("/".to_string())
             .trim_start_matches(base_path)
             .to_string()
             .trim_start_matches('/')

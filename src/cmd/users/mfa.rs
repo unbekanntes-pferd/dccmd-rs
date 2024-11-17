@@ -45,14 +45,14 @@ impl UserCommandHandler {
                 .get_group_users(group_id, Some(params))
                 .await?;
             if users.range.total > 500 {
-                for offset in (500..users.range.total).step_by(500) {
+                for offset in (500..=users.range.total).step_by(500) {
                     let params = build_params(&filter, offset, None)?;
-                    let mut new_users = self
+                    let new_users = self
                         .client
                         .groups()
                         .get_group_users(group_id, Some(params))
                         .await?;
-                    users.items.append(&mut new_users.items);
+                    users.items.extend(new_users.items);
                 }
             }
             users
@@ -77,7 +77,13 @@ impl UserCommandHandler {
                 .collect::<Vec<_>>()
                 .await
                 .into_iter()
-                .filter_map(|r| r.ok())
+                .filter_map(|r| {
+                    if let Err(e) = r {
+                        error!("Failed to get user. Error: {}", e);
+                        return None;
+                    }
+                    r.ok()
+                })
                 .filter(|u| {
                     if let Some(auth_method) = &auth_method {
                         let same_auth = u.auth_data.method == String::from(auth_method);

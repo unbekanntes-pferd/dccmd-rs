@@ -48,6 +48,7 @@ async fn main() {
             velocity,
             recursive,
             share_password,
+            include_rooms
         } => {
             download(
                 source,
@@ -58,6 +59,7 @@ async fn main() {
                     password_auth,
                     opt.encryption_password,
                     share_password,
+                    include_rooms,
                 ),
             )
             .await

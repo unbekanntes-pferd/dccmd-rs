@@ -105,15 +105,6 @@ pub async fn upload(
 }
 
 async fn upload_public_file(source: PathBuf, target: String) -> Result<(), DcCmdError> {
-    let dracoon = init_public_dracoon(&target).await?;
-
-    let access_key = target
-        .split('/')
-        .last()
-        .ok_or(DcCmdError::InvalidPath(target.clone()))?;
-
-    let upload_share = dracoon.public().get_public_upload_share(access_key).await?;
-
     let file = tokio::fs::File::open(&source).await.map_err(|err| {
         error!("Error opening file: {}", err);
         DcCmdError::IoError
@@ -129,6 +120,15 @@ async fn upload_public_file(source: PathBuf, target: String) -> Result<(), DcCmd
             source.to_string_lossy().to_string(),
         ));
     }
+
+    let dracoon = init_public_dracoon(&target).await?;
+
+    let access_key = target
+        .split('/')
+        .last()
+        .ok_or(DcCmdError::InvalidPath(target.clone()))?;
+
+    let upload_share = dracoon.public().get_public_upload_share(access_key).await?;
 
     let file_meta = get_file_meta(&file_meta, &source)?;
 
@@ -495,14 +495,9 @@ async fn update_folder_map(
     debug!("Parent name: {}", parent_name);
 
     for folder in folder_results {
-        let folder = match folder {
-            Ok(folder) => folder,
-            Err(e) if e.is_conflict() => {
-                // TODO: this is broken - conflict case is not handled
-                let DracoonClientError::Http(error_details) = &e else {
-                    unreachable!("Error is http - checked and is conflict");
-                };
-
+        let folder = match &folder {
+            Ok(folder) => folder.clone(),
+            Err(ref e @ DracoonClientError::Http(error_details)) if e.is_conflict() => {
                 let mut found_start = false;
                 let mut result_path = PathBuf::new();
 
@@ -549,6 +544,13 @@ async fn update_folder_map(
                             e
                         );
                         e
+                    })
+                    .map_err(|e| {
+                        error!(
+                            "Error finding path {path} - creating root folder failed: {}",
+                            e
+                        );
+                        DcCmdError::from(e)
                     })?
             }
             Err(e) => {
@@ -596,22 +598,27 @@ fn build_remote_path(
     target_folder: &str,
     parent_folder: &str,
 ) -> String {
-    //TODO: this is broken and works up to 1 level deep
     let components: Vec<_> = local_path.components().collect();
 
-    // Find the index where parent_folder and target_folder appear consecutively
-    let (parent_index, _) = components
+    // Find all occurrences where parent_folder and target_folder appear consecutively
+    let mut matches: Vec<_> = components
         .windows(2)
         .enumerate()
-        .find(|(_, window)| {
-            window.first().and_then(|c| c.as_os_str().to_str()) == Some(parent_folder)
-                && window.get(1).and_then(|c| c.as_os_str().to_str()) == Some(target_folder)
+        .filter(|(_, window)| {
+            window[0].as_os_str().to_str() == Some(parent_folder)
+                && window[1].as_os_str().to_str() == Some(target_folder)
         })
+        .collect();
+
+    // Use the last occurrence (deepest in the path)
+    let (parent_index, _) = matches
+        .pop()
         .expect("Parent folder followed by target folder not found in path");
 
+    // Start with the remote base
     let mut remote_path = PathBuf::from(remote_base);
 
-    // Add components from parent_folder to the end
+    // Add all components from parent_folder onwards
     for component in &components[parent_index..] {
         remote_path.push(component.as_os_str());
     }
@@ -881,6 +888,26 @@ mod tests {
         let target_folder = "target";
         let expected = "/remote/target/is/target";
         let result = build_remote_path(local_path, remote_base, target_folder, "is");
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_build_remote_path_multiple_levels() {
+        let local_path = Path::new("/deep/path/is/target/more/stuff/is/target");
+        let remote_base = "/remote/target";
+        let target_folder = "target";
+        let expected = "/remote/target/more/stuff/is/target";
+        let result = build_remote_path(local_path, remote_base, target_folder, "more");
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_build_remote_path_different_parent() {
+        let local_path = Path::new("/path/folder/target/deep/parent/target");
+        let remote_base = "/remote/base";
+        let target_folder = "target";
+        let expected = "/remote/base/parent/target";
+        let result = build_remote_path(local_path, remote_base, target_folder, "parent");
         assert_eq!(result, expected);
     }
 }

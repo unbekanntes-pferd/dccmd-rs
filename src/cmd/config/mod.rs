@@ -18,6 +18,8 @@ pub mod credentials;
 pub mod logs;
 pub mod models;
 
+pub const MAX_CONCURRENT_REQUESTS: usize = 10;
+
 pub struct ConfigCommandHandler {
     entry: Box<dyn HandleCredentials>,
     term: Term,

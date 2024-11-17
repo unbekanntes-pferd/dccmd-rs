@@ -1,6 +1,6 @@
 [package]
 name = "dccmd-rs"
-version = "0.14.0"
+version = "0.15.0-PREVIEW"
 edition = "2021"
 description = "A command line client for DRACOON"
 authors = ["Octavio Simone"]
@@ -13,7 +13,7 @@ path = "src/main.rs"
 
 [dependencies]
 # DRACOON API
-dco3 = "0.17"
+dco3 = { path = "../dco3" }
 
 # CLI helpers
 clap = { version = "4", features = ["derive"] }

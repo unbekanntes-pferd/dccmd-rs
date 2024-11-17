@@ -39,7 +39,7 @@ impl GroupCommandHandler {
         } else {
             let mut groups = self.client.groups().get_groups(None).await?;
 
-            for offset in (500..groups.range.total).step_by(500) {
+            for offset in (500..=groups.range.total).step_by(500) {
                 let params = ListAllParams::builder()
                     .with_offset(offset)
                     .with_limit(500)
@@ -65,7 +65,7 @@ impl GroupCommandHandler {
                 .await?;
 
             if opts.all {
-                for offset in (500..users.range.total).step_by(500) {
+                for offset in (500..=users.range.total).step_by(500) {
                     let params =
                         build_params(&opts.filter, offset, opts.limit.unwrap_or(500).into())?;
                     let mut new_users = self

@@ -38,7 +38,7 @@ impl ReportsCommandHandler {
     async fn get_all_user_ids(&self) -> Result<Vec<u64>, DcCmdError> {
         let mut users = self.client.users().get_users(None, None, None).await?;
 
-        let user_reqs = (500..users.range.total)
+        let user_reqs = (500..=users.range.total)
             .step_by(500)
             .map(|offset| {
                 let params = ListAllParams::builder().with_offset(offset).build();
