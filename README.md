@@ -27,15 +27,9 @@ For all DRACOON operations `dco3` is used.
 You can download precompiled binaries on the Github releases page: 
 [Releases](https://github.com/unbekanntes-pferd/dccmd-rs/releases)
 
+**Note**: The `DRACOON Commander` OAuth app must be enabled in the DRACOON OAuth Apps settings.
+
 ### Rust toolchain
-
-If you have the Rust toolchain installed, you can install this using cargo like so:
-
-```bash
-cargo install dccmd-rs
-```
-
-If you like it even rougher or would like to contribute, feel free to compile from source:
 
 Clone the repository and either use `cargo run` or build your own executable with `cargo build`:
 
@@ -44,6 +38,14 @@ git clone https://github.com/unbekanntes-pferd/dccmd-rs.git
 cd dccmd-rs
 cargo build
 ```
+
+**Note**: In order to build the client you need to set the following environment variables:
+
+```bash
+export DCCMD_CLIENT_ID=your_client_id
+export DCCMD_CLIENT_SECRET=your_client_secret
+```
+You will also need to create a custom OAuth app in order for this to work.
 
 ## What works?
 
