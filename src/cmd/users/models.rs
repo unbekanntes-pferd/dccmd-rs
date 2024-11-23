@@ -68,19 +68,23 @@ pub fn display_option<T: Display>(o: &Option<T>) -> String {
     }
 }
 
-impl From<UserItem> for UserInfo {
-    fn from(user: UserItem) -> Self {
-        let last_login = if user.last_login_success_at.is_none() {
-            None
-        } else {
+impl TryFrom<UserItem> for UserInfo {
+    type Error = DcCmdError;
+    fn try_from(user: UserItem) -> Result<Self, Self::Error> {
+        let last_login: Option<DateTime<Utc>> = if let Some(last_login) = user.last_login_success_at
+        {
             Some(
-                DateTime::parse_from_rfc3339(&user.last_login_success_at.unwrap())
-                    .expect("Failed to parse last login date")
+                DateTime::parse_from_rfc3339(&last_login)
+                    .or(Err(DcCmdError::InvalidArgument(
+                        "Failed to parse last login date".to_string(),
+                    )))?
                     .into(),
             )
+        } else {
+            None
         };
 
-        Self {
+        Ok(Self {
             id: user.id,
             first_name: user.first_name,
             last_name: user.last_name,
@@ -89,33 +93,39 @@ impl From<UserItem> for UserInfo {
             expire_at: user.expire_at,
             is_locked: user.is_locked,
             last_login_at: last_login,
-        }
+        })
     }
 }
 
-impl From<UserData> for UserInfo {
-    fn from(user: UserData) -> Self {
-        let last_login = if user.last_login_success_at.is_none() {
-            None
-        } else {
+impl TryFrom<UserData> for UserInfo {
+    type Error = DcCmdError;
+    fn try_from(user: UserData) -> Result<Self, Self::Error> {
+        let last_login: Option<DateTime<Utc>> = if let Some(last_login) = user.last_login_success_at
+        {
             Some(
-                DateTime::parse_from_rfc3339(&user.last_login_success_at.unwrap())
-                    .expect("Failed to parse last login date")
+                DateTime::parse_from_rfc3339(&last_login)
+                    .or(Err(DcCmdError::InvalidArgument(
+                        "Failed to parse last login date".to_string(),
+                    )))?
                     .into(),
             )
+        } else {
+            None
         };
 
-        let expire_at = if user.expire_at.is_none() {
-            None
-        } else {
+        let expire_at: Option<DateTime<Utc>> = if let Some(expire_at) = user.expire_at {
             Some(
-                DateTime::parse_from_rfc3339(&user.expire_at.unwrap())
-                    .expect("Failed to parse expire date")
+                DateTime::parse_from_rfc3339(&expire_at)
+                    .or(Err(DcCmdError::InvalidArgument(
+                        "Failed to parse expire date".to_string(),
+                    )))?
                     .into(),
             )
+        } else {
+            None
         };
 
-        Self {
+        Ok(Self {
             id: user.id,
             first_name: user.first_name,
             last_name: user.last_name,
@@ -124,7 +134,7 @@ impl From<UserData> for UserInfo {
             expire_at,
             is_locked: user.is_locked,
             last_login_at: last_login,
-        }
+        })
     }
 }
 
@@ -234,7 +244,7 @@ impl UsersSwitchAuthOptions {
             "email" => user
                 .email
                 .as_deref()
-                .expect("User email is required")
+                .unwrap_or(format!("{}@example.com", user.user_name.as_str()).as_str())
                 .to_string(),
             "username" => user.user_name.clone(),
             _ => user

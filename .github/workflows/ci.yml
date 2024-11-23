@@ -8,6 +8,8 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  DCCMD_CLIENT_ID: some_client_id
+  DCCMD_CLIENT_SECRET: some_client_secret
 
 jobs:
   build:

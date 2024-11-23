@@ -49,13 +49,19 @@ pub enum DcCmdError {
 
 impl From<DracoonClientError> for DcCmdError {
     fn from(value: DracoonClientError) -> Self {
+        (&value).into()
+    }
+}
+
+impl From<&DracoonClientError> for DcCmdError {
+    fn from(value: &DracoonClientError) -> Self {
         match value {
             DracoonClientError::ConnectionFailed(_) => DcCmdError::ConnectionFailed,
-            DracoonClientError::Http(err) => DcCmdError::DracoonError(err),
-            DracoonClientError::Auth(err) => DcCmdError::DracoonAuthError(err),
-            DracoonClientError::InvalidUrl(url) => DcCmdError::InvalidUrl(url),
+            DracoonClientError::Http(err) => DcCmdError::DracoonError(err.clone()),
+            DracoonClientError::Auth(err) => DcCmdError::DracoonAuthError(err.clone()),
+            DracoonClientError::InvalidUrl(url) => DcCmdError::InvalidUrl(url.clone()),
             DracoonClientError::IoError => DcCmdError::IoError,
-            DracoonClientError::S3Error(err) => DcCmdError::DracoonS3Error(err),
+            DracoonClientError::S3Error(err) => DcCmdError::DracoonS3Error(err.clone()),
             DracoonClientError::MissingArgument => {
                 DcCmdError::InvalidArgument("Missing argument (password set?)".to_string())
             }
@@ -73,14 +79,9 @@ pub struct DcCmd {
     #[clap(subcommand)]
     pub cmd: DcCmdCommand,
 
+    /// Enable debug logging
     #[clap(long)]
     pub debug: bool,
-
-    #[clap(long)]
-    pub log_file_out: bool,
-
-    #[clap(long)]
-    pub log_file_path: Option<String>,
 
     /// optional username
     #[clap(long)]
@@ -151,6 +152,9 @@ pub enum DcCmdCommand {
 
         #[clap(long)]
         share_password: Option<String>,
+
+        #[clap(long)]
+        include_rooms: bool,
     },
     /// Transfer files across DRACOON instances
     Transfer {

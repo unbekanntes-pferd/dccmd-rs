@@ -2,12 +2,8 @@ use std::sync::Arc;
 
 use console::Term;
 use dialoguer::Confirm;
-use futures_util::{
-    future::{join_all, try_join_all},
-    stream, StreamExt,
-};
 use models::{CmdCopyOptions, CmdListNodesOptions};
-use tokio::sync::Mutex;
+
 use tracing::{debug, error, info};
 
 use crate::cmd::{
@@ -29,6 +25,7 @@ use dco3::{
 use self::models::CmdMkRoomOptions;
 
 use super::{
+    config::MAX_CONCURRENT_REQUESTS,
     models::{build_params, DcCmdError, ListOptions, PasswordAuth},
     utils::strings::{format_error_message, format_success_message},
 };
@@ -115,29 +112,58 @@ async fn get_nodes(
         .await?;
 
     if opts.all() && node_list.range.total > 500 {
-        let mut offset = 500;
-        let limit = 500;
+        let (tx, mut rx) = tokio::sync::mpsc::channel(MAX_CONCURRENT_REQUESTS);
+        let semaphore = Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_REQUESTS));
+        let mut handles = Vec::new();
 
-        while offset < node_list.range.total {
-            let mut futures = vec![];
+        (500..=node_list.range.total)
+            .step_by(500)
+            .for_each(|offset| {
+                let tx = tx.clone();
+                let semaphore = semaphore.clone();
+                let dracoon = dracoon.clone();
+                let opts = opts.clone();
 
-            while offset < node_list.range.total {
-                let params = build_params(opts.filter(), offset, None)?;
+                let handle = tokio::spawn(async move {
+                    let _permit = semaphore.acquire().await.map_err({
+                        error!("Failed to acquire semaphore permit.");
+                        |_| DcCmdError::IoError
+                    })?;
+                    let params = build_params(opts.filter(), offset, None)?;
 
-                let next_node_list_req =
-                    dracoon.nodes().get_nodes(parent_id, managed, Some(params));
-                futures.push(next_node_list_req);
-                offset += limit;
+                    match dracoon
+                        .nodes()
+                        .get_nodes(parent_id, managed, Some(params))
+                        .await
+                    {
+                        Ok(node_list) => {
+                            if let Err(e) = tx.send(node_list.items).await {
+                                error!("Failed to send node list: {}", e);
+                                return Err(DcCmdError::IoError);
+                            }
+
+                            Ok::<(), DcCmdError>(())
+                        }
+                        Err(e) => {
+                            error!("Error getting folders: {}", e);
+                            Err(e.into())
+                        }
+                    }
+                });
+                handles.push(handle);
+            });
+
+        drop(tx);
+
+        while let Some(result) = rx.recv().await {
+            node_list.items.extend(result);
+        }
+
+        for handle in handles {
+            if let Err(e) = handle.await {
+                error!("Failed to join task: {}", e);
+                return Err(DcCmdError::IoError);
             }
-
-            let mut next_node_list_items = vec![];
-
-            let results = join_all(futures).await;
-            for result in results {
-                let next_node_list = result?.items;
-                next_node_list_items.extend(next_node_list);
-            }
-            node_list.items.append(&mut next_node_list_items);
         }
     }
     Ok(node_list)
@@ -179,31 +205,59 @@ async fn search_nodes(
         .await?;
 
     if opts.all() && node_list.range.total > 500 {
-        let mut offset = 500;
-        let limit = 500;
+        let (tx, mut rx) = tokio::sync::mpsc::channel(MAX_CONCURRENT_REQUESTS);
+        let semaphore = Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_REQUESTS));
+        let mut handles = Vec::new();
 
-        while offset < node_list.range.total {
-            let mut futures = vec![];
+        (500..=node_list.range.total)
+            .step_by(500)
+            .for_each(|offset| {
+                let tx = tx.clone();
+                let semaphore = semaphore.clone();
+                let dracoon = dracoon.clone();
+                let opts = opts.clone();
+                let search_string = search_string.to_string();
 
-            while offset < node_list.range.total {
-                let params = build_params(opts.filter(), offset, None)?;
+                let handle = tokio::spawn(async move {
+                    let _permit = semaphore.acquire().await.map_err({
+                        error!("Failed to acquire semaphore permit.");
+                        |_| DcCmdError::IoError
+                    })?;
+                    let params = build_params(opts.filter(), offset, None)?;
 
-                let next_node_list_req =
-                    dracoon
+                    match dracoon
                         .nodes()
-                        .search_nodes(search_string, parent_id, Some(0), Some(params));
-                futures.push(next_node_list_req);
-                offset += limit;
-            }
+                        .search_nodes(&search_string, parent_id, Some(0), Some(params))
+                        .await
+                    {
+                        Ok(node_list) => {
+                            if let Err(e) = tx.send(node_list.items).await {
+                                error!("Failed to send node list: {}", e);
+                                return Err(DcCmdError::IoError);
+                            }
 
-            let mut next_node_list_items = vec![];
+                            Ok::<(), DcCmdError>(())
+                        }
+                        Err(e) => {
+                            error!("Error getting folders: {}", e);
+                            Err(e.into())
+                        }
+                    }
+                });
+                handles.push(handle);
+            });
 
-            let results = join_all(futures).await;
-            for result in results {
-                let next_node_list = result?.items;
-                next_node_list_items.extend(next_node_list);
+        drop(tx);
+
+        while let Some(result) = rx.recv().await {
+            node_list.items.extend(result);
+        }
+
+        for handle in handles {
+            if let Err(e) = handle.await {
+                error!("Failed to join task: {}", e);
+                return Err(DcCmdError::IoError);
             }
-            node_list.items.append(&mut next_node_list_items);
         }
     }
     Ok(node_list)
@@ -228,8 +282,7 @@ pub async fn delete_node(
                 "Deleting search results not allowed. Use --recursive flag to delete recursively.",
             );
             error!("{}", msg);
-            term.write_line(&msg)
-                .expect("Error writing message to terminal.");
+            term.write_line(&msg).map_err(|_| DcCmdError::IoError)?;
             return Ok(());
         }
         _ => (),
@@ -246,8 +299,7 @@ pub async fn delete_node(
     if !recursive && (node.node_type == NodeType::Folder || node.node_type == NodeType::Room) {
         let msg = format_error_message("Deleting non-empty folder or room not allowed. Use --recursive flag to delete recursively.");
         error!("{}", msg);
-        term.write_line(&msg)
-            .expect("Error writing message to terminal.");
+        term.write_line(&msg).map_err(|_| DcCmdError::IoError)?;
         return Ok(());
     }
 
@@ -257,8 +309,7 @@ pub async fn delete_node(
         let msg = format!("Node {node_name} deleted.");
         info!("{}", msg);
         let msg = format_success_message(&msg);
-        term.write_line(&msg)
-            .expect("Error writing message to terminal.");
+        term.write_line(&msg).map_err(|_| DcCmdError::IoError)?;
         Ok(())
     };
 
@@ -269,15 +320,14 @@ pub async fn delete_node(
             let confirmed = Confirm::new()
                 .with_prompt(format!("Do you really want to delete room {node_name}?"))
                 .interact()
-                .expect("Error reading user input.");
+                .map_err(|_| DcCmdError::IoError)?;
 
             if confirmed {
                 delete_node.await
             } else {
                 let msg = format_error_message("Deleting room not confirmed.");
                 error!("{}", msg);
-                term.write_line(&msg)
-                    .expect("Error writing message to terminal.");
+                term.write_line(&msg).map_err(|_| DcCmdError::IoError)?;
                 Ok(())
             }
         }
@@ -311,7 +361,7 @@ async fn delete_node_content(
             node_ids.len()
         ))
         .interact()
-        .expect("Error reading user input.");
+        .or(Err(DcCmdError::IoError))?;
 
     if confirmed {
         dracoon.nodes().delete_nodes(node_ids.into()).await?;
@@ -358,8 +408,7 @@ pub async fn create_folder(
     let msg = format!("Folder {node_name} created.");
     info!("{}", msg);
     let msg = format_success_message(&msg);
-    term.write_line(&msg)
-        .expect("Error writing message to terminal.");
+    term.write_line(&msg).map_err(|_| DcCmdError::IoError)?;
 
     Ok(())
 }
@@ -387,35 +436,45 @@ pub async fn create_room(
     let req = match opts.admin_users {
         Some(users) => {
             let handler = UserCommandHandler::new_from_client(dracoon.clone(), term.clone());
+            let (tx, mut rx) = tokio::sync::mpsc::channel(MAX_CONCURRENT_REQUESTS);
+            let semaphore = Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_REQUESTS));
+            let mut handles = Vec::new();
 
-            let reqs = users
-                .iter()
-                .map(|username| handler.find_user_by_username(username));
-
-            let admin_users = Arc::new(Mutex::new(Vec::new()));
-
-            stream::iter(reqs)
-                .chunks(5)
-                .for_each_concurrent(None, |f| {
-                    let cloned_admin_users = Arc::clone(&admin_users);
-                    async move {
-                        let result = try_join_all(f).await.map_err(|e| {
-                            error!("Failed to find users: {}", e);
-                            e
-                        });
-                        if let Ok(users) = result {
-                            cloned_admin_users.lock().await.extend(users);
-                        }
+            for user in users {
+                let tx = tx.clone();
+                let semaphore = semaphore.clone();
+                let handler = handler.clone();
+                let handle = tokio::spawn(async move {
+                    let _permit = semaphore.acquire().await.map_err(|_| {
+                        error!("Error acquiring semaphore permit");
+                        DcCmdError::IoError
+                    })?;
+                    let user = handler.find_user_by_username(&user).await?;
+                    if let Err(e) = tx.send(user).await {
+                        error!("Failed to send user: {}", e);
                     }
-                })
-                .await;
 
-            let admin_users: Vec<_> = admin_users
-                .lock()
-                .await
-                .iter()
-                .map(|user| user.id)
-                .collect();
+                    Ok::<(), DcCmdError>(())
+                });
+
+                handles.push(handle);
+            }
+
+            drop(tx);
+
+            let mut admin_users = Vec::new();
+            while let Some(result) = rx.recv().await {
+                admin_users.push(result);
+            }
+
+            for handle in handles {
+                if let Err(e) = handle.await {
+                    error!("Error fetching users: {}", e);
+                    return Err(DcCmdError::IoError);
+                }
+            }
+
+            let admin_users: Vec<_> = admin_users.iter().map(|user| user.id).collect();
 
             if admin_users.is_empty() {
                 return Err(DcCmdError::InvalidArgument(
@@ -442,8 +501,7 @@ pub async fn create_room(
     let msg = format!("Room {node_name} created.");
     info!("{}", msg);
     let msg = format_success_message(&msg);
-    term.write_line(&msg)
-        .expect("Error writing message to terminal.");
+    term.write_line(&msg).map_err(|_| DcCmdError::IoError)?;
 
     Ok(())
 }
@@ -502,8 +560,7 @@ pub async fn copy_nodes(
     let msg = format!("Copied {count_nodes} node(s) from {source_parent_path} to {target}.");
     info!("{}", msg);
     let msg = format_success_message(&msg);
-    term.write_line(&msg)
-        .expect("Error writing message to terminal.");
+    term.write_line(&msg).map_err(|_| DcCmdError::IoError)?;
 
     Ok(())
 }

@@ -41,6 +41,7 @@ pub struct CmdDownloadOptions {
     pub auth: Option<PasswordAuth>,
     pub encryption_password: Option<String>,
     pub share_password: Option<String>,
+    pub include_rooms: bool,
 }
 
 impl CmdDownloadOptions {
@@ -50,6 +51,7 @@ impl CmdDownloadOptions {
         auth: Option<PasswordAuth>,
         encryption_password: Option<String>,
         share_password: Option<String>,
+        include_rooms: bool,
     ) -> Self {
         Self {
             recursive,
@@ -57,6 +59,7 @@ impl CmdDownloadOptions {
             auth,
             encryption_password,
             share_password,
+            include_rooms,
         }
     }
 }

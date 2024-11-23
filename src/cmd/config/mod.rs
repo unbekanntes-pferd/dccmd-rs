@@ -1,10 +1,12 @@
+use std::path::PathBuf;
+
 use console::Term;
 use dco3::{auth::Connected, AuthenticationMethods, Dracoon, OAuth2Flow, User};
 use dialoguer::Confirm;
 use keyring::Entry;
 
 use self::{
-    credentials::{get_client_credentials, HandleCredentials},
+    credentials::HandleCredentials,
     models::{ConfigAuthCommand, ConfigCryptoCommand},
 };
 
@@ -17,6 +19,15 @@ use super::{
 pub mod credentials;
 pub mod logs;
 pub mod models;
+
+pub const MAX_CONCURRENT_REQUESTS: usize = 10;
+pub const DEFAULT_CHUNK_SIZE: usize = 1024 * 1024 * 32; // 32 MB (standard S3 chunk)
+pub const DEFAULT_CONCURRENT_MULTIPLIER: u8 = 10;
+pub const MAX_VELOCITY: u8 = 10;
+pub const MIN_VELOCITY: u8 = 1;
+pub const CLIENT_ID: &str = env!("DCCMD_CLIENT_ID");
+pub const CLIENT_SECRET: &str = env!("DCCMD_CLIENT_SECRET");
+pub const APPLICATION_NAME: &str = "dccmd";
 
 pub struct ConfigCommandHandler {
     entry: Box<dyn HandleCredentials>,
@@ -32,7 +43,6 @@ impl ConfigCommandHandler {
     }
 
     async fn get_dracoon_client(&self, target: &str) -> Result<Dracoon<Connected>, DcCmdError> {
-        let (client_id, client_secret) = get_client_credentials();
         let Ok(refresh_token) = self.entry.get_dracoon_env() else {
             let msg = format_error_message(
                 format!("No token found for this DRACOON url: {target}.").as_str(),
@@ -45,8 +55,8 @@ impl ConfigCommandHandler {
 
         let dracoon = Dracoon::builder()
             .with_base_url(target)
-            .with_client_id(client_id)
-            .with_client_secret(client_secret)
+            .with_client_id(CLIENT_ID)
+            .with_client_secret(CLIENT_SECRET)
             .build()?
             .connect(OAuth2Flow::refresh_token(refresh_token))
             .await?;
@@ -284,4 +294,23 @@ fn prepare_config_cmd(
     };
 
     Ok((base_url, entry))
+}
+
+fn get_or_create_config_dir() -> PathBuf {
+    if let Some(config_dir) = dirs::config_dir() {
+        let config_dir = config_dir.join(APPLICATION_NAME);
+
+        if !config_dir.exists() {
+            std::fs::create_dir_all(&config_dir).unwrap_or_else(|_| {
+                panic!(
+                    "Failed to write to config dir {config_dir}",
+                    config_dir = config_dir.display()
+                )
+            });
+        }
+
+        config_dir
+    } else {
+        panic!("Unsupported platform (no config dir found). Only Linux, MacOS and Windows are supported.");
+    }
 }
