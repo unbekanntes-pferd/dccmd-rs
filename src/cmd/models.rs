@@ -79,14 +79,9 @@ pub struct DcCmd {
     #[clap(subcommand)]
     pub cmd: DcCmdCommand,
 
+    /// Enable debug logging
     #[clap(long)]
     pub debug: bool,
-
-    #[clap(long)]
-    pub log_file_out: bool,
-
-    #[clap(long)]
-    pub log_file_path: Option<String>,
 
     /// optional username
     #[clap(long)]

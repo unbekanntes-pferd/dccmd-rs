@@ -34,7 +34,7 @@ async fn main() {
     let term = Term::stdout();
     let err_term = Term::stderr();
 
-    init_logging(&err_term, opt.debug, opt.log_file_path);
+    init_logging(&err_term, opt.debug);
 
     let password_auth = match (opt.username, opt.password) {
         (Some(username), Some(password)) => Some(PasswordAuth(username, password)),

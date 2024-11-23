@@ -6,7 +6,9 @@ use tracing_subscriber::EnvFilter;
 
 use crate::cmd::{handle_error, models::DcCmdError};
 
-pub fn init_logging(err_term: &Term, debug: bool, log_file: Option<String>) {
+use super::get_or_create_config_dir;
+
+pub fn init_logging(err_term: &Term, debug: bool) {
     let log_format = tracing_subscriber::fmt::format()
         .with_level(true)
         .with_thread_names(false)
@@ -22,8 +24,9 @@ pub fn init_logging(err_term: &Term, debug: bool, log_file: Option<String>) {
         EnvFilter::from_default_env().add_directive(LevelFilter::INFO.into())
     };
 
-    // set up logging file
-    let log_file_path = log_file.unwrap_or("dccmd-rs.log".to_string());
+    let config_dir = get_or_create_config_dir();
+    let log_file_name = "dccmd-rs.log";
+    let log_file_path = config_dir.join(log_file_name);
 
     let log_file = OpenOptions::new()
         .create(true)

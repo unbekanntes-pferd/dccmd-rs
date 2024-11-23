@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use console::Term;
 use dco3::{auth::Connected, AuthenticationMethods, Dracoon, OAuth2Flow, User};
 use dialoguer::Confirm;
@@ -25,6 +27,7 @@ pub const MAX_VELOCITY: u8 = 10;
 pub const MIN_VELOCITY: u8 = 1;
 pub const CLIENT_ID: &str = env!("DCCMD_CLIENT_ID");
 pub const CLIENT_SECRET: &str = env!("DCCMD_CLIENT_SECRET");
+pub const APPLICATION_NAME: &str = "dccmd";
 
 pub struct ConfigCommandHandler {
     entry: Box<dyn HandleCredentials>,
@@ -291,4 +294,19 @@ fn prepare_config_cmd(
     };
 
     Ok((base_url, entry))
+}
+
+fn get_or_create_config_dir() -> PathBuf {
+    if let Some(config_dir) = dirs::config_dir() {
+
+        let config_dir = config_dir.join(APPLICATION_NAME);
+
+        if !config_dir.exists() {
+            std::fs::create_dir_all(&config_dir).expect(&format!("Failed to write to config dir {config_dir}", config_dir = config_dir.display()));
+        }
+
+        config_dir
+    } else {
+        panic!("Unsupported platform (no config dir found). Only Linux, MacOS and Windows are supported.");
+    }
 }

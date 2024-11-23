@@ -37,6 +37,7 @@ thiserror = "2"
 serde = {version = "1", features = ["derive"]}
 csv = "1"
 dashmap = "6"
+dirs = "5"
 
 # credentials
 keyring = "2"
