@@ -174,7 +174,7 @@ pub async fn upload_file(
         let success_msg = format!("\n{success_msg}");
 
         term.write_line(&success_msg)
-            .expect("Error writing message to terminal.");
+            .or(Err(DcCmdError::IoError))?;
     }
 
     Ok(())

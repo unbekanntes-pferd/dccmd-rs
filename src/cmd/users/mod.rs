@@ -8,10 +8,10 @@ use dco3::{
     users::{CreateUserRequest, UserItem, UsersFilter},
     Dracoon, Groups, ListAllParams, Nodes, RangedItems, Rooms, Users,
 };
-use futures_util::{stream, StreamExt};
+
 use indicatif::{ProgressBar, ProgressStyle};
 use models::{CreateUserOptions, UsersSwitchAuthOptions};
-use tokio::sync::Mutex;
+use tokio::sync::Semaphore;
 use tracing::{error, info};
 
 mod auth;
@@ -263,48 +263,61 @@ impl UserCommandHandler {
             opts.limit().unwrap_or(500).into(),
         )?;
 
-        let results = self
+        let mut results = self
             .client
             .users()
             .get_users(Some(params), None, None)
             .await?;
 
-        if opts.all() {
-            let total = results.range.total;
-            let shared_results = Arc::new(Mutex::new(results.clone()));
+        if opts.all() && results.range.total > 500 {
+            let (tx, mut rx) = tokio::sync::mpsc::channel(MAX_CONCURRENT_REQUESTS);
+            let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_REQUESTS));
 
-            let reqs = (500..=total)
-                .step_by(500)
-                .map(|offset| {
-                    let params = build_params(opts.filter(), offset, opts.limit())
-                        .expect("failed to build params");
-                    self.client.users().get_users(Some(params), None, None)
-                })
-                .collect::<Vec<_>>();
+            let mut handles = Vec::new();
 
-            stream::iter(reqs)
-                .for_each_concurrent(5, |f| {
-                    let shared_results_clone = Arc::clone(&shared_results);
-                    async move {
-                        match f.await {
-                            Ok(mut users) => {
-                                let mut shared_results = shared_results_clone.lock().await;
-                                shared_results.items.append(&mut users.items);
-                            }
-                            Err(e) => {
-                                error!("Failed to fetch users: {}", e);
-                            }
-                        }
-                    }
-                })
-                .await;
+            (500..=results.range.total).step_by(500).for_each(|offset| {
+                let tx = tx.clone();
+                let dracoon_client = self.client.clone();
+                let filter = opts.filter().clone();
+                let semaphore = semaphore.clone();
+                let handle = tokio::spawn(async move {
+                    let _permit = semaphore.acquire().await.map_err(|_| {
+                        error!("Error acquiring semaphore permit");
+                        DcCmdError::IoError
+                    })?;
 
-            let results = shared_results.lock().await.clone();
+                    let params = build_params(&filter, offset, 500.into())?;
+                    let users = dracoon_client
+                        .users()
+                        .get_users(Some(params), None, None)
+                        .await?;
 
-            if print {
-                self.print_users(&results, opts.csv())?;
+                    tx.send(users).await.map_err(|e| {
+                        error!("Error sending users: {}", e);
+                        DcCmdError::IoError
+                    })?;
+
+                    Ok::<(), DcCmdError>(())
+                });
+
+                handles.push(handle);
+            });
+
+            drop(tx);
+
+            while let Some(users) = rx.recv().await {
+                results.items.extend(users.items);
             }
-        } else if print {
+
+            for handle in handles {
+                if let Err(e) = handle.await {
+                    error!("Error fetching users: {}", e);
+                    return Err(DcCmdError::IoError);
+                }
+            }
+        }
+
+        if print {
             self.print_users(&results, opts.csv())?;
         }
 
@@ -343,9 +356,13 @@ impl UserCommandHandler {
         user_id: Option<u64>,
     ) -> Result<(), DcCmdError> {
         let user: UserInfo = if let Some(user_name) = user_name {
-            self.find_user_by_username(&user_name).await?.into()
+            self.find_user_by_username(&user_name).await?.try_into()?
         } else if let Some(user_id) = user_id {
-            self.client.users().get_user(user_id, None).await?.into()
+            self.client
+                .users()
+                .get_user(user_id, None)
+                .await?
+                .try_into()?
         } else {
             error!("User name or user id must be provided");
             return Err(DcCmdError::InvalidArgument(

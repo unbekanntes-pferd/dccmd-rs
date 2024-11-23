@@ -103,7 +103,7 @@ impl UserCommandHandler {
                 let users: Vec<_> = users
                     .items
                     .iter()
-                    .map(|user| UserInfo::from(user.clone()))
+                    .flat_map(|user| UserInfo::try_from(user.clone()))
                     .collect();
                 let displayed = users.len();
                 let mut user_table = Table::new(users);

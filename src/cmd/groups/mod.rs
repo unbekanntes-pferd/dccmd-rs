@@ -8,7 +8,7 @@ use dco3::{
 };
 
 use futures_util::{stream, StreamExt};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Semaphore};
 use tracing::error;
 
 mod models;
@@ -16,9 +16,7 @@ mod print;
 mod users;
 
 use super::{
-    init_dracoon,
-    models::{build_params, DcCmdError, GroupsCommand, ListOptions},
-    utils::strings::format_success_message,
+    config::MAX_CONCURRENT_REQUESTS, init_dracoon, models::{build_params, DcCmdError, GroupsCommand, ListOptions}, utils::strings::format_success_message
 };
 
 pub use models::GroupsUsersCommand;
@@ -92,46 +90,58 @@ impl GroupCommandHandler {
             opts.limit().unwrap_or(500).into(),
         )?;
 
-        let groups = self.client.groups().get_groups(Some(params)).await?;
+        let mut groups = self.client.groups().get_groups(Some(params)).await?;
 
-        if opts.all() {
-            let total = groups.range.total;
-            let shared_results = Arc::new(Mutex::new(groups.clone()));
+        if opts.all() && groups.range.total > 500 {
+            let (tx, mut rx) = tokio::sync::mpsc::channel(MAX_CONCURRENT_REQUESTS);
+            let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_REQUESTS));
 
-            let reqs = (500..=total)
-                .step_by(500)
-                .map(|offset| {
-                    let params =
-                        build_params(opts.filter(), offset, None).expect("failed to build params");
+            let mut handles = Vec::new();
 
-                    self.client.groups().get_groups(Some(params))
-                })
-                .collect::<Vec<_>>();
+            (500..=groups.range.total).step_by(500).for_each(|offset| {
+                let tx = tx.clone();
+                let dracoon_client = self.client.clone();
+                let filter = opts.filter().clone();
+                let semaphore = semaphore.clone();
+                let handle = tokio::spawn(async move {
+                    let _permit = semaphore.acquire().await.map_err(|_| {
+                        error!("Error acquiring semaphore permit");
+                        DcCmdError::IoError
+                    })?;
 
-            stream::iter(reqs)
-                .for_each_concurrent(5, |f| {
-                    let shared_results_clone = Arc::clone(&shared_results);
-                    async move {
-                        match f.await {
-                            Ok(mut users) => {
-                                let mut shared_results = shared_results_clone.lock().await;
-                                shared_results.items.append(&mut users.items);
-                            }
-                            Err(e) => {
-                                error!("Failed to fetch users: {}", e);
-                            }
-                        }
-                    }
-                })
-                .await;
+                    let params = build_params(&filter, offset, 500.into())?;
+                    let users = dracoon_client
+                        .groups()
+                        .get_groups(Some(params))
+                        .await?;
 
-            let results = shared_results.lock().await.clone();
+                    tx.send(users).await.map_err(|e| {
+                        error!("Error sending users: {}", e);
+                        DcCmdError::IoError
+                    })?;
 
-            self.print_groups(results, opts.csv())?;
-        } else {
-            self.print_groups(groups, opts.csv())?;
-        }
+                    Ok::<(), DcCmdError>(())
+                });
 
+                handles.push(handle);
+            });
+
+            drop(tx);
+
+            while let Some(results) = rx.recv().await {
+                groups.items.extend(results.items);
+            }
+
+            for handle in handles {
+                if let Err(e) = handle.await {
+                    error!("Error fetching users: {}", e);
+                    return Err(DcCmdError::IoError);
+                }
+            }
+        } 
+        
+        self.print_groups(groups, opts.csv())?;
+        
         Ok(())
     }
 }

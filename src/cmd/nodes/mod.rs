@@ -284,7 +284,7 @@ pub async fn delete_node(
             );
             error!("{}", msg);
             term.write_line(&msg)
-                .expect("Error writing message to terminal.");
+                .map_err(|_|DcCmdError::IoError)?;
             return Ok(());
         }
         _ => (),
@@ -302,7 +302,7 @@ pub async fn delete_node(
         let msg = format_error_message("Deleting non-empty folder or room not allowed. Use --recursive flag to delete recursively.");
         error!("{}", msg);
         term.write_line(&msg)
-            .expect("Error writing message to terminal.");
+            .map_err(|_|DcCmdError::IoError)?;
         return Ok(());
     }
 
@@ -313,7 +313,7 @@ pub async fn delete_node(
         info!("{}", msg);
         let msg = format_success_message(&msg);
         term.write_line(&msg)
-            .expect("Error writing message to terminal.");
+            .map_err(|_|DcCmdError::IoError)?;
         Ok(())
     };
 
@@ -324,7 +324,7 @@ pub async fn delete_node(
             let confirmed = Confirm::new()
                 .with_prompt(format!("Do you really want to delete room {node_name}?"))
                 .interact()
-                .expect("Error reading user input.");
+                .map_err(|_|DcCmdError::IoError)?;
 
             if confirmed {
                 delete_node.await
@@ -332,7 +332,7 @@ pub async fn delete_node(
                 let msg = format_error_message("Deleting room not confirmed.");
                 error!("{}", msg);
                 term.write_line(&msg)
-                    .expect("Error writing message to terminal.");
+                    .map_err(|_|DcCmdError::IoError)?;
                 Ok(())
             }
         }
@@ -366,7 +366,7 @@ async fn delete_node_content(
             node_ids.len()
         ))
         .interact()
-        .expect("Error reading user input.");
+        .or(Err(DcCmdError::IoError))?;
 
     if confirmed {
         dracoon.nodes().delete_nodes(node_ids.into()).await?;
@@ -414,7 +414,7 @@ pub async fn create_folder(
     info!("{}", msg);
     let msg = format_success_message(&msg);
     term.write_line(&msg)
-        .expect("Error writing message to terminal.");
+        .map_err(|_|DcCmdError::IoError)?;
 
     Ok(())
 }
@@ -498,7 +498,7 @@ pub async fn create_room(
     info!("{}", msg);
     let msg = format_success_message(&msg);
     term.write_line(&msg)
-        .expect("Error writing message to terminal.");
+        .map_err(|_|DcCmdError::IoError)?;
 
     Ok(())
 }
@@ -558,7 +558,7 @@ pub async fn copy_nodes(
     info!("{}", msg);
     let msg = format_success_message(&msg);
     term.write_line(&msg)
-        .expect("Error writing message to terminal.");
+        .map_err(|_|DcCmdError::IoError)?;
 
     Ok(())
 }

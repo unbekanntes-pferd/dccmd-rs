@@ -302,7 +302,7 @@ fn get_or_create_config_dir() -> PathBuf {
         let config_dir = config_dir.join(APPLICATION_NAME);
 
         if !config_dir.exists() {
-            std::fs::create_dir_all(&config_dir).expect(&format!("Failed to write to config dir {config_dir}", config_dir = config_dir.display()));
+            std::fs::create_dir_all(&config_dir).unwrap_or_else(|_| panic!("Failed to write to config dir {config_dir}", config_dir = config_dir.display()));
         }
 
         config_dir
