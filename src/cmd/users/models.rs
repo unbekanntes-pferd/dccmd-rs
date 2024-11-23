@@ -71,11 +71,13 @@ pub fn display_option<T: Display>(o: &Option<T>) -> String {
 impl TryFrom<UserItem> for UserInfo {
     type Error = DcCmdError;
     fn try_from(user: UserItem) -> Result<Self, Self::Error> {
-
-        let last_login: Option<DateTime<Utc>> = if let Some(last_login) = user.last_login_success_at {
+        let last_login: Option<DateTime<Utc>> = if let Some(last_login) = user.last_login_success_at
+        {
             Some(
                 DateTime::parse_from_rfc3339(&last_login)
-                    .or(Err(DcCmdError::InvalidArgument("Failed to parse last login date".to_string())))?
+                    .or(Err(DcCmdError::InvalidArgument(
+                        "Failed to parse last login date".to_string(),
+                    )))?
                     .into(),
             )
         } else {
@@ -98,10 +100,13 @@ impl TryFrom<UserItem> for UserInfo {
 impl TryFrom<UserData> for UserInfo {
     type Error = DcCmdError;
     fn try_from(user: UserData) -> Result<Self, Self::Error> {
-        let last_login: Option<DateTime<Utc>> = if let Some(last_login) = user.last_login_success_at {
+        let last_login: Option<DateTime<Utc>> = if let Some(last_login) = user.last_login_success_at
+        {
             Some(
                 DateTime::parse_from_rfc3339(&last_login)
-                    .or(Err(DcCmdError::InvalidArgument("Failed to parse last login date".to_string())))?
+                    .or(Err(DcCmdError::InvalidArgument(
+                        "Failed to parse last login date".to_string(),
+                    )))?
                     .into(),
             )
         } else {
@@ -111,7 +116,9 @@ impl TryFrom<UserData> for UserInfo {
         let expire_at: Option<DateTime<Utc>> = if let Some(expire_at) = user.expire_at {
             Some(
                 DateTime::parse_from_rfc3339(&expire_at)
-                    .or(Err(DcCmdError::InvalidArgument("Failed to parse expire date".to_string())))?
+                    .or(Err(DcCmdError::InvalidArgument(
+                        "Failed to parse expire date".to_string(),
+                    )))?
                     .into(),
             )
         } else {

@@ -153,7 +153,6 @@ async fn init_dracoon(
 }
 
 pub async fn init_public_dracoon(url_path: &str) -> Result<Dracoon<Disconnected>, DcCmdError> {
-
     let base_url = parse_base_url(url_path.to_string())?;
 
     let dccmd_user_agent = format!("{}|{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));

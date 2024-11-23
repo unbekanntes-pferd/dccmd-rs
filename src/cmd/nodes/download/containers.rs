@@ -205,7 +205,9 @@ pub async fn download_container(
     let base_path = node
         .clone()
         .parent_path
-        .ok_or(DcCmdError::InvalidPath("Node has no parent path".to_string()))?
+        .ok_or(DcCmdError::InvalidPath(
+            "Node has no parent path".to_string(),
+        ))?
         .trim_end_matches('/')
         .to_string();
 
@@ -232,7 +234,9 @@ pub async fn download_container(
         let file_base_path = file
             .clone()
             .parent_path
-            .ok_or(DcCmdError::InvalidPath("File has no parent path".to_string()))?
+            .ok_or(DcCmdError::InvalidPath(
+                "File has no parent path".to_string(),
+            ))?
             .trim_start_matches(&base_path)
             .to_string();
         let parent = format!("/{}", node.name.clone());
@@ -243,14 +247,23 @@ pub async fn download_container(
 
         targets.insert(
             file.id,
-            target.to_str().ok_or(DcCmdError::InvalidPath(format!("Invalid target: {}", target.display())))?.to_string(),
+            target
+                .to_str()
+                .ok_or(DcCmdError::InvalidPath(format!(
+                    "Invalid target: {}",
+                    target.display()
+                )))?
+                .to_string(),
         );
     }
 
     download_files(
         dracoon,
         files,
-        target.to_str().ok_or(DcCmdError::InvalidPath(format!("Invalid target: {}", target.display())))?,
+        target.to_str().ok_or(DcCmdError::InvalidPath(format!(
+            "Invalid target: {}",
+            target.display()
+        )))?,
         Some(targets),
         velocity,
     )

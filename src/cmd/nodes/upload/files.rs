@@ -173,8 +173,7 @@ pub async fn upload_file(
             format_success_message(format!("Shared {file_name}.\n▶︎▶︎ {link}").as_str());
         let success_msg = format!("\n{success_msg}");
 
-        term.write_line(&success_msg)
-            .or(Err(DcCmdError::IoError))?;
+        term.write_line(&success_msg).or(Err(DcCmdError::IoError))?;
     }
 
     Ok(())

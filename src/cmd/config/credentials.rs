@@ -2,7 +2,6 @@ use keyring::Entry;
 
 use crate::cmd::models::DcCmdError;
 
-
 pub trait HandleCredentials {
     fn set_dracoon_env(&self, secret: &str) -> Result<(), DcCmdError>;
     fn get_dracoon_env(&self) -> Result<String, DcCmdError>;
