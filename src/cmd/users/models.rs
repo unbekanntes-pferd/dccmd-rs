@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use chrono::{Date, DateTime, Utc};
+use chrono::{DateTime, Utc};
 use dco3::users::{UserData, UserItem};
 use serde::Deserialize;
 use tabled::Tabled;

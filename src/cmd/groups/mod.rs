@@ -7,8 +7,7 @@ use dco3::{
     Dracoon, Groups, ListAllParams,
 };
 
-use futures_util::{stream, StreamExt};
-use tokio::sync::{Mutex, Semaphore};
+use tokio::sync::Semaphore;
 use tracing::error;
 
 mod models;
@@ -16,7 +15,10 @@ mod print;
 mod users;
 
 use super::{
-    config::MAX_CONCURRENT_REQUESTS, init_dracoon, models::{build_params, DcCmdError, GroupsCommand, ListOptions}, utils::strings::format_success_message
+    config::MAX_CONCURRENT_REQUESTS,
+    init_dracoon,
+    models::{build_params, DcCmdError, GroupsCommand, ListOptions},
+    utils::strings::format_success_message,
 };
 
 pub use models::GroupsUsersCommand;
@@ -110,10 +112,7 @@ impl GroupCommandHandler {
                     })?;
 
                     let params = build_params(&filter, offset, 500.into())?;
-                    let users = dracoon_client
-                        .groups()
-                        .get_groups(Some(params))
-                        .await?;
+                    let users = dracoon_client.groups().get_groups(Some(params)).await?;
 
                     tx.send(users).await.map_err(|e| {
                         error!("Error sending users: {}", e);
@@ -138,10 +137,10 @@ impl GroupCommandHandler {
                     return Err(DcCmdError::IoError);
                 }
             }
-        } 
-        
+        }
+
         self.print_groups(groups, opts.csv())?;
-        
+
         Ok(())
     }
 }
