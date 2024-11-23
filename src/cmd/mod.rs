@@ -1,9 +1,10 @@
+use config::{CLIENT_ID, CLIENT_SECRET};
 use console::Term;
 use keyring::Entry;
 use tracing::{debug, error, warn};
 
 use self::{
-    config::credentials::{get_client_credentials, HandleCredentials},
+    config::credentials::HandleCredentials,
     models::{DcCmdError, PasswordAuth},
     utils::strings::format_error_message,
 };
@@ -83,7 +84,6 @@ async fn init_dracoon(
     password_auth: Option<PasswordAuth>,
     is_transfer: bool,
 ) -> Result<Dracoon<Connected>, DcCmdError> {
-    let (client_id, client_secret) = get_client_credentials();
     let base_url = parse_base_url(url_path.to_string())?;
 
     // use multiple access tokens for transfers
@@ -93,8 +93,8 @@ async fn init_dracoon(
 
     let dracoon = DracoonBuilder::new()
         .with_base_url(base_url.clone())
-        .with_client_id(client_id)
-        .with_client_secret(client_secret)
+        .with_client_id(CLIENT_ID)
+        .with_client_secret(CLIENT_SECRET)
         .with_token_rotation(token_rotation)
         .with_user_agent(dccmd_user_agent)
         .build()?;
@@ -124,8 +124,8 @@ async fn init_dracoon(
                     debug!("Error storing refresh token: {}", err);
                     error!("Failed to store refresh token.");
                 }
-                return Ok(dracoon)
-            },
+                return Ok(dracoon);
+            }
             Err(ref e @ DracoonClientError::Http(ref res)) => {
                 error!("Error connecting with refresh token: {}", e);
                 debug!("Response: {:?}", res);
@@ -153,15 +153,15 @@ async fn init_dracoon(
 }
 
 pub async fn init_public_dracoon(url_path: &str) -> Result<Dracoon<Disconnected>, DcCmdError> {
-    let (client_id, client_secret) = get_client_credentials();
+
     let base_url = parse_base_url(url_path.to_string())?;
 
     let dccmd_user_agent = format!("{}|{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
 
     let dracoon = DracoonBuilder::new()
         .with_base_url(base_url.clone())
-        .with_client_id(client_id)
-        .with_client_secret(client_secret)
+        .with_client_id(CLIENT_ID)
+        .with_client_secret(CLIENT_SECRET)
         .with_user_agent(dccmd_user_agent)
         .build()?;
 

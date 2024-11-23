@@ -8,7 +8,7 @@ use dco3::{
     users::{CreateUserRequest, UserItem, UsersFilter},
     Dracoon, Groups, ListAllParams, Nodes, RangedItems, Rooms, Users,
 };
-use futures_util::{future::join_all, stream, StreamExt};
+use futures_util::{stream, StreamExt};
 use indicatif::{ProgressBar, ProgressStyle};
 use models::{CreateUserOptions, UsersSwitchAuthOptions};
 use tokio::sync::Mutex;
@@ -20,6 +20,7 @@ mod models;
 mod print;
 
 use super::{
+    config::MAX_CONCURRENT_REQUESTS,
     init_dracoon,
     models::{build_params, DcCmdError, ListOptions, UsersCommand},
     utils::strings::{build_node_path, format_success_message, parse_path},
@@ -31,6 +32,7 @@ use crate::cmd::users::models::UserImport;
 
 use self::models::UserInfo;
 
+#[derive(Clone)]
 pub struct UserCommandHandler {
     client: Dracoon<Connected>,
     term: Term,
@@ -73,24 +75,9 @@ impl UserCommandHandler {
                 DcCmdError::InvalidArgument(format!("Invalid CSV format. Expected fields: first_name, last_name, email, login (optional), mfa_enabled (optional).\n{e})"))
             })?;
 
-        // build requests per import
-        let reqs = imports
-            .iter()
-            .map(|import| {
-                self.create_user(CreateUserOptions::new(
-                    &import.first_name,
-                    &import.last_name,
-                    &import.email,
-                    import.login.as_deref(),
-                    oidc_id,
-                    import.mfa_enabled.unwrap_or(false),
-                    true,
-                    None,
-                ))
-            })
-            .collect::<Vec<_>>();
+        let user_count = imports.len();
 
-        let progress_bar = ProgressBar::new(reqs.len() as u64);
+        let progress_bar = ProgressBar::new(user_count as u64);
         progress_bar.set_style(
             ProgressStyle::default_bar()
                 .template(
@@ -101,31 +88,62 @@ impl UserCommandHandler {
         );
 
         let errors = Arc::new(AtomicU32::new(0));
+        let semaphore = Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_REQUESTS));
+        let mut handles = Vec::new();
 
-        stream::iter(reqs)
-            .chunks(5)
-            .for_each_concurrent(None, |f| {
-                let errors = Arc::clone(&errors);
-                let progress_bar = progress_bar.clone();
-                async move {
-                    let results = join_all(f).await;
-                    results.iter().filter(|r| r.is_err()).for_each(|r| {
-                        error!("Failed to import user: {:?}", r);
-                    });
-                    #[allow(clippy::cast_possible_truncation)]
-                    let err_count = results.iter().filter(|r| r.is_err()).count() as u32;
-                    let prev_err_count =
-                        errors.fetch_add(err_count, std::sync::atomic::Ordering::Relaxed);
-                    progress_bar.inc(results.len() as u64);
-                    if prev_err_count > 0 {
-                        error!("Current error count: {}", prev_err_count);
+        for import in imports {
+            let handler = self.clone();
+            let semaphore = semaphore.clone();
+            let errors = errors.clone();
+            let progress_bar = progress_bar.clone();
+
+            let handle = tokio::spawn(async move {
+                let _permit = semaphore.acquire().await.map_err(|e| {
+                    error!("Failed to acquire semaphore: {}", e);
+                    DcCmdError::IoError
+                })?;
+
+                match handler
+                    .create_user(CreateUserOptions::new(
+                        &import.first_name,
+                        &import.last_name,
+                        &import.email,
+                        import.login.as_deref(),
+                        oidc_id,
+                        import.mfa_enabled.unwrap_or(false),
+                        true,
+                        None,
+                    ))
+                    .await
+                {
+                    Ok(_) => {
+                        progress_bar.inc(1);
+                    }
+                    Err(e) => {
+                        error!("Failed to import user: {e}");
+                        let prev_err_count =
+                            errors.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        if prev_err_count > 0 {
+                            error!("Current error count: {prev_err_count}");
+                        }
+                        progress_bar.inc(1);
                     }
                 }
-            })
-            .await;
 
-        #[allow(clippy::arithmetic_side_effects, clippy::cast_possible_truncation)]
-        let imported = imports.len() as u32 - errors.load(std::sync::atomic::Ordering::Relaxed);
+                Ok::<(), DcCmdError>(())
+            });
+
+            handles.push(handle);
+        }
+
+        for handle in handles {
+            if let Err(e) = handle.await {
+                error!("Error uploading file: {}", e);
+                return Err(DcCmdError::IoError);
+            }
+        }
+
+        let imported = user_count - errors.load(std::sync::atomic::Ordering::Relaxed) as usize;
 
         let msg = format!("{imported} users imported");
 

@@ -48,7 +48,7 @@ async fn main() {
             velocity,
             recursive,
             share_password,
-            include_rooms
+            include_rooms,
         } => {
             download(
                 source,
