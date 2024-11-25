@@ -152,6 +152,7 @@ pub async fn handle_groups_cmd(cmd: GroupsCommand, term: Term) -> Result<(), DcC
         | GroupsCommand::Rm { target, .. } => target,
         GroupsCommand::Users { cmd } => match cmd {
             GroupsUsersCommand::Ls { target, .. } => target,
+            GroupsUsersCommand::Add { target, .. } => target,
         },
     };
 

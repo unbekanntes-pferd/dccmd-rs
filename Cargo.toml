@@ -1,6 +1,6 @@
 [package]
 name = "dccmd-rs"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2021"
 description = "A command line client for DRACOON"
 authors = ["Octavio Simone"]
@@ -38,11 +38,16 @@ serde = {version = "1", features = ["derive"]}
 csv = "1"
 dashmap = "6"
 dirs = "5"
+unicode-normalization = "0.1"
 
 # credentials
-keyring = "2"
+keyring = { version = "3", features = ["windows-native", "apple-native", "linux-native"]}
 
 [package.metadata.generate-rpm]
 assets = [
     { source = "target/release/dccmd-rs", dest = "/usr/bin/dccmd-rs", mode = "755" },
 ]
+
+# pinned because chrono is not compatible yet
+[dependencies.windows-targets]
+version = "0.52.6"

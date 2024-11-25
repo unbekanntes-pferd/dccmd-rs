@@ -16,6 +16,7 @@ use dco3::{
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 use tracing::{debug, error, info};
+use unicode_normalization::UnicodeNormalization;
 
 use crate::cmd::{
     config::MAX_CONCURRENT_REQUESTS,
@@ -37,14 +38,11 @@ pub async fn upload_container(
     // create folder first
     let root_name = source
         .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .map(|n| n.nfc().collect::<String>())
         .ok_or(DcCmdError::InvalidPath(
             source.to_string_lossy().to_string(),
-        ))?
-        .to_str()
-        .ok_or(DcCmdError::InvalidPath(
-            source.to_string_lossy().to_string(),
-        ))?
-        .to_string();
+        ))?;
 
     if source.is_relative() {
         error!("Only absolute paths are supported.");
@@ -89,7 +87,7 @@ pub async fn upload_container(
     let folders = group_folders_by_depth(folders);
 
     let created_nodes = Arc::new(DashMap::new());
-    let root_folder_path = format!("/{}", &root_name);
+    let root_folder_path: String = format!("/{}", &root_name).nfc().collect();
 
     created_nodes.insert(root_folder_path.clone(), parent_id);
 
@@ -107,36 +105,44 @@ pub async fn upload_container(
             let target = target.clone();
             let progress_bar = progress_bar.clone();
             let root_path = root_path.clone();
+            let source = source.clone();
 
             debug!("Created nodes: {:?}", created_nodes);
 
             let handle = tokio::spawn(async move {
-                let _permit = semaphore.acquire().await;
+                let _permit = semaphore.acquire().await.map_err(|_| {
+                    error!("Failed to acquire semaphore permit.");
+                    DcCmdError::IoError
+                })?;
 
                 let (path, _) = folder;
                 let parent_path = path.parent().unwrap_or_else(|| Path::new("/"));
 
                 let parent_path = parent_path.to_string_lossy().to_string();
+                let parent_path = parent_path.nfc().collect::<String>();
                 let normalized_path = normalize_path(&path, &root_path);
                 let normalized_parent = normalized_path.parent().unwrap_or_else(|| Path::new("/"));
                 let normalized_parent = normalized_parent.to_string_lossy().to_string();
+                let normalized_parent = normalized_parent.nfc().collect::<String>();
                 debug!("Normalized path: {}", normalized_parent);
                 debug!("Root and path: {:?} {:?}", root_path, path);
-                let parent_id = created_nodes.get(&normalized_parent).ok_or_else(|| {
+                let parent_id = *created_nodes.get(&normalized_parent).ok_or_else(|| {
                     error!("Parent folder not found: {normalized_parent}");
                     DcCmdError::InvalidPath(parent_path.clone())
                 })?;
                 let name = path
+                    .clone()
                     .file_name()
-                    .ok_or(DcCmdError::InvalidPath(path.to_string_lossy().to_string()))?
-                    .to_str()
-                    .ok_or(DcCmdError::InvalidPath(path.to_string_lossy().to_string()))?
-                    .to_string();
-                let folder = CreateFolderRequest::builder(&name, *parent_id).build();
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .map(|n| n.nfc().collect::<String>())
+                    .ok_or(DcCmdError::InvalidPath(
+                        source.to_string_lossy().to_string(),
+                    ))?;
+                let folder = CreateFolderRequest::builder(&name, parent_id).build();
 
                 match dracoon.nodes().create_folder(folder).await {
                     Ok(folder) => {
-                        let folder_path = format!("{normalized_parent}/{name}");
+                        let folder_path = format!("{normalized_parent}/{name}").nfc().collect();
                         created_nodes.insert(folder_path, folder.id);
                         progress_bar.inc(1);
                     }
@@ -146,7 +152,9 @@ pub async fn upload_container(
                             target.parent_path.unwrap_or("/".into()),
                             target.name
                         );
-                        let path = format!("{target_path}{normalized_parent}/{name}/");
+                        let path: String = format!("{target_path}{normalized_parent}/{name}/")
+                            .nfc()
+                            .collect();
                         let folder = dracoon
                             .nodes()
                             .get_node_from_path(&path)
@@ -155,7 +163,7 @@ pub async fn upload_container(
                                 error!("Conflict - folder not found: {path}");
                                 e
                             })?;
-                        let folder_path = format!("{normalized_parent}/{name}");
+                        let folder_path = format!("{normalized_parent}/{name}").nfc().collect();
                         created_nodes.insert(folder_path, folder.id);
                         progress_bar.inc(1);
                     }
@@ -202,7 +210,7 @@ fn create_file_map(
             let file_rel_path = normalize_path(&file, root_path);
 
             let file_parent = file_rel_path.parent().unwrap_or_else(|| Path::new("/"));
-            let file_parent = file_parent.to_string_lossy().to_string();
+            let file_parent = file_parent.to_string_lossy().nfc().collect::<String>();
 
             // get node id of parent folder
             let node_id = *created_nodes.get(&file_parent).ok_or_else(|| {
@@ -285,21 +293,6 @@ async fn create_root_folder(
                     e
                 })?
         }
-        Err(e) if e.is_conflict() => {
-            let path = format!("{node_parent}{name}");
-            debug!("Path: {}", path);
-            dracoon
-                .nodes()
-                .get_node_from_path(&path)
-                .await?
-                .ok_or_else(|| {
-                    error!(
-                        "Failed to create folder (conflict). Error finding root folder: {:?}",
-                        e
-                    );
-                    e
-                })?
-        }
         Err(e) => {
             error!("Not a conflict - error creating root folder: {:?}", e);
             debug!("Is conflict: {}", e.is_conflict());
@@ -322,30 +315,43 @@ fn group_folders_by_depth(folders: Vec<PathBuf>) -> Vec<Vec<(PathBuf, usize)>> {
 }
 
 fn normalize_path(path: &Path, root_path: &Path) -> PathBuf {
-    // Convert to forward-slash strings and remove drive letters if present
+    // Normalize Windows paths: replace `\` with `/` and strip drive letters (if any)
     let path_str = path
         .to_string_lossy()
         .replace('\\', "/")
         .split(':')
-        .last()
+        .last() // Remove drive letters, e.g., "C:"
         .unwrap_or("")
-        .to_string();
+        .nfc() // Normalize to NFC
+        .collect::<String>();
+
     let root_str = root_path
         .to_string_lossy()
         .replace('\\', "/")
         .split(':')
         .last()
         .unwrap_or("")
-        .to_string();
+        .nfc()
+        .collect::<String>();
 
-    // If path is same as root, return /
+    // Special case: if the path matches the root, return "/"
     if path_str == root_str {
         return PathBuf::from("/");
     }
 
-    // Strip root prefix and ensure leading slash
-    let normalized = path_str.strip_prefix(&root_str).unwrap_or(&path_str);
-    PathBuf::from(&format!("/{}", normalized.trim_start_matches('/')))
+    // Strip the root prefix and normalize components
+    let stripped = path_str
+        .strip_prefix(&root_str)
+        .unwrap_or(&path_str)
+        .trim_start_matches('/'); // Remove leading slash after stripping
+
+    let normalized = stripped
+        .split('/') // Split path into components
+        .map(|component| component.nfc().collect::<String>()) // Normalize each component to NFC
+        .collect::<Vec<_>>()
+        .join("/"); // Rebuild the normalized path
+
+    PathBuf::from(format!("/{}", normalized))
 }
 
 #[cfg(test)]
@@ -447,5 +453,22 @@ mod tests {
         let path = PathBuf::from("/root/base/folder1/folder2");
         let parent = path.parent().unwrap();
         assert_eq!(normalize_path(parent, &root), PathBuf::from("/folder1"));
+    }
+
+    #[test]
+    fn test_mac_path_normalization() {
+        let root = PathBuf::from("/root");
+
+        // Simulate a macOS-style NFD input path
+        let path_nfd = PathBuf::from("/root/fo\u{308}lde\u{301}r"); // "földér" in NFD
+
+        // Normalize the path
+        let normalized = normalize_path(&path_nfd, &root);
+
+        // The output should normalize to NFC
+        assert_eq!(
+            normalized,
+            PathBuf::from("/földér") // "földér" in NFC
+        );
     }
 }

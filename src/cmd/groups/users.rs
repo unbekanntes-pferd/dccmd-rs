@@ -1,10 +1,14 @@
 use dco3::{
-    groups::{Group, GroupsFilter},
+    groups::{ChangeGroupMembersRequest, Group, GroupsFilter},
     Groups, ListAllParams,
 };
 use tracing::error;
 
-use crate::cmd::models::{build_params, DcCmdError};
+use crate::cmd::{
+    models::{build_params, DcCmdError},
+    users::UserCommandHandler,
+    utils::strings::format_success_message,
+};
 
 use super::{models::GroupUsersOptions, GroupCommandHandler, GroupsUsersCommand};
 
@@ -24,6 +28,18 @@ pub async fn handle_group_users_cmd(
             let group_name = target.split('/').last();
             let options = GroupUsersOptions::new(filter, offset, limit, all, csv);
             handler.list_group_users(group_name, options).await
+        }
+
+        GroupsUsersCommand::Add {
+            target: _,
+            group_name,
+            group_id,
+            user_name,
+            user_id,
+        } => {
+            handler
+                .add_group_user(group_name, group_id, user_name, user_id)
+                .await
         }
     }
 }
@@ -96,11 +112,54 @@ impl GroupCommandHandler {
             .into_iter()
             .find(|g| g.name == group_name)
         else {
-            error!("No group found with username: {group_name}");
+            error!("No group found with name: {group_name}");
             let msg = format!("No group found with name: {group_name}");
             return Err(DcCmdError::InvalidArgument(msg));
         };
 
         Ok(group)
+    }
+
+    async fn add_group_user(
+        &self,
+        group_name: Option<String>,
+        group_id: Option<u64>,
+        user_name: Option<String>,
+        user_id: Option<u64>,
+    ) -> Result<(), DcCmdError> {
+        let group_id = if let Some(id) = group_id {
+            id
+        } else if let Some(name) = group_name {
+            self.get_group_by_name(&name).await?.id
+        } else {
+            return Err(DcCmdError::InvalidArgument(
+                "Either group name or id must be provided".to_string(),
+            ));
+        };
+
+        let user_id = if let Some(id) = user_id {
+            id
+        } else if let Some(name) = user_name {
+            let client = self.client.clone();
+            let term = self.term.clone();
+            let user_cmd_handler = UserCommandHandler::new_from_client(client, term);
+            user_cmd_handler.find_user_by_username(&name).await?.id
+        } else {
+            return Err(DcCmdError::InvalidArgument(
+                "Either user name or id must be provided".to_string(),
+            ));
+        };
+
+        let req = ChangeGroupMembersRequest::new(vec![user_id]);
+
+        self.client.groups().add_group_users(group_id, req).await?;
+
+        let msg = format!("User {user_id} added to group {group_id}");
+
+        self.term
+            .write_line(format_success_message(&msg).as_str())
+            .map_err(|_| DcCmdError::IoError)?;
+
+        Ok(())
     }
 }

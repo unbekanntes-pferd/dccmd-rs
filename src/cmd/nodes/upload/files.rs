@@ -17,6 +17,7 @@ use dco3::{
 };
 use indicatif::{ProgressBar, ProgressStyle};
 use tracing::{debug, error, info, warn};
+use unicode_normalization::UnicodeNormalization;
 
 use crate::cmd::{
     config::{DEFAULT_CHUNK_SIZE, DEFAULT_CONCURRENT_MULTIPLIER, MAX_VELOCITY, MIN_VELOCITY},
@@ -329,13 +330,11 @@ pub async fn upload_files(
 fn get_file_meta(file_meta: &Metadata, file_path: &Path) -> Result<FileMeta, DcCmdError> {
     let file_name = file_path
         .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .map(|n| n.nfc().collect::<String>())
         .ok_or(DcCmdError::InvalidPath(
             file_path.to_string_lossy().to_string(),
-        ))?
-        .to_owned()
-        .to_string_lossy()
-        .as_ref()
-        .to_string();
+        ))?;
 
     let timestamp_modification = file_meta
         .modified()
