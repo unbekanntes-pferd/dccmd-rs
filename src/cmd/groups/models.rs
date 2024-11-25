@@ -74,6 +74,21 @@ pub enum GroupsUsersCommand {
         #[clap(long)]
         csv: bool,
     },
+    Add {
+        target: String,
+
+        #[clap(long)]
+        group_name: Option<String>,
+
+        #[clap(long)]
+        group_id: Option<u64>,
+
+        #[clap(long)]
+        user_name: Option<String>,
+
+        #[clap(long)]
+        user_id: Option<u64>,
+    }
 }
 
 pub struct GroupUsersOptions {
