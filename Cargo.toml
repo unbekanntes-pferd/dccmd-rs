@@ -38,6 +38,7 @@ serde = {version = "1", features = ["derive"]}
 csv = "1"
 dashmap = "6"
 dirs = "5"
+unicode-normalization = "0.1"
 
 # credentials
 keyring = "2"
