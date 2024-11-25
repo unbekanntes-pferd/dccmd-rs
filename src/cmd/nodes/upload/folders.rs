@@ -461,10 +461,10 @@ mod tests {
 
         // Simulate a macOS-style NFD input path
         let path_nfd = PathBuf::from("/root/fo\u{308}lde\u{301}r"); // "földér" in NFD
-    
+
         // Normalize the path
         let normalized = normalize_path(&path_nfd, &root);
-    
+
         // The output should normalize to NFC
         assert_eq!(
             normalized,

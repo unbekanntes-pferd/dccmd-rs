@@ -88,7 +88,7 @@ pub enum GroupsUsersCommand {
 
         #[clap(long)]
         user_id: Option<u64>,
-    }
+    },
 }
 
 pub struct GroupUsersOptions {

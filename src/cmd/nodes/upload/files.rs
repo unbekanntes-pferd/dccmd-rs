@@ -332,7 +332,9 @@ fn get_file_meta(file_meta: &Metadata, file_path: &Path) -> Result<FileMeta, DcC
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())
         .map(|n| n.nfc().collect::<String>())
-        .ok_or(DcCmdError::InvalidPath(file_path.to_string_lossy().to_string()))?;
+        .ok_or(DcCmdError::InvalidPath(
+            file_path.to_string_lossy().to_string(),
+        ))?;
 
     let timestamp_modification = file_meta
         .modified()
