@@ -41,9 +41,13 @@ dirs = "5"
 unicode-normalization = "0.1"
 
 # credentials
-keyring = "2"
+keyring = { version = "3", features = ["windows-native", "apple-native", "linux-native"]}
 
 [package.metadata.generate-rpm]
 assets = [
     { source = "target/release/dccmd-rs", dest = "/usr/bin/dccmd-rs", mode = "755" },
 ]
+
+# pinned because chrono is not compatible yet
+[dependencies.windows-targets]
+version = "0.52.6"

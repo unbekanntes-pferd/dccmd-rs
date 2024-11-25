@@ -26,7 +26,7 @@ impl HandleCredentials for Entry {
             return Err(DcCmdError::InvalidAccount);
         }
 
-        match self.delete_password() {
+        match self.delete_credential() {
             Ok(()) => Ok(()),
             Err(_) => Err(DcCmdError::CredentialDeletionFailed),
         }
