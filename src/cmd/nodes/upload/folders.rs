@@ -19,7 +19,7 @@ use tracing::{debug, error, info};
 use unicode_normalization::UnicodeNormalization;
 
 use crate::cmd::{
-    config::MAX_CONCURRENT_REQUESTS,
+    config::{MAX_CONCURRENT_REQUESTS, MIN_VELOCITY},
     models::DcCmdError,
     nodes::{models::CmdUploadOptions, upload::files::upload_files},
 };
@@ -91,7 +91,12 @@ pub async fn upload_container(
 
     created_nodes.insert(root_folder_path.clone(), parent_id);
 
-    let semaphore = Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_REQUESTS));
+    let velocity = opts
+    .velocity
+    .unwrap_or(MIN_VELOCITY)
+    .clamp(MIN_VELOCITY, MAX_CONCURRENT_REQUESTS as u8);
+
+    let semaphore = Arc::new(tokio::sync::Semaphore::new(velocity as usize));
 
     let root_path = source.parent().unwrap_or_else(|| Path::new("/")).to_owned();
 
