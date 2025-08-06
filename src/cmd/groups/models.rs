@@ -1,14 +1,14 @@
 use clap::Parser;
 use dco3::groups::{Group, GroupUser};
-use tabled::Tabled;
+use tabled::{Tabled, derive::display};
 
 #[derive(Tabled)]
+#[tabled(display(Option, "display::option", "N/A"))]
 pub struct GroupInfo {
     pub id: String,
     pub name: String,
     pub created_at: String,
     pub cnt_users: u64,
-    #[tabled(display_with = "crate::cmd::users::display_option")]
     pub updated_at: Option<String>,
 }
 

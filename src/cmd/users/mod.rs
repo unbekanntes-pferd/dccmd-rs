@@ -26,8 +26,6 @@ use super::{
     utils::strings::{build_node_path, format_success_message, parse_path},
 };
 
-pub use models::display_option;
-
 use crate::cmd::users::models::UserImport;
 
 use self::models::UserInfo;
