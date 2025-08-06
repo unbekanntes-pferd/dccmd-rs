@@ -19,7 +19,7 @@ use tracing::{debug, error, info};
 use unicode_normalization::UnicodeNormalization;
 
 use crate::cmd::{
-    config::MAX_CONCURRENT_REQUESTS,
+    config::{MAX_CONCURRENT_REQUESTS, MIN_VELOCITY},
     models::DcCmdError,
     nodes::{models::CmdUploadOptions, upload::files::upload_files},
 };
@@ -87,11 +87,16 @@ pub async fn upload_container(
     let folders = group_folders_by_depth(folders);
 
     let created_nodes = Arc::new(DashMap::new());
-    let root_folder_path: String = format!("/{}", &root_name).nfc().collect();
+    let root_folder_path: String = format!("/{root_name}").nfc().collect();
 
     created_nodes.insert(root_folder_path.clone(), parent_id);
 
-    let semaphore = Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_REQUESTS));
+    let velocity = opts
+        .velocity
+        .unwrap_or(MIN_VELOCITY)
+        .clamp(MIN_VELOCITY, MAX_CONCURRENT_REQUESTS as u8);
+
+    let semaphore = Arc::new(tokio::sync::Semaphore::new(velocity as usize));
 
     let root_path = source.parent().unwrap_or_else(|| Path::new("/")).to_owned();
 
@@ -320,7 +325,7 @@ fn normalize_path(path: &Path, root_path: &Path) -> PathBuf {
         .to_string_lossy()
         .replace('\\', "/")
         .split(':')
-        .last() // Remove drive letters, e.g., "C:"
+        .next_back() // Remove drive letters, e.g., "C:"
         .unwrap_or("")
         .nfc() // Normalize to NFC
         .collect::<String>();
@@ -329,7 +334,7 @@ fn normalize_path(path: &Path, root_path: &Path) -> PathBuf {
         .to_string_lossy()
         .replace('\\', "/")
         .split(':')
-        .last()
+        .next_back()
         .unwrap_or("")
         .nfc()
         .collect::<String>();
@@ -351,7 +356,7 @@ fn normalize_path(path: &Path, root_path: &Path) -> PathBuf {
         .collect::<Vec<_>>()
         .join("/"); // Rebuild the normalized path
 
-    PathBuf::from(format!("/{}", normalized))
+    PathBuf::from(format!("/{normalized}"))
 }
 
 #[cfg(test)]

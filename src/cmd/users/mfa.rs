@@ -134,8 +134,7 @@ impl UserCommandHandler {
 
         self.term
             .write_line(&format_success_message(&format!(
-                "Enforced MFA for {} users successfully.",
-                success_count
+                "Enforced MFA for {success_count} users successfully.",
             )))
             .map_err(|_| DcCmdError::IoError)?;
 

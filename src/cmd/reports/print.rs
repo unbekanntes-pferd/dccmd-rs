@@ -126,8 +126,7 @@ impl ReportsCommandHandler {
 
         let mut table = tabled::Table::new(events);
         table.with(Style::modern()).with(Panel::footer(format!(
-            "{} events ({} total)",
-            event_count, total_events
+            "{event_count} events ({total_events} total)"
         )));
 
         self.term
@@ -161,7 +160,7 @@ impl ReportsCommandHandler {
         let mut table = tabled::Table::new(perms);
         table
             .with(Style::modern())
-            .with(Panel::footer(format!("{} permissions", permission_count)));
+            .with(Panel::footer(format!("{permission_count} permissions")));
         self.term
             .write_line(&table.to_string())
             .map_err(|_| DcCmdError::IoError)?;

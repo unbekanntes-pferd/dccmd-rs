@@ -28,8 +28,7 @@ impl TryFrom<String> for AuthMethod {
             "oidc" | "openid" => Ok(AuthMethod::Oidc),
             "ad" | "active_directory" | "activedirectory" => Ok(AuthMethod::Ad),
             _ => Err(DcCmdError::InvalidArgument(format!(
-                "Invalid auth method: {}",
-                value
+                "Invalid auth method: {value}",
             ))),
         }
     }

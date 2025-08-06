@@ -1,9 +1,7 @@
-use std::fmt::Display;
-
 use chrono::{DateTime, Utc};
 use dco3::users::{UserData, UserItem};
 use serde::Deserialize;
-use tabled::Tabled;
+use tabled::{derive::display, Tabled};
 use tracing::debug;
 
 use crate::cmd::models::DcCmdError;
@@ -47,25 +45,16 @@ impl<'o> CreateUserOptions<'o> {
 }
 
 #[derive(Tabled)]
+#[tabled(display(Option, "display::option", "N/A"))]
 pub struct UserInfo {
     pub id: u64,
     pub first_name: String,
     pub last_name: String,
     pub username: String,
-    #[tabled(display_with = "display_option")]
     pub email: Option<String>,
-    #[tabled(display_with = "display_option")]
     pub expire_at: Option<DateTime<Utc>>,
     pub is_locked: bool,
-    #[tabled(display_with = "display_option")]
     pub last_login_at: Option<DateTime<Utc>>,
-}
-
-pub fn display_option<T: Display>(o: &Option<T>) -> String {
-    match o {
-        Some(v) => v.to_string(),
-        None => "N/A".to_string(),
-    }
 }
 
 impl TryFrom<UserItem> for UserInfo {

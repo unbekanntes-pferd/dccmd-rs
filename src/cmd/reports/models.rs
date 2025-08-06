@@ -29,7 +29,7 @@ impl EventOptions {
         let start_date = start_date
             .map(|s| {
                 NaiveDate::parse_from_str(&s, "%Y-%m-%d")
-                    .map_err(|e| DcCmdError::InvalidArgument(format!("Invalid start date: {}", e)))
+                    .map_err(|e| DcCmdError::InvalidArgument(format!("Invalid start date: {e}")))
                     .map(|date| {
                         let time = NaiveTime::from_hms_opt(0, 0, 0).unwrap(); // Midnight
                         let naive_datetime = date.and_time(time);
@@ -41,7 +41,7 @@ impl EventOptions {
         let end_date = end_date
             .map(|s| {
                 NaiveDate::parse_from_str(&s, "%Y-%m-%d")
-                    .map_err(|e| DcCmdError::InvalidArgument(format!("Invalid end date: {}", e)))
+                    .map_err(|e| DcCmdError::InvalidArgument(format!("Invalid end date: {e}")))
                     .map(|date| {
                         let time = NaiveTime::from_hms_opt(23, 59, 59).unwrap(); // End of day
                         let naive_datetime = date.and_time(time);

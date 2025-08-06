@@ -48,7 +48,7 @@ pub async fn upload_public_file(source: PathBuf, target: String) -> Result<(), D
 
     let access_key = target
         .split('/')
-        .last()
+        .next_back()
         .ok_or(DcCmdError::InvalidPath(target.clone()))?;
 
     let upload_share = dracoon.public().get_public_upload_share(access_key).await?;

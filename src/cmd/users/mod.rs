@@ -26,8 +26,6 @@ use super::{
     utils::strings::{build_node_path, format_success_message, parse_path},
 };
 
-pub use models::display_option;
-
 use crate::cmd::users::models::UserImport;
 
 use self::models::UserInfo;
@@ -376,7 +374,7 @@ impl UserCommandHandler {
     }
 
     pub async fn find_user_by_username(&self, user_name: &str) -> Result<UserItem, DcCmdError> {
-        let user_filter = UsersFilter::username_contains(user_name);
+        let user_filter = UsersFilter::username_equals(user_name);
         let params = ListAllParams::builder().with_filter(user_filter).build();
 
         let results = self

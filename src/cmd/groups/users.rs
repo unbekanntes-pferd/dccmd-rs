@@ -25,7 +25,7 @@ pub async fn handle_group_users_cmd(
             all,
             csv,
         } => {
-            let group_name = target.split('/').last();
+            let group_name = target.split('/').next_back();
             let options = GroupUsersOptions::new(filter, offset, limit, all, csv);
             handler.list_group_users(group_name, options).await
         }
