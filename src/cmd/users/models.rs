@@ -1,9 +1,7 @@
-use std::fmt::Display;
-
 use chrono::{DateTime, Utc};
 use dco3::users::{UserData, UserItem};
 use serde::Deserialize;
-use tabled::{Tabled, derive::display};
+use tabled::{derive::display, Tabled};
 use tracing::debug;
 
 use crate::cmd::models::DcCmdError;

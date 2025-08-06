@@ -119,7 +119,7 @@ pub async fn download_public_file(
 
     let access_key = source
         .split('/')
-        .last()
+        .next_back()
         .ok_or(DcCmdError::InvalidPath(source.clone()))?;
 
     let dracoon = init_public_dracoon(&source).await?;

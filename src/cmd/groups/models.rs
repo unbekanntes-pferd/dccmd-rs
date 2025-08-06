@@ -1,6 +1,6 @@
 use clap::Parser;
 use dco3::groups::{Group, GroupUser};
-use tabled::{Tabled, derive::display};
+use tabled::{derive::display, Tabled};
 
 #[derive(Tabled)]
 #[tabled(display(Option, "display::option", "N/A"))]
