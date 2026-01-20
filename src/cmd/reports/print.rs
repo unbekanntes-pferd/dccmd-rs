@@ -169,7 +169,7 @@ impl ReportsCommandHandler {
     }
 
     fn print_permissions_csv(&self, perms: AuditNodeList) -> Result<(), DcCmdError> {
-        let header = "nodeId,nodeName,nodeParentPath,userId,userLogin,userFirstName,userLastName,manage,read,create,change,delete,manageDownloadShare,manageUploadShare,readRecycleBin,restoreRecycleBin,deleteRecycleBin";
+        let header = "nodeId,nodeName,nodeParentPath,userId,userLogin,userFirstName,userLastName,manage,read,create,change,delete,manageDownloadShare,manageUploadShare,readRecycleBin,restoreRecycleBin,deleteRecycleBin,nodeUpdatedAt,nodeUpdatedBy";
 
         self.term
             .write_line(header)
@@ -198,9 +198,19 @@ impl ReportsCommandHandler {
             let read_recycle_bin = user_perms.permissions.read_recycle_bin.to_string();
             let restore_recycle_bin = user_perms.permissions.restore_recycle_bin.to_string();
             let delete_recycle_bin = user_perms.permissions.delete_recycle_bin.to_string();
+            let updated_at = if let Some(updated_at) = perm.node_updated_at {
+                updated_at.to_rfc3339()
+            } else {
+                "N/A".to_string()
+            };
+            let updated_by = if let Some(updated_by) = perm.node_updated_by {
+                updated_by.user_name.unwrap_or_default()
+            } else {
+                "N/A".to_string()
+            };
 
             let line = format!(
-                "{node_id},{node_name},{node_parent_path},{user_id},{user_login},{user_first_name},{user_last_name},{manage},{read},{create},{change},{delete},{manage_download_share},{manage_upload_share},{read_recycle_bin},{restore_recycle_bin},{delete_recycle_bin}",
+                "{node_id},{node_name},{node_parent_path},{user_id},{user_login},{user_first_name},{user_last_name},{manage},{read},{create},{change},{delete},{manage_download_share},{manage_upload_share},{read_recycle_bin},{restore_recycle_bin},{delete_recycle_bin},{updated_at},{updated_by}",
             );
 
             self.term
