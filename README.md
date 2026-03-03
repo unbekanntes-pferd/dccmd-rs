@@ -55,8 +55,8 @@ Currently, the following commands are working:
 - `download` - downloads a file or folder / room from DRACOON to a desired location on disk (encrypted, unencrypted)
 - `upload` - uploads a file or folder to a parent in DRACOON (encrypted, unencrypted)
 - `ls` - lists all nodes for a given path in DRACOON
-- `mkdir` - creates a folder in given path in DRACOON
-- `mkroom` - creates a room (inherits permissions) in given path in DRACOON
+- `mkdir` - creates a folder (default) or room in given path in DRACOON
+- `mkroom` - deprecated alias for room creation (`mkdir --type room`)
 - `rm` - removes a node by given path in DRACOON
 - `cp` - copies node(s) by given path (or search) in DRACOON
 - `users` - user management in DRACOON (see subcommands below)
@@ -198,26 +198,32 @@ dccmd-rs rm -r your.dracoon.domain/*test
 *Note*: Room deletion always requires additional confirmation.
 *Note*: You can delete the content in a room by using search strings (`*` deletes all). This does **not** include rooms.
 
-### Creating folders
+### Creating folders and rooms
 
-To create folders, use the `mkdir` command:
+To create folders, use the `mkdir` command (default type is folder):
 
 ```bash
 dccmd-rs mkdir your.dracoon.domain/some/path/newfolder
 ```
 
-To create rooms, use the `mkroom` command:
+To create rooms, use `mkdir --type room`:
+
+```bash
+dccmd-rs mkdir your.dracoon.domain/some/path/newroom --type room
+# pass optional usernames for admins (example adds admins with usernames foo1, foo2 and foo3)
+dccmd-rs mkdir your.dracoon.domain/some/path/newroom --type room -a foo1 -a foo2 -a foo3
+
+# when -a/--admin-users is set, inherit-permissions defaults to false and can be enabled explicitly
+dccmd-rs mkdir your.dracoon.domain/some/path/newroom --type room -a foo1 --inherit-permissions
+
+# you can also set the default classification (example sets to confidential)
+dccmd-rs mkdir your.dracoon.domain/some/path/newroom --type room --classification 3
+```
+
+`mkroom` is kept as a deprecated alias for compatibility:
 
 ```bash
 dccmd-rs mkroom your.dracoon.domain/some/path/newroom
-# pass optional usernames for admins (example adds admins with usernames foo1, foo2 and foo3)
-dccmd-rs mkroom your.dracoon.domain/some/path/newroom -a foo1 -a foo2 -a foo3
-
-# you can additionally inherit permissions using the --inherit-permissions flag 
-dccmd-rs mkroom your.dracoon.domain/some/path/newroom -a foo1 --inherit-permissions
-
-# you can also set the default classification (example sets to confidential)
-dccmd-rs mkroom your.dracoon.domain/some/path/newroom --classification 3
 ```
 
 ### Copying nodes
