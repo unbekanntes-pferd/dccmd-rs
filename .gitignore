@@ -2,3 +2,7 @@
 .env
 dccmd-rs.log
 .DS_Store
+.serena
+.claude
+.codex
+docs/tmp-*.md
