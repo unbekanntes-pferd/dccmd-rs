@@ -40,9 +40,14 @@ csv = "1"
 dashmap = "6"
 dirs = "6"
 unicode-normalization = "0.1"
+secrecy = "0.10"
 
 # credentials
 keyring = { version = "3", features = ["windows-native", "apple-native", "linux-native"]}
+
+[dev-dependencies]
+mockall = "0.14"
+mockito = "1"
 
 [package.metadata.generate-rpm]
 assets = [
