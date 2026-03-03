@@ -115,11 +115,13 @@ pub async fn upload_container(
                 let normalized_parent = normalized_parent.nfc().collect::<String>();
                 debug!("Normalized path: {}", normalized_parent);
                 debug!("Root and path: {:?} {:?}", root_path, path);
-                let parent_node = created_nodes.get(&normalized_parent).ok_or_else(|| {
-                    error!("Parent folder not found: {normalized_parent}");
-                    DcCmdError::InvalidPath(parent_path.clone())
-                })?;
-                let parent_id = parent_node.id;
+                let parent_id = created_nodes
+                    .get(&normalized_parent)
+                    .map(|parent_node| parent_node.id)
+                    .ok_or_else(|| {
+                        error!("Parent folder not found: {normalized_parent}");
+                        DcCmdError::InvalidPath(parent_path.clone())
+                    })?;
                 let name = path
                     .clone()
                     .file_name()
