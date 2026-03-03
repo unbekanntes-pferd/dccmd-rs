@@ -35,6 +35,15 @@ use crate::{
         utils::dates::to_datetime_utc,
     },
 };
+
+const UPLOAD_FAILURE_PREVIEW_LIMIT: usize = 5;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct UploadFailure {
+    file: String,
+    reason: String,
+}
+
 pub async fn upload_public_file(
     source: PathBuf,
     target: String,
@@ -227,51 +236,61 @@ pub async fn upload_files(
         let parent_nodes = parent_nodes.clone();
 
         async move {
-            debug!("Uploading file: {}", source.to_string_lossy());
-            let file = tokio::fs::File::open(&source).await.map_err(|err| {
-                error!("Error opening file: {}", err);
-                DcCmdError::IoError
-            })?;
+            let source_display = source.to_string_lossy().to_string();
+            debug!("Uploading file: {source_display}");
 
-            let parent_node = parent_nodes.get(&node_id).cloned().ok_or_else(|| {
-                DcCmdError::InvalidPath(format!("Parent node not found in upload cache: {node_id}"))
-            })?;
+            let result = async {
+                let file = tokio::fs::File::open(&source).await.map_err(|err| {
+                    error!("Error opening file: {}", err);
+                    DcCmdError::IoError
+                })?;
 
-            let file_meta = file.metadata().await.or(Err(DcCmdError::IoError))?;
-            let file_meta = get_file_meta(&file_meta, &source)?;
+                let parent_node = parent_nodes.get(&node_id).cloned().ok_or_else(|| {
+                    DcCmdError::InvalidPath(format!(
+                        "Parent node not found in upload cache: {node_id}"
+                    ))
+                })?;
 
-            let file_name = file_meta.name.clone();
+                let file_meta = file.metadata().await.or(Err(DcCmdError::IoError))?;
+                let file_meta = get_file_meta(&file_meta, &source)?;
 
-            let resolution_strategy = if overwrite {
-                ResolutionStrategy::Overwrite
-            } else {
-                ResolutionStrategy::AutoRename
-            };
+                let file_name = file_meta.name.clone();
 
-            // only keep share links if overwrite is set
-            let keep_share_links = match resolution_strategy {
-                ResolutionStrategy::Overwrite => keep_share_links_flag,
-                _ => false,
-            };
+                let resolution_strategy = if overwrite {
+                    ResolutionStrategy::Overwrite
+                } else {
+                    ResolutionStrategy::AutoRename
+                };
 
-            let upload_options = UploadOptions::builder(file_meta)
-                .with_classification(classification)
-                .with_resolution_strategy(resolution_strategy)
-                .with_keep_share_links(keep_share_links)
-                .build();
+                // only keep share links if overwrite is set
+                let keep_share_links = match resolution_strategy {
+                    ResolutionStrategy::Overwrite => keep_share_links_flag,
+                    _ => false,
+                };
 
-            let reader = tokio::io::BufReader::new(file);
-            let result = client
-                .upload(
-                    &parent_node,
-                    upload_options,
-                    reader,
-                    Some(Box::new(move |progress: u64, _total: u64| {
-                        progress_bar_mv.inc(progress);
-                    })),
-                    None,
-                )
-                .await;
+                let upload_options = UploadOptions::builder(file_meta)
+                    .with_classification(classification)
+                    .with_resolution_strategy(resolution_strategy)
+                    .with_keep_share_links(keep_share_links)
+                    .build();
+
+                let reader = tokio::io::BufReader::new(file);
+                client
+                    .upload(
+                        &parent_node,
+                        upload_options,
+                        reader,
+                        Some(Box::new(move |progress: u64, _total: u64| {
+                            progress_bar_mv.inc(progress);
+                        })),
+                        None,
+                    )
+                    .await
+                    .map_err(DcCmdError::from)?;
+
+                Ok::<String, DcCmdError>(file_name)
+            }
+            .await;
 
             let remaining = remaining_files
                 .fetch_sub(1, Ordering::Relaxed)
@@ -279,32 +298,48 @@ pub async fn upload_files(
             update_remaining_files_message(progress_bar_inc.as_ref(), "Uploading", remaining);
 
             match result {
-                Ok(_) => {
+                Ok(file_name) => {
                     uploaded_files.fetch_add(1, Ordering::Relaxed);
                     debug!("Uploaded file: {}", file_name);
-                    Ok::<(), DcCmdError>(())
+                    None
                 }
-                Err(e) => {
-                    error!("Error uploading file: {file_name} ({e})");
-                    Err(e.into())
+                Err(err) => {
+                    error!("Error uploading file: {source_display} ({err})");
+                    Some(UploadFailure {
+                        file: source_display,
+                        reason: upload_error_reason(&err),
+                    })
                 }
             }
         }
     }))
     .buffer_unordered(concurrent_reqs)
-    .collect::<Vec<_>>()
+    .collect::<Vec<Option<UploadFailure>>>()
     .await;
 
-    for result in task_results {
-        result?;
-    }
-
     let target = parent_node.name.clone();
-
-    progress_bar.finish_with_message(&format!("Upload to {target} complete"));
     let uploaded_files = uploaded_files.load(Ordering::Relaxed);
+    let failures = task_results.into_iter().flatten().collect::<Vec<_>>();
+    let requested_total = count_files as u64;
+
+    progress_bar.finish_with_message(&format!(
+        "Upload to {target} complete ({uploaded_files}/{requested_total})"
+    ));
 
     info!("Upload of {uploaded_files} files to {target} complete.");
+
+    if !failures.is_empty() {
+        warn!(
+            "Failed to upload {} files to {target}.",
+            requested_total.saturating_sub(uploaded_files as u64)
+        );
+        return Err(DcCmdError::InvalidArgument(format_partial_upload_message(
+            &target,
+            requested_total,
+            uploaded_files as u64,
+            &failures,
+        )));
+    }
 
     if uploaded_files != count_files {
         warn!(
@@ -365,6 +400,39 @@ fn concurrent_requests_for_velocity(velocity: Option<u8>) -> usize {
     effective_velocity(velocity) as usize * DEFAULT_CONCURRENT_MULTIPLIER as usize
 }
 
+fn upload_error_reason(error: &DcCmdError) -> String {
+    match error {
+        DcCmdError::InvalidArgument(msg)
+        | DcCmdError::InvalidPath(msg)
+        | DcCmdError::InvalidUrl(msg) => msg.clone(),
+        _ => error.to_string(),
+    }
+}
+
+fn format_partial_upload_message(
+    target: &str,
+    requested_total: u64,
+    succeeded: u64,
+    failures: &[UploadFailure],
+) -> String {
+    let failed = failures.len() as u64;
+    let mut summary =
+        format!("Uploaded {succeeded}/{requested_total} file(s) to {target}; {failed} failed.");
+
+    for failure in failures.iter().take(UPLOAD_FAILURE_PREVIEW_LIMIT) {
+        summary.push_str(&format!("\nFailed {} ({})", failure.file, failure.reason));
+    }
+
+    if failures.len() > UPLOAD_FAILURE_PREVIEW_LIMIT {
+        summary.push_str(&format!(
+            "\n... and {} more failed file(s).",
+            failures.len() - UPLOAD_FAILURE_PREVIEW_LIMIT
+        ));
+    }
+
+    summary
+}
+
 #[cfg(test)]
 mod tests {
     use std::{
@@ -385,8 +453,8 @@ mod tests {
     };
 
     use super::{
-        concurrent_requests_for_velocity, effective_velocity, maybe_build_share_message,
-        upload_public_file,
+        concurrent_requests_for_velocity, effective_velocity, format_partial_upload_message,
+        maybe_build_share_message, upload_error_reason, upload_public_file, UploadFailure,
     };
 
     fn unique_test_dir(prefix: &str) -> std::path::PathBuf {
@@ -634,5 +702,26 @@ mod tests {
 
         let _ = tokio::fs::remove_file(&source).await;
         let _ = tokio::fs::remove_dir_all(&tmp_dir).await;
+    }
+
+    #[test]
+    fn test_upload_error_reason_returns_original_message_for_invalid_path() {
+        let reason = upload_error_reason(&DcCmdError::InvalidPath("missing".to_string()));
+        assert_eq!(reason, "missing");
+    }
+
+    #[test]
+    fn test_format_partial_upload_message_includes_preview_and_remainder() {
+        let failures = (0..7)
+            .map(|idx| UploadFailure {
+                file: format!("/tmp/file-{idx}.txt"),
+                reason: "Connection to DRACOON failed".to_string(),
+            })
+            .collect::<Vec<_>>();
+
+        let message = format_partial_upload_message("target", 10, 3, &failures);
+        assert!(message.contains("Uploaded 3/10 file(s) to target; 7 failed."));
+        assert!(message.contains("Failed /tmp/file-0.txt (Connection to DRACOON failed)"));
+        assert!(message.contains("... and 2 more failed file(s)."));
     }
 }
