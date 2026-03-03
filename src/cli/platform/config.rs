@@ -1,0 +1,66 @@
+use crate::{
+    app::{config::service::ConfigService, results::ConfigPlatformResult},
+    command::config::{ConfigAuthCommand, ConfigCommand, ConfigCryptoCommand},
+    core::models::DcCmdError,
+};
+
+use super::CliPlatform;
+
+impl CliPlatform {
+    pub(super) async fn execute_config_cmd(
+        &self,
+        cmd: ConfigCommand,
+    ) -> Result<ConfigPlatformResult, DcCmdError> {
+        let service = ConfigService::new();
+
+        match cmd {
+            ConfigCommand::Auth { cmd } => match cmd {
+                ConfigAuthCommand::Ls { target } => {
+                    let base_url = service.normalize_base_url(&target)?;
+                    match service.get_refresh_token_info(&target).await {
+                        Ok(user_info) => Ok(ConfigPlatformResult::AuthTokenInfo {
+                            base_url,
+                            user_info,
+                        }),
+                        Err(DcCmdError::InvalidAccount) => {
+                            Ok(ConfigPlatformResult::MissingToken { base_url })
+                        }
+                        Err(e) => Err(e),
+                    }
+                }
+                ConfigAuthCommand::Rm { target } => {
+                    let base_url = service.normalize_base_url(&target)?;
+                    service.remove_refresh_token(&target)?;
+                    Ok(ConfigPlatformResult::AuthTokenRemoved { base_url })
+                }
+            },
+            ConfigCommand::Crypto { cmd } => match cmd {
+                ConfigCryptoCommand::Ls { target } => {
+                    let base_url = service.normalize_base_url(&target)?;
+                    if !service.has_encryption_secret(&target)? {
+                        return Ok(ConfigPlatformResult::MissingCryptoSecret);
+                    }
+                    Ok(ConfigPlatformResult::CryptoSecretStored { base_url })
+                }
+                ConfigCryptoCommand::Rm { target } => {
+                    let base_url = service.normalize_base_url(&target)?;
+                    service.remove_encryption_secret(&target)?;
+                    Ok(ConfigPlatformResult::CryptoSecretRemoved { base_url })
+                }
+            },
+            ConfigCommand::SystemInfo { target } => {
+                let base_url = service.normalize_base_url(&target)?;
+                match service.get_system_info(&target).await {
+                    Ok(system_info) => Ok(ConfigPlatformResult::SystemInfo {
+                        base_url,
+                        system_info,
+                    }),
+                    Err(DcCmdError::InvalidAccount) => {
+                        Ok(ConfigPlatformResult::MissingToken { base_url })
+                    }
+                    Err(e) => Err(e),
+                }
+            }
+        }
+    }
+}
