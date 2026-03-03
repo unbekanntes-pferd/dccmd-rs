@@ -11,6 +11,9 @@ pub trait ProgressTask: Send + Sync {
 
 pub trait ProgressReporter: Send + Sync {
     fn bar(&self, length: u64) -> Arc<dyn ProgressTask>;
+    fn item_bar(&self, length: u64) -> Arc<dyn ProgressTask> {
+        self.bar(length)
+    }
     fn spinner(&self, message: &str) -> Arc<dyn ProgressTask>;
 }
 
@@ -22,6 +25,21 @@ pub fn start_progress_bar(
     message: Option<&str>,
 ) -> Arc<dyn ProgressTask> {
     let bar = progress.bar(length);
+    bar.set_length(length);
+
+    if let Some(message) = message {
+        bar.set_message(message);
+    }
+
+    bar
+}
+
+pub fn start_item_progress_bar(
+    progress: &dyn ProgressReporter,
+    length: u64,
+    message: Option<&str>,
+) -> Arc<dyn ProgressTask> {
+    let bar = progress.item_bar(length);
     bar.set_length(length);
 
     if let Some(message) = message {
@@ -79,8 +97,8 @@ mod tests {
     };
 
     use super::{
-        start_progress_bar, start_spinner, update_remaining_files_message, ProgressReporter,
-        ProgressTask,
+        start_item_progress_bar, start_progress_bar, start_spinner, update_remaining_files_message,
+        ProgressReporter, ProgressTask,
     };
 
     #[derive(Default)]
@@ -138,6 +156,16 @@ mod tests {
             })
         }
 
+        fn item_bar(&self, length: u64) -> Arc<dyn ProgressTask> {
+            self.events
+                .lock()
+                .expect("lock poisoned")
+                .push(format!("item_bar:{length}"));
+            Arc::new(RecordingProgressTask {
+                events: self.events.clone(),
+            })
+        }
+
         fn spinner(&self, message: &str) -> Arc<dyn ProgressTask> {
             self.events
                 .lock()
@@ -176,6 +204,22 @@ mod tests {
             vec![
                 "spinner:Listing files and folders...".to_string(),
                 "enable_tick:100ms".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn start_item_progress_bar_applies_common_setup() {
+        let reporter = RecordingProgressReporter::default();
+
+        let _ = start_item_progress_bar(&reporter, 9, Some("Creating folders"));
+
+        assert_eq!(
+            reporter.events(),
+            vec![
+                "item_bar:9".to_string(),
+                "set_length:9".to_string(),
+                "set_message:Creating folders".to_string(),
             ]
         );
     }

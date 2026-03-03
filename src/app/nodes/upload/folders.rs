@@ -21,7 +21,7 @@ use super::files::upload_files;
 use crate::{
     app::nodes::{
         command::CmdUploadOptions,
-        progress::{start_progress_bar, start_spinner, ProgressReporter},
+        progress::{start_item_progress_bar, start_spinner, ProgressReporter},
     },
     core::{
         constants::{MAX_CONCURRENT_REQUESTS, MIN_VELOCITY},
@@ -76,7 +76,8 @@ pub async fn upload_container(
     info!("Found {} folders.", folders.len());
     progress_spinner.finish_and_clear();
 
-    let progress_bar = start_progress_bar(progress, folders.len() as u64, None);
+    let progress_bar =
+        start_item_progress_bar(progress, folders.len() as u64, Some("Creating folders"));
 
     let folders = group_folders_by_depth(folders);
 

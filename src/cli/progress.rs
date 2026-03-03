@@ -64,6 +64,25 @@ impl ProgressReporter for IndicatifProgressReporter {
         })
     }
 
+    fn item_bar(&self, length: u64) -> Arc<dyn ProgressTask> {
+        let progress_bar = ProgressBar::new(length);
+        if !io::stderr().is_terminal() {
+            progress_bar.set_draw_target(ProgressDrawTarget::hidden());
+        }
+        progress_bar.set_style(
+            ProgressStyle::default_bar()
+                .template(
+                    "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} {msg}",
+                )
+                .expect("valid progress template")
+                .progress_chars("=>-"),
+        );
+
+        Arc::new(IndicatifProgressTask {
+            inner: progress_bar,
+        })
+    }
+
     fn spinner(&self, message: &str) -> Arc<dyn ProgressTask> {
         let progress_spinner = ProgressBar::new_spinner();
         if !io::stderr().is_terminal() {
