@@ -6,7 +6,7 @@ use crate::{
                 CmdCopyOptions, CmdCreateContainerOptions, CmdDeleteOptions, CmdListNodesOptions,
                 CmdTransferOptions,
             },
-            transfer::NodesTransferService,
+            transfer::{NodesTransferService, TransferOutcome},
             CopyNodesResult, DeleteNodesPreparation, ListNodesResult, NodesService,
         },
     },
@@ -124,7 +124,7 @@ impl CliPlatform {
         source: String,
         target: String,
         opts: CmdTransferOptions,
-    ) -> Result<Option<String>, DcCmdError> {
+    ) -> Result<TransferOutcome, DcCmdError> {
         NodesTransferService::with_progress(std::sync::Arc::new(IndicatifProgressReporter::new()))
             .transfer(source, target, opts)
             .await

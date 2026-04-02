@@ -22,6 +22,7 @@ use crate::{
     app::nodes::{
         command::CmdUploadOptions,
         progress::{start_item_progress_bar, start_spinner, ProgressReporter},
+        upload::UploadOutcome,
     },
     core::{
         constants::{MAX_CONCURRENT_REQUESTS, MIN_VELOCITY},
@@ -36,7 +37,7 @@ pub async fn upload_container(
     target: &Node,
     opts: &CmdUploadOptions,
     progress: &dyn ProgressReporter,
-) -> Result<(), DcCmdError> {
+) -> Result<UploadOutcome, DcCmdError> {
     info!("Attempting upload of folder: {}.", source.to_string_lossy());
     info!("Target node: {}.", target.name);
 
@@ -183,7 +184,7 @@ pub async fn upload_container(
         .collect::<HashMap<_, _>>();
 
     // upload files
-    upload_files(
+    let outcome = upload_files(
         dracoon,
         target,
         file_map,
@@ -195,7 +196,7 @@ pub async fn upload_container(
 
     info!("Upload of {} complete.", source.to_string_lossy());
 
-    Ok(())
+    Ok(outcome)
 }
 
 fn create_file_map(

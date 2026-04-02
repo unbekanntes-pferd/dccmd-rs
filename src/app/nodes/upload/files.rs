@@ -1,22 +1,19 @@
 use std::{
     collections::{BTreeMap, HashMap},
-    fs::Metadata,
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::{
         atomic::{AtomicU64, AtomicUsize, Ordering},
         Arc,
     },
-    time::SystemTime,
 };
 
 use dco3::{
     auth::Connected,
-    nodes::{FileMeta, Node, ResolutionStrategy, UploadOptions},
+    nodes::{Node, ResolutionStrategy, UploadOptions},
     Dracoon, Public, PublicUpload, Upload,
 };
 use futures_util::{stream, StreamExt};
 use tracing::{debug, error, info, warn};
-use unicode_normalization::UnicodeNormalization;
 
 use crate::{
     app::{
@@ -24,6 +21,7 @@ use crate::{
         nodes::{
             command::CmdUploadOptions,
             progress::{start_progress_bar, update_remaining_files_message, ProgressReporter},
+            upload::UploadOutcome,
         },
         shares::DownloadShareLinkCreator,
     },
@@ -32,16 +30,15 @@ use crate::{
             DEFAULT_CHUNK_SIZE, DEFAULT_CONCURRENT_MULTIPLIER, MAX_VELOCITY, MIN_VELOCITY,
         },
         models::DcCmdError,
-        utils::dates::to_datetime_utc,
     },
 };
 
-const UPLOAD_FAILURE_PREVIEW_LIMIT: usize = 5;
+use super::api::{get_file_meta, UploadApi, UploadProgressFn};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct UploadFailure {
-    file: String,
-    reason: String,
+pub struct UploadFailure {
+    pub file: String,
+    pub reason: String,
 }
 
 pub async fn upload_public_file(
@@ -201,14 +198,14 @@ async fn maybe_build_share_message(
     Ok(Some(format!("Shared {file_name}.\n▶︎▶︎ {link}")))
 }
 
-pub async fn upload_files(
-    dracoon: &Dracoon<Connected>,
+pub async fn upload_files<A: UploadApi + Clone + Send + Sync + 'static>(
+    api: &A,
     parent_node: &Node,
     files: BTreeMap<PathBuf, (u64, u64)>,
     parent_nodes: HashMap<u64, Node>,
     opts: CmdUploadOptions,
     progress: &dyn ProgressReporter,
-) -> Result<(), DcCmdError> {
+) -> Result<UploadOutcome, DcCmdError> {
     info!("Attempting upload of {} files.", files.len());
 
     let concurrent_reqs = concurrent_requests_for_velocity(opts.velocity);
@@ -228,7 +225,7 @@ pub async fn upload_files(
     let files_iter: Vec<_> = files.into_iter().collect();
 
     let task_results = stream::iter(files_iter.into_iter().map(|(source, (node_id, _))| {
-        let client = dracoon.clone();
+        let api_client = api.clone();
         let progress_bar_mv = progress_bar.clone();
         let progress_bar_inc = progress_bar.clone();
         let remaining_files = remaining_files.clone();
@@ -240,55 +237,26 @@ pub async fn upload_files(
             debug!("Uploading file: {source_display}");
 
             let result = async {
-                let file = tokio::fs::File::open(&source).await.map_err(|err| {
-                    error!("Error opening file: {}", err);
-                    DcCmdError::IoError
-                })?;
-
                 let parent_node = parent_nodes.get(&node_id).cloned().ok_or_else(|| {
                     DcCmdError::InvalidPath(format!(
                         "Parent node not found in upload cache: {node_id}"
                     ))
                 })?;
 
-                let file_meta = file.metadata().await.or(Err(DcCmdError::IoError))?;
-                let file_meta = get_file_meta(&file_meta, &source)?;
+                let on_progress: UploadProgressFn = Arc::new(move |progress| {
+                    progress_bar_mv.inc(progress);
+                });
 
-                let file_name = file_meta.name.clone();
-
-                let resolution_strategy = if overwrite {
-                    ResolutionStrategy::Overwrite
-                } else {
-                    ResolutionStrategy::AutoRename
-                };
-
-                // only keep share links if overwrite is set
-                let keep_share_links = match resolution_strategy {
-                    ResolutionStrategy::Overwrite => keep_share_links_flag,
-                    _ => false,
-                };
-
-                let upload_options = UploadOptions::builder(file_meta)
-                    .with_classification(classification)
-                    .with_resolution_strategy(resolution_strategy)
-                    .with_keep_share_links(keep_share_links)
-                    .build();
-
-                let reader = tokio::io::BufReader::new(file);
-                client
-                    .upload(
+                api_client
+                    .upload_local_file(
+                        source,
                         &parent_node,
-                        upload_options,
-                        reader,
-                        Some(Box::new(move |progress: u64, _total: u64| {
-                            progress_bar_mv.inc(progress);
-                        })),
-                        None,
+                        classification,
+                        overwrite,
+                        keep_share_links_flag,
+                        Some(on_progress),
                     )
                     .await
-                    .map_err(DcCmdError::from)?;
-
-                Ok::<String, DcCmdError>(file_name)
             }
             .await;
 
@@ -333,51 +301,15 @@ pub async fn upload_files(
             "Failed to upload {} files to {target}.",
             requested_total.saturating_sub(uploaded_files as u64)
         );
-        return Err(DcCmdError::InvalidArgument(format_partial_upload_message(
-            &target,
+        return Ok(UploadOutcome::from_failures(
+            target,
             requested_total,
             uploaded_files as u64,
-            &failures,
-        )));
+            failures,
+        ));
     }
 
-    if uploaded_files != count_files {
-        warn!(
-            "Failed to upload {} files to {target}.",
-            count_files - uploaded_files
-        );
-    }
-
-    Ok(())
-}
-
-fn get_file_meta(file_meta: &Metadata, file_path: &Path) -> Result<FileMeta, DcCmdError> {
-    let file_name = file_path
-        .file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .map(|n| n.nfc().collect::<String>())
-        .ok_or(DcCmdError::InvalidPath(
-            file_path.to_string_lossy().to_string(),
-        ))?;
-
-    let timestamp_modification = file_meta
-        .modified()
-        .or(Err(DcCmdError::IoError))
-        .unwrap_or_else(|_| SystemTime::now());
-
-    let timestamp_modification = to_datetime_utc(timestamp_modification);
-
-    let timestamp_creation = file_meta
-        .created()
-        .or(Err(DcCmdError::IoError))
-        .unwrap_or_else(|_| SystemTime::now());
-
-    let timestamp_creation = to_datetime_utc(timestamp_creation);
-
-    Ok(FileMeta::builder(file_name, file_meta.len())
-        .with_timestamp_modification(timestamp_modification)
-        .with_timestamp_creation(timestamp_creation)
-        .build())
+    Ok(UploadOutcome::success(target, requested_total))
 }
 
 fn calculate_buffer_size(file_size: u64) -> usize {
@@ -409,36 +341,14 @@ fn upload_error_reason(error: &DcCmdError) -> String {
     }
 }
 
-fn format_partial_upload_message(
-    target: &str,
-    requested_total: u64,
-    succeeded: u64,
-    failures: &[UploadFailure],
-) -> String {
-    let failed = failures.len() as u64;
-    let mut summary =
-        format!("Uploaded {succeeded}/{requested_total} file(s) to {target}; {failed} failed.");
-
-    for failure in failures.iter().take(UPLOAD_FAILURE_PREVIEW_LIMIT) {
-        summary.push_str(&format!("\nFailed {} ({})", failure.file, failure.reason));
-    }
-
-    if failures.len() > UPLOAD_FAILURE_PREVIEW_LIMIT {
-        summary.push_str(&format!(
-            "\n... and {} more failed file(s).",
-            failures.len() - UPLOAD_FAILURE_PREVIEW_LIMIT
-        ));
-    }
-
-    summary
-}
-
 #[cfg(test)]
 mod tests {
     use std::{
+        collections::{BTreeMap, HashMap},
+        path::PathBuf,
         sync::{
             atomic::{AtomicUsize, Ordering},
-            Arc,
+            Arc, Mutex,
         },
         time::{Duration, SystemTime, UNIX_EPOCH},
     };
@@ -448,13 +358,19 @@ mod tests {
     use mockito::Server;
 
     use crate::{
-        app::{nodes::progress::NoopProgressReporter, shares::DownloadShareLinkCreator},
+        app::{
+            nodes::{
+                command::CmdUploadOptions, progress::NoopProgressReporter, upload::UploadOutcome,
+            },
+            shares::DownloadShareLinkCreator,
+        },
         core::models::DcCmdError,
     };
 
     use super::{
-        concurrent_requests_for_velocity, effective_velocity, format_partial_upload_message,
-        maybe_build_share_message, upload_error_reason, upload_public_file, UploadFailure,
+        super::api::{UploadApi, UploadProgressFn},
+        concurrent_requests_for_velocity, effective_velocity, maybe_build_share_message,
+        upload_error_reason, upload_files, upload_public_file, UploadFailure,
     };
 
     fn unique_test_dir(prefix: &str) -> std::path::PathBuf {
@@ -496,6 +412,60 @@ mod tests {
         calls: AtomicUsize,
     }
 
+    #[derive(Clone, Default)]
+    struct MockUploadApi {
+        results: Arc<Mutex<HashMap<String, Result<String, DcCmdError>>>>,
+        calls: Arc<Mutex<Vec<String>>>,
+    }
+
+    impl MockUploadApi {
+        fn with_results(results: Vec<(String, Result<String, DcCmdError>)>) -> Self {
+            Self {
+                results: Arc::new(Mutex::new(results.into_iter().collect())),
+                calls: Arc::new(Mutex::new(Vec::new())),
+            }
+        }
+
+        fn calls(&self) -> Vec<String> {
+            self.calls.lock().expect("lock poisoned").clone()
+        }
+    }
+
+    #[async_trait]
+    impl UploadApi for MockUploadApi {
+        async fn upload_local_file(
+            &self,
+            source: PathBuf,
+            _target_node: &Node,
+            _classification: u8,
+            _overwrite: bool,
+            _keep_share_links: bool,
+            on_progress: Option<UploadProgressFn>,
+        ) -> Result<String, DcCmdError> {
+            let source_display = source.to_string_lossy().to_string();
+            self.calls
+                .lock()
+                .expect("lock poisoned")
+                .push(source_display.clone());
+
+            if let Some(on_progress) = on_progress {
+                on_progress(1);
+            }
+
+            self.results
+                .lock()
+                .expect("lock poisoned")
+                .remove(&source_display)
+                .unwrap_or_else(|| {
+                    Ok(source
+                        .file_name()
+                        .expect("file name")
+                        .to_string_lossy()
+                        .to_string())
+                })
+        }
+    }
+
     #[async_trait]
     impl DownloadShareLinkCreator for MockShareLinkCreator {
         async fn create_download_share_link(
@@ -532,6 +502,49 @@ mod tests {
             permissions: None,
             inherit_permissions: None,
             is_encrypted: encrypted,
+            encryption_info: None,
+            cnt_deleted_versions: None,
+            cnt_comments: None,
+            cnt_upload_shares: None,
+            cnt_download_shares: None,
+            recycle_bin_retention_period: None,
+            has_activities_log: None,
+            quota: None,
+            is_favorite: None,
+            branch_version: None,
+            media_token: None,
+            is_browsable: None,
+            cnt_rooms: None,
+            cnt_folders: None,
+            cnt_files: None,
+            auth_parent_id: None,
+        }
+    }
+
+    fn folder_node(id: u64, name: &str) -> Node {
+        Node {
+            id,
+            reference_id: None,
+            node_type: NodeType::Folder,
+            name: name.to_string(),
+            timestamp_creation: None,
+            timestamp_modification: None,
+            parent_id: None,
+            parent_path: Some("/room/".to_string()),
+            created_at: None,
+            created_by: None,
+            updated_at: None,
+            updated_by: None,
+            expire_at: None,
+            hash: None,
+            file_type: None,
+            media_type: None,
+            size: None,
+            classification: None,
+            notes: None,
+            permissions: None,
+            inherit_permissions: None,
+            is_encrypted: Some(false),
             encryption_info: None,
             cnt_deleted_versions: None,
             cnt_comments: None,
@@ -711,7 +724,7 @@ mod tests {
     }
 
     #[test]
-    fn test_format_partial_upload_message_includes_preview_and_remainder() {
+    fn test_upload_outcome_failure_message_includes_preview_and_remainder() {
         let failures = (0..7)
             .map(|idx| UploadFailure {
                 file: format!("/tmp/file-{idx}.txt"),
@@ -719,9 +732,118 @@ mod tests {
             })
             .collect::<Vec<_>>();
 
-        let message = format_partial_upload_message("target", 10, 3, &failures);
+        let outcome = UploadOutcome::from_failures("target", 10, 3, failures);
+        let message = outcome.failure_message().expect("failure message");
         assert!(message.contains("Uploaded 3/10 file(s) to target; 7 failed."));
         assert!(message.contains("Failed /tmp/file-0.txt (Connection to DRACOON failed)"));
         assert!(message.contains("... and 2 more failed file(s)."));
+    }
+
+    #[tokio::test]
+    async fn test_upload_files_aggregates_partial_failures_with_mock_api() {
+        let api = MockUploadApi::with_results(vec![(
+            "/tmp/b.txt".to_string(),
+            Err(DcCmdError::InvalidArgument("network".to_string())),
+        )]);
+        let target = folder_node(1, "room");
+        let parent_node = folder_node(11, "batch");
+        let files = BTreeMap::from([
+            (PathBuf::from("/tmp/a.txt"), (11, 10)),
+            (PathBuf::from("/tmp/b.txt"), (11, 20)),
+        ]);
+        let parent_nodes = HashMap::from([(11, parent_node)]);
+
+        let outcome = upload_files(
+            &api,
+            &target,
+            files,
+            parent_nodes,
+            CmdUploadOptions::new(
+                false,
+                false,
+                true,
+                false,
+                false,
+                None,
+                Some(1),
+                None,
+                None,
+                None,
+            ),
+            &NoopProgressReporter,
+        )
+        .await
+        .expect("upload outcome");
+
+        let mut calls = api.calls();
+        calls.sort();
+        assert_eq!(
+            calls,
+            vec!["/tmp/a.txt".to_string(), "/tmp/b.txt".to_string()]
+        );
+        assert_eq!(outcome.requested_total, 2);
+        assert_eq!(outcome.succeeded, 1);
+        assert_eq!(outcome.failed, 1);
+        assert!(outcome.partial);
+        assert_eq!(outcome.failures.len(), 1);
+        assert_eq!(outcome.failures[0].file, "/tmp/b.txt");
+        assert_eq!(outcome.failures[0].reason, "network");
+    }
+
+    #[tokio::test]
+    async fn test_upload_files_aggregates_all_failed_with_mock_api() {
+        let api = MockUploadApi::with_results(vec![
+            (
+                "/tmp/a.txt".to_string(),
+                Err(DcCmdError::InvalidArgument("io".to_string())),
+            ),
+            (
+                "/tmp/b.txt".to_string(),
+                Err(DcCmdError::InvalidPath("missing".to_string())),
+            ),
+        ]);
+        let target = folder_node(1, "room");
+        let parent_node = folder_node(22, "batch");
+        let files = BTreeMap::from([
+            (PathBuf::from("/tmp/a.txt"), (22, 10)),
+            (PathBuf::from("/tmp/b.txt"), (22, 20)),
+        ]);
+        let parent_nodes = HashMap::from([(22, parent_node)]);
+
+        let outcome = upload_files(
+            &api,
+            &target,
+            files,
+            parent_nodes,
+            CmdUploadOptions::new(
+                false,
+                false,
+                true,
+                false,
+                false,
+                None,
+                Some(1),
+                None,
+                None,
+                None,
+            ),
+            &NoopProgressReporter,
+        )
+        .await
+        .expect("upload outcome");
+
+        assert_eq!(outcome.requested_total, 2);
+        assert_eq!(outcome.succeeded, 0);
+        assert_eq!(outcome.failed, 2);
+        assert!(!outcome.partial);
+        assert_eq!(outcome.failures.len(), 2);
+        assert!(outcome
+            .failures
+            .iter()
+            .any(|failure| failure.file == "/tmp/a.txt" && failure.reason == "io"));
+        assert!(outcome
+            .failures
+            .iter()
+            .any(|failure| failure.file == "/tmp/b.txt" && failure.reason == "missing"));
     }
 }

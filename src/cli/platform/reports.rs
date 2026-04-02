@@ -1,10 +1,10 @@
 use crate::{
+    app::requests::ReportsRequest,
     app::{
         auth::AuthService,
         reports::{EventOptions, ReportsService},
         results::ReportsPlatformResult,
     },
-    command::ReportsCommand,
     core::models::{DcCmdError, ListOptions, PasswordAuth},
 };
 
@@ -13,7 +13,7 @@ use super::CliPlatform;
 impl CliPlatform {
     pub(super) async fn execute_reports_cmd(
         &self,
-        cmd: ReportsCommand,
+        cmd: ReportsRequest,
         auth: Option<PasswordAuth>,
     ) -> Result<ReportsPlatformResult, DcCmdError> {
         let client = AuthService::new()
@@ -22,7 +22,7 @@ impl CliPlatform {
         let service = ReportsService::new(client);
 
         match cmd {
-            ReportsCommand::Events {
+            ReportsRequest::Events {
                 target: _,
                 filter,
                 offset,
@@ -50,11 +50,11 @@ impl CliPlatform {
 
                 Ok(ReportsPlatformResult::Events { events, csv })
             }
-            ReportsCommand::OperationTypes { target: _ } => {
+            ReportsRequest::OperationTypes { target: _ } => {
                 let operations = service.get_event_operations().await?;
                 Ok(ReportsPlatformResult::OperationTypes { operations })
             }
-            ReportsCommand::Permissions {
+            ReportsRequest::Permissions {
                 target: _,
                 filter,
                 offset,
@@ -71,11 +71,11 @@ impl CliPlatform {
         }
     }
 
-    fn reports_target(cmd: &ReportsCommand) -> &str {
+    fn reports_target(cmd: &ReportsRequest) -> &str {
         match cmd {
-            ReportsCommand::Events { target, .. }
-            | ReportsCommand::Permissions { target, .. }
-            | ReportsCommand::OperationTypes { target } => target,
+            ReportsRequest::Events { target, .. }
+            | ReportsRequest::Permissions { target, .. }
+            | ReportsRequest::OperationTypes { target } => target,
         }
     }
 }

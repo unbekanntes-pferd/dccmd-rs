@@ -1,10 +1,10 @@
 use crate::{
+    app::requests::UsersRequest,
     app::{
         auth::AuthService,
         results::UsersPlatformResult,
         users::{models::UsersSwitchAuthOptions, UsersService},
     },
-    command::UsersCommand,
     core::models::{DcCmdError, ListOptions, PasswordAuth},
 };
 
@@ -13,11 +13,11 @@ use super::CliPlatform;
 impl CliPlatform {
     pub(super) async fn execute_users_cmd(
         &self,
-        cmd: UsersCommand,
+        cmd: UsersRequest,
         auth: Option<PasswordAuth>,
     ) -> Result<UsersPlatformResult, DcCmdError> {
         let target = Self::users_target(&cmd);
-        let is_import = matches!(cmd, UsersCommand::Import { .. });
+        let is_import = matches!(cmd, UsersRequest::Import { .. });
         let client = AuthService::new()
             .connect_client(target, auth, is_import)
             .await?;
@@ -25,7 +25,7 @@ impl CliPlatform {
         let service = UsersService::new(client);
 
         match cmd {
-            UsersCommand::Create {
+            UsersRequest::Create {
                 target: _,
                 first_name,
                 last_name,
@@ -53,7 +53,7 @@ impl CliPlatform {
                     auth_method: user.auth_data.method,
                 })
             }
-            UsersCommand::Invite {
+            UsersRequest::Invite {
                 target,
                 first_name,
                 last_name,
@@ -69,7 +69,7 @@ impl CliPlatform {
                     last_name,
                 })
             }
-            UsersCommand::Ls {
+            UsersRequest::Ls {
                 target: _,
                 filter,
                 offset,
@@ -82,7 +82,7 @@ impl CliPlatform {
                     .await?;
                 Ok(UsersPlatformResult::Listed { users, csv })
             }
-            UsersCommand::Rm {
+            UsersRequest::Rm {
                 target: _,
                 user_name,
                 user_id,
@@ -90,7 +90,7 @@ impl CliPlatform {
                 let message = service.delete_user(user_name, user_id).await?;
                 Ok(UsersPlatformResult::Removed { message })
             }
-            UsersCommand::Import {
+            UsersRequest::Import {
                 target: _,
                 source,
                 oidc_id,
@@ -99,7 +99,7 @@ impl CliPlatform {
                 let result = service.import_users(imports, oidc_id, |_| {}).await?;
                 Ok(UsersPlatformResult::Imported(result))
             }
-            UsersCommand::Info {
+            UsersRequest::Info {
                 target: _,
                 user_name,
                 user_id,
@@ -107,7 +107,7 @@ impl CliPlatform {
                 let user = service.get_user_info(user_name, user_id).await?;
                 Ok(UsersPlatformResult::Info { user })
             }
-            UsersCommand::SwitchAuth {
+            UsersRequest::SwitchAuth {
                 target: _,
                 current_method,
                 new_method,
@@ -131,7 +131,7 @@ impl CliPlatform {
                 let result = service.switch_auth(opts).await?;
                 Ok(UsersPlatformResult::SwitchedAuth(result))
             }
-            UsersCommand::EnforceMfa {
+            UsersRequest::EnforceMfa {
                 target: _,
                 auth_method,
                 filter,
@@ -146,16 +146,16 @@ impl CliPlatform {
         }
     }
 
-    fn users_target(cmd: &UsersCommand) -> &str {
+    fn users_target(cmd: &UsersRequest) -> &str {
         match cmd {
-            UsersCommand::Create { target, .. }
-            | UsersCommand::Ls { target, .. }
-            | UsersCommand::Rm { target, .. }
-            | UsersCommand::Import { target, .. }
-            | UsersCommand::Info { target, .. }
-            | UsersCommand::SwitchAuth { target, .. }
-            | UsersCommand::EnforceMfa { target, .. }
-            | UsersCommand::Invite { target, .. } => target.as_str(),
+            UsersRequest::Create { target, .. }
+            | UsersRequest::Ls { target, .. }
+            | UsersRequest::Rm { target, .. }
+            | UsersRequest::Import { target, .. }
+            | UsersRequest::Info { target, .. }
+            | UsersRequest::SwitchAuth { target, .. }
+            | UsersRequest::EnforceMfa { target, .. }
+            | UsersRequest::Invite { target, .. } => target.as_str(),
         }
     }
 }

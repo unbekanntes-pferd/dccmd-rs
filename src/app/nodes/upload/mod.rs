@@ -13,8 +13,85 @@ use crate::{
 };
 use dco3::nodes::Nodes;
 
+mod api;
 mod files;
 mod folders;
+
+pub use self::files::UploadFailure;
+
+const UPLOAD_FAILURE_PREVIEW_LIMIT: usize = 5;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UploadOutcome {
+    pub requested_total: u64,
+    pub succeeded: u64,
+    pub failed: u64,
+    pub failures: Vec<UploadFailure>,
+    pub target_root: String,
+    pub partial: bool,
+    pub share_message: Option<String>,
+}
+
+impl UploadOutcome {
+    pub fn success(target_root: impl Into<String>, count: u64) -> Self {
+        Self {
+            requested_total: count,
+            succeeded: count,
+            failed: 0,
+            failures: Vec::new(),
+            target_root: target_root.into(),
+            partial: false,
+            share_message: None,
+        }
+    }
+
+    pub fn from_failures(
+        target_root: impl Into<String>,
+        requested_total: u64,
+        succeeded: u64,
+        failures: Vec<UploadFailure>,
+    ) -> Self {
+        let failed = failures.len() as u64;
+        Self {
+            requested_total,
+            succeeded,
+            failed,
+            failures,
+            target_root: target_root.into(),
+            partial: failed > 0 && succeeded > 0,
+            share_message: None,
+        }
+    }
+
+    pub fn with_share_message(mut self, share_message: Option<String>) -> Self {
+        self.share_message = share_message;
+        self
+    }
+
+    pub fn failure_message(&self) -> Option<String> {
+        if self.failed == 0 {
+            return None;
+        }
+
+        let mut summary = format!(
+            "Uploaded {}/{} file(s) to {}; {} failed.",
+            self.succeeded, self.requested_total, self.target_root, self.failed
+        );
+
+        for failure in self.failures.iter().take(UPLOAD_FAILURE_PREVIEW_LIMIT) {
+            summary.push_str(&format!("\nFailed {} ({})", failure.file, failure.reason));
+        }
+
+        if self.failures.len() > UPLOAD_FAILURE_PREVIEW_LIMIT {
+            summary.push_str(&format!(
+                "\n... and {} more failed file(s).",
+                self.failures.len() - UPLOAD_FAILURE_PREVIEW_LIMIT
+            ));
+        }
+
+        Some(summary)
+    }
+}
 
 pub struct NodesUploadService {
     progress: Arc<dyn ProgressReporter>,
@@ -30,12 +107,12 @@ impl NodesUploadService {
         source: PathBuf,
         target: String,
         opts: CmdUploadOptions,
-    ) -> Result<Option<String>, DcCmdError> {
+    ) -> Result<UploadOutcome, DcCmdError> {
         // this is a public upload share
         match (target.contains("/public/upload-shares/"), source.is_file()) {
             (true, true) => {
                 upload_public_file(source, target, self.progress.as_ref()).await?;
-                return Ok(None);
+                return Ok(UploadOutcome::success("public upload share", 1));
             }
             (true, false) => {
                 error!("Public upload shares only support file uploads.");
@@ -90,7 +167,8 @@ impl NodesUploadService {
                     self.progress.as_ref(),
                 )
                 .await?;
-                return Ok(share_message);
+                Ok(UploadOutcome::success(parent_node.name.clone(), 1)
+                    .with_share_message(share_message))
             }
             // is a directory and recursive flag is set
             (_, true, true) => {
@@ -101,22 +179,16 @@ impl NodesUploadService {
                     &opts,
                     self.progress.as_ref(),
                 )
-                .await?;
+                .await
             }
             // is a directory and recursive flag is not set
-            (_, true, false) => {
-                return Err(DcCmdError::InvalidArgument(
-                    "Container upload requires recursive flag".to_string(),
-                ));
-            }
+            (_, true, false) => Err(DcCmdError::InvalidArgument(
+                "Container upload requires recursive flag".to_string(),
+            )),
             // is neither a file nor a directory
-            _ => {
-                return Err(DcCmdError::InvalidPath(
-                    source.to_string_lossy().to_string(),
-                ));
-            }
+            _ => Err(DcCmdError::InvalidPath(
+                source.to_string_lossy().to_string(),
+            )),
         }
-
-        Ok(None)
     }
 }

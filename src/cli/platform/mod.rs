@@ -15,14 +15,16 @@ use crate::{
             },
             download::{DownloadOutcome, NodesDownloadService, NoopTransferStateStore},
             filesystem::OSFileSystem,
+            transfer::TransferOutcome,
             upload::NodesUploadService,
+            upload::UploadOutcome,
             CopyNodesResult, DeleteNodesPreparation, ListNodesResult,
         },
+        requests::{ConfigRequest, GroupsRequest, ReportsRequest, UsersRequest},
         results::{GroupsPlatformResult, ReportsPlatformResult, UsersPlatformResult},
         Platform,
     },
     cli::progress::IndicatifProgressReporter,
-    command::{config::ConfigCommand, GroupsCommand, ReportsCommand, UsersCommand},
     core::models::{DcCmdError, PasswordAuth},
 };
 
@@ -38,7 +40,7 @@ impl CliPlatform {
 impl Platform for CliPlatform {
     async fn config(
         &self,
-        cmd: ConfigCommand,
+        cmd: ConfigRequest,
     ) -> Result<crate::app::results::ConfigPlatformResult, DcCmdError> {
         self.execute_config_cmd(cmd).await
     }
@@ -48,7 +50,7 @@ impl Platform for CliPlatform {
         source: String,
         target: String,
         opts: CmdUploadOptions,
-    ) -> Result<Option<String>, DcCmdError> {
+    ) -> Result<UploadOutcome, DcCmdError> {
         NodesUploadService::with_progress(std::sync::Arc::new(IndicatifProgressReporter::new()))
             .upload(source.into(), target, opts)
             .await
@@ -74,7 +76,7 @@ impl Platform for CliPlatform {
         source: String,
         target: String,
         opts: CmdTransferOptions,
-    ) -> Result<Option<String>, DcCmdError> {
+    ) -> Result<TransferOutcome, DcCmdError> {
         self.execute_nodes_transfer(source, target, opts).await
     }
 
@@ -131,7 +133,7 @@ impl Platform for CliPlatform {
 
     async fn users(
         &self,
-        cmd: UsersCommand,
+        cmd: UsersRequest,
         auth: Option<PasswordAuth>,
     ) -> Result<UsersPlatformResult, DcCmdError> {
         self.execute_users_cmd(cmd, auth).await
@@ -139,7 +141,7 @@ impl Platform for CliPlatform {
 
     async fn groups(
         &self,
-        cmd: GroupsCommand,
+        cmd: GroupsRequest,
         auth: Option<PasswordAuth>,
     ) -> Result<GroupsPlatformResult, DcCmdError> {
         self.execute_groups_cmd(cmd, auth).await
@@ -147,7 +149,7 @@ impl Platform for CliPlatform {
 
     async fn reports(
         &self,
-        cmd: ReportsCommand,
+        cmd: ReportsRequest,
         auth: Option<PasswordAuth>,
     ) -> Result<ReportsPlatformResult, DcCmdError> {
         self.execute_reports_cmd(cmd, auth).await

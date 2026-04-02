@@ -1,0 +1,60 @@
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UsersRequest {
+    Ls {
+        target: String,
+        filter: Option<String>,
+        offset: Option<u64>,
+        limit: Option<u32>,
+        all: bool,
+        csv: bool,
+    },
+    Create {
+        target: String,
+        first_name: String,
+        last_name: String,
+        email: String,
+        login: Option<String>,
+        oidc_id: Option<u32>,
+        mfa_enforced: bool,
+        group_id: Option<u64>,
+    },
+    Invite {
+        target: String,
+        first_name: String,
+        last_name: String,
+        email: String,
+    },
+    Rm {
+        target: String,
+        user_name: Option<String>,
+        user_id: Option<u64>,
+    },
+    Import {
+        target: String,
+        source: String,
+        oidc_id: Option<u32>,
+    },
+    Info {
+        target: String,
+        user_name: Option<String>,
+        user_id: Option<u64>,
+    },
+    SwitchAuth {
+        target: String,
+        current_method: String,
+        new_method: String,
+        current_oidc_id: Option<u64>,
+        new_oidc_id: Option<u64>,
+        current_ad_id: Option<u64>,
+        new_ad_id: Option<u64>,
+        filter: Option<String>,
+        login: Option<String>,
+    },
+    EnforceMfa {
+        target: String,
+        auth_method: Option<String>,
+        filter: Option<String>,
+        auth_method_id: Option<u64>,
+        group_id: Option<u64>,
+    },
+}

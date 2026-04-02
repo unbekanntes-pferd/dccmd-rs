@@ -9,21 +9,69 @@ use std::ops::Deref;
 use crate::app::{
     config::api::{RefreshTokenInfo, SystemInfo},
     groups::GroupUsersPage,
+    nodes::{download::DownloadOutcome, transfer::TransferOutcome, upload::UploadOutcome},
     outcome::CommandOutcome,
     users::{models::UserInfo, EnforceMfaResult, ImportUsersResult, SwitchAuthResult},
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AppStatus {
+    Success,
+    PartialFailure,
+    Failure,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AppPayload {
+    Download(DownloadOutcome),
+    Upload(UploadOutcome),
+    Transfer(TransferOutcome),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppResult {
+    status: AppStatus,
     outcome: CommandOutcome,
+    payload: Option<AppPayload>,
 }
 
 impl AppResult {
-    pub fn messages(outcome: CommandOutcome) -> Self {
-        Self { outcome }
+    pub fn success(outcome: CommandOutcome) -> Self {
+        Self {
+            status: AppStatus::Success,
+            outcome,
+            payload: None,
+        }
     }
 
-    pub fn into_outcome(self) -> CommandOutcome {
-        self.outcome
+    pub fn partial_failure(outcome: CommandOutcome) -> Self {
+        Self {
+            status: AppStatus::PartialFailure,
+            outcome,
+            payload: None,
+        }
+    }
+
+    pub fn failure(outcome: CommandOutcome) -> Self {
+        Self {
+            status: AppStatus::Failure,
+            outcome,
+            payload: None,
+        }
+    }
+
+    pub fn with_payload(mut self, payload: AppPayload) -> Self {
+        self.payload = Some(payload);
+        self
+    }
+
+    pub fn status(&self) -> AppStatus {
+        self.status
+    }
+
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn payload(&self) -> Option<&AppPayload> {
+        self.payload.as_ref()
     }
 }
 

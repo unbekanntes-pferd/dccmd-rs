@@ -23,6 +23,14 @@ use crate::{
 
 const MAX_BUFFER_SIZE: usize = 64 * 1024;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TransferOutcome {
+    pub node_name: String,
+    pub source: String,
+    pub target: String,
+    pub share_message: Option<String>,
+}
+
 pub struct NodesTransferService {
     progress: Arc<dyn ProgressReporter>,
 }
@@ -37,7 +45,7 @@ impl NodesTransferService {
         source: String,
         target: String,
         opts: CmdTransferOptions,
-    ) -> Result<Option<String>, DcCmdError> {
+    ) -> Result<TransferOutcome, DcCmdError> {
         let auth = AuthService::new();
         let (mut source_dracoon, mut target_dracoon) =
             init_transfer_clients(&auth, &source, &target).await?;
@@ -148,7 +156,12 @@ impl NodesTransferService {
         let msg = format!("Node {} uploaded from {source} to {target}.", node.name);
         progress_bar.finish_with_message(&msg);
 
-        Ok(share_message)
+        Ok(TransferOutcome {
+            node_name: node.name.clone(),
+            source,
+            target,
+            share_message,
+        })
     }
 }
 

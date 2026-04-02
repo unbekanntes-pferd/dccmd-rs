@@ -3,14 +3,13 @@ use crate::{
         CmdCopyOptions, CmdCreateContainerOptions, CmdDeleteOptions, CmdDownloadOptions,
         CmdListNodesOptions, CmdTransferOptions, CmdUploadOptions,
     },
+    app::requests::{ConfigRequest, GroupsRequest, ReportsRequest, UsersRequest},
     core::models::PasswordAuth,
 };
 
-use super::{config::ConfigCommand, GroupsCommand, ReportsCommand, UsersCommand};
-
 pub enum AppCommand {
     Config {
-        cmd: ConfigCommand,
+        cmd: ConfigRequest,
     },
     Upload {
         source: String,
@@ -46,15 +45,15 @@ pub enum AppCommand {
         deprecated_alias: bool,
     },
     Users {
-        cmd: UsersCommand,
+        cmd: UsersRequest,
         auth: Option<PasswordAuth>,
     },
     Groups {
-        cmd: GroupsCommand,
+        cmd: GroupsRequest,
         auth: Option<PasswordAuth>,
     },
     Reports {
-        cmd: ReportsCommand,
+        cmd: ReportsRequest,
         auth: Option<PasswordAuth>,
     },
 }
