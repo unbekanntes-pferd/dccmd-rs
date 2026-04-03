@@ -3,7 +3,9 @@ use dco3::{
     auth::{Connected, Disconnected, OAuth2Flow},
     Dracoon, DracoonBuilder, DracoonClientError,
 };
-use keyring::Entry;
+#[cfg(target_os = "linux")]
+use keyring::{keyutils::KeyutilsCredential, secret_service::SsCredential};
+use keyring::{Entry, Error as KeyringError};
 use secrecy::{ExposeSecret, SecretString};
 use tracing::{debug, error, info, warn};
 
@@ -31,6 +33,23 @@ enum ConnectMode {
 pub enum RefreshTokenConnectError {
     InvalidToken(String),
     Other(DcCmdError),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum StoredSecretLookup {
+    Found(String),
+    Missing,
+    Unavailable,
+}
+
+impl StoredSecretLookup {
+    fn into_result(self) -> Result<String, DcCmdError> {
+        match self {
+            Self::Found(secret) => Ok(secret),
+            Self::Missing => Err(DcCmdError::InvalidAccount),
+            Self::Unavailable => Err(DcCmdError::CredentialStorageFailed),
+        }
+    }
 }
 
 #[async_trait]
@@ -70,10 +89,12 @@ pub trait AuthBackend: Send + Sync {
 }
 
 pub trait SecretStore: Send + Sync {
+    fn lookup_refresh_token(&self, base_url: &str) -> Result<StoredSecretLookup, DcCmdError>;
     fn get_refresh_token(&self, base_url: &str) -> Result<String, DcCmdError>;
     fn set_refresh_token(&self, base_url: &str, refresh_token: &str) -> Result<(), DcCmdError>;
     fn delete_refresh_token(&self, base_url: &str) -> Result<(), DcCmdError>;
 
+    fn lookup_encryption_secret(&self, account: &str) -> Result<StoredSecretLookup, DcCmdError>;
     fn get_encryption_secret(&self, account: &str) -> Result<String, DcCmdError>;
     fn set_encryption_secret(&self, account: &str, secret: &str) -> Result<(), DcCmdError>;
     fn delete_encryption_secret(&self, account: &str) -> Result<(), DcCmdError>;
@@ -144,15 +165,19 @@ where
             return Ok(Session::new(base_url, AuthMode::PasswordFlow, client));
         }
 
-        let refresh_token = match self.store.get_refresh_token(&base_url) {
-            Ok(token) => Some(token),
-            Err(DcCmdError::InvalidAccount) => None,
+        let refresh_lookup = match self.store.lookup_refresh_token(&base_url) {
+            Ok(lookup) => lookup,
             Err(e) => return Err(e),
         };
 
-        match Self::resolve_connect_mode(false, refresh_token.is_some()) {
+        match Self::resolve_connect_mode(
+            false,
+            matches!(refresh_lookup, StoredSecretLookup::Found(_)),
+        ) {
             ConnectMode::RefreshToken => {
-                let refresh_token = refresh_token.expect("refresh token checked as present");
+                let StoredSecretLookup::Found(refresh_token) = refresh_lookup else {
+                    unreachable!("refresh token checked as present");
+                };
                 if let Some(session) = self
                     .try_connect_with_refresh_token(&base_url, is_transfer, refresh_token)
                     .await?
@@ -164,7 +189,19 @@ where
                 }
             }
             ConnectMode::AuthCode => {
-                info!("No stored refresh token for {base_url}; starting auth code flow.");
+                match refresh_lookup {
+                    StoredSecretLookup::Missing => {
+                        info!("No stored refresh token for {base_url}; starting auth code flow.");
+                    }
+                    StoredSecretLookup::Unavailable => {
+                        warn!(
+                            "Stored refresh token for {base_url} is unavailable due to local credential storage access failures; starting auth code flow."
+                        );
+                    }
+                    StoredSecretLookup::Found(_) => {
+                        unreachable!("auth code flow selected without stored refresh token")
+                    }
+                }
                 self.connect_with_auth_code_flow(&base_url, is_transfer)
                     .await
             }
@@ -219,9 +256,17 @@ where
 
         let (secret, persist) = match encryption_password {
             Some(password) => (password, false),
-            None => match self.store.get_encryption_secret(&account) {
-                Ok(stored_secret) => (SecretString::new(stored_secret.into()), false),
-                Err(DcCmdError::InvalidAccount) => (self.prompts.ask_encryption_secret()?, true),
+            None => match self.store.lookup_encryption_secret(&account) {
+                Ok(StoredSecretLookup::Found(stored_secret)) => {
+                    (SecretString::new(stored_secret.into()), false)
+                }
+                Ok(StoredSecretLookup::Missing) => (self.prompts.ask_encryption_secret()?, true),
+                Ok(StoredSecretLookup::Unavailable) => {
+                    warn!(
+                        "Stored encryption secret for {account} is unavailable due to local credential storage access failures; prompting again."
+                    );
+                    (self.prompts.ask_encryption_secret()?, true)
+                }
                 Err(DcCmdError::CredentialStorageFailed) => {
                     (self.prompts.ask_encryption_secret()?, false)
                 }
@@ -450,36 +495,36 @@ impl AuthBackend for DracoonAuthBackend {
 }
 
 impl SecretStore for KeyringSecretStore {
+    fn lookup_refresh_token(&self, base_url: &str) -> Result<StoredSecretLookup, DcCmdError> {
+        lookup_secret(base_url, "refresh token")
+    }
+
     fn get_refresh_token(&self, base_url: &str) -> Result<String, DcCmdError> {
-        let entry = keyring_entry(base_url)?;
-        entry.get_password().map_err(|_| DcCmdError::InvalidAccount)
+        self.lookup_refresh_token(base_url)?.into_result()
     }
 
     fn set_refresh_token(&self, base_url: &str, refresh_token: &str) -> Result<(), DcCmdError> {
-        let entry = keyring_entry(base_url)?;
-        entry
-            .set_password(refresh_token)
-            .map_err(|_| DcCmdError::CredentialStorageFailed)
+        store_secret(base_url, refresh_token, "refresh token")
     }
 
     fn delete_refresh_token(&self, base_url: &str) -> Result<(), DcCmdError> {
-        delete_keyring_secret(base_url)
+        delete_stored_secret(base_url, "refresh token")
+    }
+
+    fn lookup_encryption_secret(&self, account: &str) -> Result<StoredSecretLookup, DcCmdError> {
+        lookup_secret(account, "encryption secret")
     }
 
     fn get_encryption_secret(&self, account: &str) -> Result<String, DcCmdError> {
-        let entry = keyring_entry(account)?;
-        entry.get_password().map_err(|_| DcCmdError::InvalidAccount)
+        self.lookup_encryption_secret(account)?.into_result()
     }
 
     fn set_encryption_secret(&self, account: &str, secret: &str) -> Result<(), DcCmdError> {
-        let entry = keyring_entry(account)?;
-        entry
-            .set_password(secret)
-            .map_err(|_| DcCmdError::CredentialStorageFailed)
+        store_secret(account, secret, "encryption secret")
     }
 
     fn delete_encryption_secret(&self, account: &str) -> Result<(), DcCmdError> {
-        delete_keyring_secret(account)
+        delete_stored_secret(account, "encryption secret")
     }
 }
 
@@ -520,19 +565,230 @@ fn build_disconnected_client(
         .map_err(Into::into)
 }
 
-fn keyring_entry(account: &str) -> Result<Entry, DcCmdError> {
-    Entry::new(SERVICE_NAME, account).map_err(|_| DcCmdError::CredentialStorageFailed)
+#[cfg(target_os = "linux")]
+fn lookup_secret(account: &str, secret_label: &str) -> Result<StoredSecretLookup, DcCmdError> {
+    let secret_service = match secret_service_entry(account) {
+        Ok(entry) => Some(entry),
+        Err(err) => {
+            warn!(
+                "Failed to create persistent Secret Service {secret_label} entry for {account}: {err}; trying keyutils fallback."
+            );
+            None
+        }
+    };
+
+    if let Some(entry) = secret_service {
+        match entry.get_password() {
+            Ok(secret) => {
+                warm_keyutils_secret(account, secret_label, &secret);
+                return Ok(StoredSecretLookup::Found(secret));
+            }
+            Err(KeyringError::NoEntry) => {}
+            Err(err) => {
+                warn!(
+                    "Failed to access persistent Secret Service {secret_label} for {account}: {err}; trying keyutils fallback."
+                );
+                return lookup_keyutils_fallback(account, secret_label, true);
+            }
+        }
+    }
+
+    lookup_keyutils_fallback(account, secret_label, false)
 }
 
-fn delete_keyring_secret(account: &str) -> Result<(), DcCmdError> {
-    let entry = keyring_entry(account)?;
-    if entry.get_password().is_err() {
+#[cfg(not(target_os = "linux"))]
+fn lookup_secret(account: &str, _secret_label: &str) -> Result<StoredSecretLookup, DcCmdError> {
+    match keyring_entry(account)
+        .map_err(|_| DcCmdError::CredentialStorageFailed)?
+        .get_password()
+    {
+        Ok(secret) => Ok(StoredSecretLookup::Found(secret)),
+        Err(KeyringError::NoEntry) => Ok(StoredSecretLookup::Missing),
+        Err(err) => {
+            debug!("Error reading stored secret for {account}: {err}");
+            Err(DcCmdError::CredentialStorageFailed)
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn store_secret(account: &str, secret: &str, secret_label: &str) -> Result<(), DcCmdError> {
+    let secret_service_result = secret_service_entry(account)
+        .and_then(|entry| entry.set_password(secret))
+        .map_err(|err| {
+            debug!("Failed to store {secret_label} for {account} in Secret Service: {err}");
+            err
+        });
+    let keyutils_result = keyutils_entry(account)
+        .and_then(|entry| entry.set_password(secret))
+        .map_err(|err| {
+            debug!("Failed to store {secret_label} for {account} in keyutils fallback: {err}");
+            err
+        });
+
+    match (secret_service_result, keyutils_result) {
+        (Ok(()), Ok(())) | (Ok(()), Err(_)) => Ok(()),
+        (Err(secret_service_err), Ok(())) => {
+            warn!(
+                "Failed to persist {secret_label} for {account} in Secret Service: {secret_service_err}; stored only in keyutils fallback."
+            );
+            Ok(())
+        }
+        (Err(_), Err(_)) => Err(DcCmdError::CredentialStorageFailed),
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn store_secret(account: &str, secret: &str, _secret_label: &str) -> Result<(), DcCmdError> {
+    keyring_entry(account)
+        .map_err(|_| DcCmdError::CredentialStorageFailed)?
+        .set_password(secret)
+        .map_err(|_| DcCmdError::CredentialStorageFailed)
+}
+
+#[cfg(target_os = "linux")]
+fn delete_stored_secret(account: &str, secret_label: &str) -> Result<(), DcCmdError> {
+    let secret_service_result = delete_entry(
+        secret_service_entry(account),
+        "Secret Service",
+        account,
+        secret_label,
+    );
+    let keyutils_result = delete_entry(
+        keyutils_entry(account),
+        "keyutils fallback",
+        account,
+        secret_label,
+    );
+
+    if matches!(secret_service_result, DeleteOutcome::Missing)
+        && matches!(keyutils_result, DeleteOutcome::Missing)
+    {
         return Err(DcCmdError::InvalidAccount);
     }
 
-    entry
+    if matches!(secret_service_result, DeleteOutcome::Failed)
+        || matches!(keyutils_result, DeleteOutcome::Failed)
+    {
+        return Err(DcCmdError::CredentialDeletionFailed);
+    }
+
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn delete_stored_secret(account: &str, _secret_label: &str) -> Result<(), DcCmdError> {
+    match keyring_entry(account)
+        .map_err(|_| DcCmdError::CredentialStorageFailed)?
         .delete_credential()
-        .map_err(|_| DcCmdError::CredentialDeletionFailed)
+    {
+        Ok(()) => Ok(()),
+        Err(KeyringError::NoEntry) => Err(DcCmdError::InvalidAccount),
+        Err(_) => Err(DcCmdError::CredentialDeletionFailed),
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn keyring_entry(account: &str) -> Result<Entry, KeyringError> {
+    Entry::new(SERVICE_NAME, account)
+}
+
+#[cfg(target_os = "linux")]
+fn secret_service_entry(account: &str) -> Result<Entry, KeyringError> {
+    Ok(Entry::new_with_credential(Box::new(
+        SsCredential::new_with_target(None, SERVICE_NAME, account)?,
+    )))
+}
+
+#[cfg(target_os = "linux")]
+fn keyutils_entry(account: &str) -> Result<Entry, KeyringError> {
+    Ok(Entry::new_with_credential(Box::new(
+        KeyutilsCredential::new_with_target(None, SERVICE_NAME, account)?,
+    )))
+}
+
+#[cfg(target_os = "linux")]
+fn warm_keyutils_secret(account: &str, secret_label: &str, secret: &str) {
+    match keyutils_entry(account) {
+        Ok(entry) => {
+            if let Err(err) = entry.set_password(secret) {
+                debug!("Failed to warm keyutils {secret_label} for {account}: {err}");
+            }
+        }
+        Err(err) => {
+            debug!("Failed to create keyutils entry for {secret_label} {account}: {err}");
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn lookup_keyutils_fallback(
+    account: &str,
+    secret_label: &str,
+    after_secret_service_failure: bool,
+) -> Result<StoredSecretLookup, DcCmdError> {
+    let entry = match keyutils_entry(account) {
+        Ok(entry) => entry,
+        Err(err) => {
+            warn!("Failed to create keyutils entry for {secret_label} {account}: {err}");
+            return Ok(StoredSecretLookup::Unavailable);
+        }
+    };
+
+    match entry.get_password() {
+        Ok(secret) => {
+            if after_secret_service_failure {
+                info!("Using keyutils fallback {secret_label} for {account}.");
+            } else {
+                info!(
+                    "Using keyutils fallback {secret_label} for {account}; no persistent Secret Service entry was found."
+                );
+            }
+            Ok(StoredSecretLookup::Found(secret))
+        }
+        Err(KeyringError::NoEntry) if after_secret_service_failure => {
+            warn!(
+                "No keyutils fallback {secret_label} was available for {account} after Secret Service access failed."
+            );
+            Ok(StoredSecretLookup::Unavailable)
+        }
+        Err(KeyringError::NoEntry) => Ok(StoredSecretLookup::Missing),
+        Err(err) => {
+            warn!("Failed to access keyutils fallback {secret_label} for {account}: {err}");
+            Ok(StoredSecretLookup::Unavailable)
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DeleteOutcome {
+    Deleted,
+    Missing,
+    Failed,
+}
+
+#[cfg(target_os = "linux")]
+fn delete_entry(
+    entry_result: Result<Entry, KeyringError>,
+    backend_label: &str,
+    account: &str,
+    secret_label: &str,
+) -> DeleteOutcome {
+    match entry_result {
+        Ok(entry) => match entry.delete_credential() {
+            Ok(()) => DeleteOutcome::Deleted,
+            Err(KeyringError::NoEntry) => DeleteOutcome::Missing,
+            Err(err) => {
+                warn!("Failed to delete {secret_label} for {account} from {backend_label}: {err}");
+                DeleteOutcome::Failed
+            }
+        },
+        Err(err) => {
+            warn!("Failed to create {backend_label} entry for {secret_label} {account}: {err}");
+            DeleteOutcome::Failed
+        }
+    }
 }
 
 #[cfg(test)]

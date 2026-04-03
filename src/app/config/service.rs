@@ -1,24 +1,20 @@
 use crate::{
-    app::{
-        auth::{
-            AuthService, DialoguerPrompts, DracoonAuthBackend, KeyringSecretStore, SecretStore,
-        },
-        config::api::{RefreshTokenInfo, SystemApi, SystemInfo},
+    app::auth::{
+        DialoguerPrompts, DracoonAuthBackend, KeyringSecretStore, SecretStore, StoredSecretLookup,
     },
     core::models::DcCmdError,
 };
 
 pub struct ConfigService<S = KeyringSecretStore> {
-    auth_service: AuthService,
     store: S,
 }
 
-type DefaultAuthService = AuthService<DracoonAuthBackend, KeyringSecretStore, DialoguerPrompts>;
+type DefaultAuthService =
+    crate::app::auth::AuthService<DracoonAuthBackend, KeyringSecretStore, DialoguerPrompts>;
 
 impl ConfigService<KeyringSecretStore> {
     pub fn new() -> Self {
         Self {
-            auth_service: AuthService::new(),
             store: KeyringSecretStore,
         }
     }
@@ -30,10 +26,7 @@ where
 {
     #[cfg(test)]
     pub fn with_store(store: S) -> Self {
-        Self {
-            auth_service: AuthService::new(),
-            store,
-        }
+        Self { store }
     }
 
     pub fn normalize_base_url(&self, target: &str) -> Result<String, DcCmdError> {
@@ -53,25 +46,12 @@ where
         Ok(format!("{}-crypto", self.normalize_base_url(target)?))
     }
 
-    pub async fn get_refresh_token_info(
-        &self,
-        target: &str,
-    ) -> Result<RefreshTokenInfo, DcCmdError> {
-        let api_client = self.connect_with_refresh_token(target).await?;
-        SystemApi::get_refresh_token_info(&api_client).await
-    }
-
-    pub async fn get_system_info(&self, target: &str) -> Result<SystemInfo, DcCmdError> {
-        let api_client = self.connect_with_refresh_token(target).await?;
-        SystemApi::get_system_info(&api_client).await
-    }
-
     pub fn has_encryption_secret(&self, target: &str) -> Result<bool, DcCmdError> {
         let account = self.encryption_account(target)?;
-        match self.store.get_encryption_secret(&account) {
-            Ok(_) => Ok(true),
-            Err(DcCmdError::InvalidAccount) => Ok(false),
-            Err(e) => Err(e),
+        match self.store.lookup_encryption_secret(&account)? {
+            StoredSecretLookup::Found(_) => Ok(true),
+            StoredSecretLookup::Missing => Ok(false),
+            StoredSecretLookup::Unavailable => Err(DcCmdError::CredentialStorageFailed),
         }
     }
 
@@ -85,19 +65,13 @@ where
         self.store.delete_encryption_secret(&account)
     }
 
-    async fn connect_with_refresh_token(
-        &self,
-        target: &str,
-    ) -> Result<dco3::Dracoon<dco3::auth::Connected>, DcCmdError> {
+    pub fn get_refresh_token(&self, target: &str) -> Result<String, DcCmdError> {
         let base_url = self.normalize_base_url(target)?;
-        let refresh_token = self.store.get_refresh_token(&base_url)?;
-
-        let session = self
-            .auth_service
-            .connect_with_refresh_token(&base_url, refresh_token)
-            .await?;
-
-        Ok(session.into_client())
+        match self.store.lookup_refresh_token(&base_url)? {
+            StoredSecretLookup::Found(refresh_token) => Ok(refresh_token),
+            StoredSecretLookup::Missing => Err(DcCmdError::InvalidAccount),
+            StoredSecretLookup::Unavailable => Err(DcCmdError::CredentialStorageFailed),
+        }
     }
 }
 
@@ -114,6 +88,8 @@ mod tests {
     struct StoreState {
         refresh_tokens: Mutex<HashMap<String, String>>,
         encryption_secrets: Mutex<HashMap<String, String>>,
+        unavailable_refresh_accounts: Mutex<Vec<String>>,
+        unavailable_encryption_accounts: Mutex<Vec<String>>,
         deleted_refresh_accounts: Mutex<Vec<String>>,
         deleted_encryption_accounts: Mutex<Vec<String>>,
     }
@@ -124,6 +100,21 @@ mod tests {
     }
 
     impl InMemoryStore {
+        fn with_refresh_token(base_url: &str, refresh_token: &str) -> Self {
+            let mut refresh_tokens = HashMap::new();
+            refresh_tokens.insert(base_url.to_string(), refresh_token.to_string());
+            Self {
+                state: Arc::new(StoreState {
+                    refresh_tokens: Mutex::new(refresh_tokens),
+                    encryption_secrets: Mutex::new(HashMap::new()),
+                    unavailable_refresh_accounts: Mutex::new(Vec::new()),
+                    unavailable_encryption_accounts: Mutex::new(Vec::new()),
+                    deleted_refresh_accounts: Mutex::new(Vec::new()),
+                    deleted_encryption_accounts: Mutex::new(Vec::new()),
+                }),
+            }
+        }
+
         fn with_encryption_secret(account: &str, secret: &str) -> Self {
             let mut encryption_secrets = HashMap::new();
             encryption_secrets.insert(account.to_string(), secret.to_string());
@@ -131,6 +122,21 @@ mod tests {
                 state: Arc::new(StoreState {
                     refresh_tokens: Mutex::new(HashMap::new()),
                     encryption_secrets: Mutex::new(encryption_secrets),
+                    unavailable_refresh_accounts: Mutex::new(Vec::new()),
+                    unavailable_encryption_accounts: Mutex::new(Vec::new()),
+                    deleted_refresh_accounts: Mutex::new(Vec::new()),
+                    deleted_encryption_accounts: Mutex::new(Vec::new()),
+                }),
+            }
+        }
+
+        fn with_unavailable_refresh_token(base_url: &str) -> Self {
+            Self {
+                state: Arc::new(StoreState {
+                    refresh_tokens: Mutex::new(HashMap::new()),
+                    encryption_secrets: Mutex::new(HashMap::new()),
+                    unavailable_refresh_accounts: Mutex::new(vec![base_url.to_string()]),
+                    unavailable_encryption_accounts: Mutex::new(Vec::new()),
                     deleted_refresh_accounts: Mutex::new(Vec::new()),
                     deleted_encryption_accounts: Mutex::new(Vec::new()),
                 }),
@@ -155,14 +161,35 @@ mod tests {
     }
 
     impl SecretStore for InMemoryStore {
-        fn get_refresh_token(&self, base_url: &str) -> Result<String, DcCmdError> {
-            self.state
+        fn lookup_refresh_token(&self, base_url: &str) -> Result<StoredSecretLookup, DcCmdError> {
+            if self
+                .state
+                .unavailable_refresh_accounts
+                .lock()
+                .expect("lock poisoned")
+                .iter()
+                .any(|account| account == base_url)
+            {
+                return Ok(StoredSecretLookup::Unavailable);
+            }
+
+            Ok(self
+                .state
                 .refresh_tokens
                 .lock()
                 .expect("lock poisoned")
                 .get(base_url)
                 .cloned()
-                .ok_or(DcCmdError::InvalidAccount)
+                .map(StoredSecretLookup::Found)
+                .unwrap_or(StoredSecretLookup::Missing))
+        }
+
+        fn get_refresh_token(&self, base_url: &str) -> Result<String, DcCmdError> {
+            match self.lookup_refresh_token(base_url)? {
+                StoredSecretLookup::Found(refresh_token) => Ok(refresh_token),
+                StoredSecretLookup::Missing => Err(DcCmdError::InvalidAccount),
+                StoredSecretLookup::Unavailable => Err(DcCmdError::CredentialStorageFailed),
+            }
         }
 
         fn set_refresh_token(
@@ -182,14 +209,38 @@ mod tests {
             Ok(())
         }
 
-        fn get_encryption_secret(&self, account: &str) -> Result<String, DcCmdError> {
-            self.state
+        fn lookup_encryption_secret(
+            &self,
+            account: &str,
+        ) -> Result<StoredSecretLookup, DcCmdError> {
+            if self
+                .state
+                .unavailable_encryption_accounts
+                .lock()
+                .expect("lock poisoned")
+                .iter()
+                .any(|stored_account| stored_account == account)
+            {
+                return Ok(StoredSecretLookup::Unavailable);
+            }
+
+            Ok(self
+                .state
                 .encryption_secrets
                 .lock()
                 .expect("lock poisoned")
                 .get(account)
                 .cloned()
-                .ok_or(DcCmdError::InvalidAccount)
+                .map(StoredSecretLookup::Found)
+                .unwrap_or(StoredSecretLookup::Missing))
+        }
+
+        fn get_encryption_secret(&self, account: &str) -> Result<String, DcCmdError> {
+            match self.lookup_encryption_secret(account)? {
+                StoredSecretLookup::Found(secret) => Ok(secret),
+                StoredSecretLookup::Missing => Err(DcCmdError::InvalidAccount),
+                StoredSecretLookup::Unavailable => Err(DcCmdError::CredentialStorageFailed),
+            }
         }
 
         fn set_encryption_secret(&self, _account: &str, _secret: &str) -> Result<(), DcCmdError> {
@@ -239,6 +290,33 @@ mod tests {
             .unwrap();
 
         assert!(has_secret);
+    }
+
+    #[test]
+    fn test_get_refresh_token_uses_normalized_base_url() {
+        let store = InMemoryStore::with_refresh_token(
+            "https://dracoon.example.com",
+            "stored-refresh-token",
+        );
+        let service = ConfigService::with_store(store);
+
+        let refresh_token = service
+            .get_refresh_token("dracoon.example.com/some/path")
+            .unwrap();
+
+        assert_eq!(refresh_token, "stored-refresh-token");
+    }
+
+    #[test]
+    fn test_get_refresh_token_errors_when_storage_is_unavailable() {
+        let store = InMemoryStore::with_unavailable_refresh_token("https://dracoon.example.com");
+        let service = ConfigService::with_store(store);
+
+        let err = service
+            .get_refresh_token("dracoon.example.com/some/path")
+            .unwrap_err();
+
+        assert!(matches!(err, DcCmdError::CredentialStorageFailed));
     }
 
     #[test]
