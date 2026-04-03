@@ -19,7 +19,7 @@ use crate::{
         AppCommand, CreateContainerType, DcCmdCommand, GroupsCommand, GroupsUsersCommand,
         UsersCommand,
     },
-    core::models::{DcCmdError, PasswordAuth},
+    core::models::DcCmdError,
 };
 
 type AppCommandChecker = Box<dyn FnOnce(AppCommand) + Send>;
@@ -157,13 +157,10 @@ async fn test_execute_dispatches_mkroom_alias_to_mkdir_app_command() {
 #[tokio::test]
 async fn test_execute_dispatches_users_groups_and_reports_to_app() {
     let app = MockAppExecutor::with_checker(|command| match command {
-        AppCommand::Users { cmd, auth } => {
-            assert!(auth.is_none());
-            match cmd {
-                UsersRequest::Ls { target, .. } => assert_eq!(target, "example.com"),
-                _ => panic!("expected users ls"),
-            }
-        }
+        AppCommand::Users { cmd } => match cmd {
+            UsersRequest::Ls { target, .. } => assert_eq!(target, "example.com"),
+            _ => panic!("expected users ls"),
+        },
         _ => panic!("expected AppCommand::Users"),
     });
     let runner = CliRunner::new_with_executor(app, Term::buffered_stdout(), None, None);
@@ -182,21 +179,18 @@ async fn test_execute_dispatches_users_groups_and_reports_to_app() {
         .unwrap();
 
     let app = MockAppExecutor::with_checker(|command| match command {
-        AppCommand::Groups { cmd, auth } => {
-            assert!(auth.is_none());
-            match cmd {
-                GroupsRequest::Users { cmd } => match cmd {
-                    GroupsUsersRequest::Add {
-                        target, group_id, ..
-                    } => {
-                        assert_eq!(target, "example.com");
-                        assert_eq!(group_id, Some(7));
-                    }
-                    _ => panic!("expected group user add"),
-                },
-                _ => panic!("expected groups users"),
-            }
-        }
+        AppCommand::Groups { cmd } => match cmd {
+            GroupsRequest::Users { cmd } => match cmd {
+                GroupsUsersRequest::Add {
+                    target, group_id, ..
+                } => {
+                    assert_eq!(target, "example.com");
+                    assert_eq!(group_id, Some(7));
+                }
+                _ => panic!("expected group user add"),
+            },
+            _ => panic!("expected groups users"),
+        },
         _ => panic!("expected AppCommand::Groups"),
     });
     let runner = CliRunner::new_with_executor(app, Term::buffered_stdout(), None, None);
@@ -216,92 +210,15 @@ async fn test_execute_dispatches_users_groups_and_reports_to_app() {
         .unwrap();
 
     let app = MockAppExecutor::with_checker(|command| match command {
-        AppCommand::Reports { cmd, auth } => {
-            assert!(auth.is_none());
-            match cmd {
-                ReportsRequest::OperationTypes { target } => {
-                    assert_eq!(target, "example.com")
-                }
-                _ => panic!("expected operation types"),
+        AppCommand::Reports { cmd } => match cmd {
+            ReportsRequest::OperationTypes { target } => {
+                assert_eq!(target, "example.com")
             }
-        }
+            _ => panic!("expected operation types"),
+        },
         _ => panic!("expected AppCommand::Reports"),
     });
     let runner = CliRunner::new_with_executor(app, Term::buffered_stdout(), None, None);
-    runner
-        .execute(DcCmdCommand::Reports {
-            cmd: crate::command::ReportsCommand::OperationTypes {
-                target: "example.com".to_string(),
-            },
-        })
-        .await
-        .unwrap();
-}
-
-#[tokio::test]
-async fn test_execute_dispatches_global_password_auth_to_users_groups_and_reports() {
-    let password_auth = Some(PasswordAuth::new(
-        "alice".to_string(),
-        SecretString::new("secret".into()),
-    ));
-
-    let app = MockAppExecutor::with_checker(|command| match command {
-        AppCommand::Users { auth, .. } => {
-            let auth = auth.expect("users auth should be set");
-            assert_eq!(auth.username(), "alice");
-            assert_eq!(auth.password_str(), "secret");
-        }
-        _ => panic!("expected users command"),
-    });
-    let runner =
-        CliRunner::new_with_executor(app, Term::buffered_stdout(), password_auth.clone(), None);
-    runner
-        .execute(DcCmdCommand::Users {
-            cmd: UsersCommand::Ls {
-                target: "example.com".to_string(),
-                filter: None,
-                offset: None,
-                limit: None,
-                all: false,
-                csv: false,
-            },
-        })
-        .await
-        .unwrap();
-
-    let app = MockAppExecutor::with_checker(|command| match command {
-        AppCommand::Groups { auth, .. } => {
-            let auth = auth.expect("groups auth should be set");
-            assert_eq!(auth.username(), "alice");
-            assert_eq!(auth.password_str(), "secret");
-        }
-        _ => panic!("expected groups command"),
-    });
-    let runner =
-        CliRunner::new_with_executor(app, Term::buffered_stdout(), password_auth.clone(), None);
-    runner
-        .execute(DcCmdCommand::Groups {
-            cmd: GroupsCommand::Ls {
-                target: "example.com".to_string(),
-                filter: None,
-                offset: None,
-                limit: None,
-                all: false,
-                csv: false,
-            },
-        })
-        .await
-        .unwrap();
-
-    let app = MockAppExecutor::with_checker(|command| match command {
-        AppCommand::Reports { auth, .. } => {
-            let auth = auth.expect("reports auth should be set");
-            assert_eq!(auth.username(), "alice");
-            assert_eq!(auth.password_str(), "secret");
-        }
-        _ => panic!("expected reports command"),
-    });
-    let runner = CliRunner::new_with_executor(app, Term::buffered_stdout(), password_auth, None);
     runner
         .execute(DcCmdCommand::Reports {
             cmd: crate::command::ReportsCommand::OperationTypes {

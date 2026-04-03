@@ -4,7 +4,6 @@ use crate::{
         CmdListNodesOptions, CmdTransferOptions, CmdUploadOptions,
     },
     app::requests::{ConfigRequest, GroupsRequest, ReportsRequest, UsersRequest},
-    core::models::PasswordAuth,
 };
 
 pub enum AppCommand {
@@ -46,14 +45,11 @@ pub enum AppCommand {
     },
     Users {
         cmd: UsersRequest,
-        auth: Option<PasswordAuth>,
     },
     Groups {
         cmd: GroupsRequest,
-        auth: Option<PasswordAuth>,
     },
     Reports {
         cmd: ReportsRequest,
-        auth: Option<PasswordAuth>,
     },
 }

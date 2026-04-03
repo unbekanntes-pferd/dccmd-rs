@@ -5,7 +5,7 @@ use crate::{
         reports::{EventOptions, ReportsService},
         results::ReportsPlatformResult,
     },
-    core::models::{DcCmdError, ListOptions, PasswordAuth},
+    core::models::{DcCmdError, ListOptions},
 };
 
 use super::CliPlatform;
@@ -14,10 +14,9 @@ impl CliPlatform {
     pub(super) async fn execute_reports_cmd(
         &self,
         cmd: ReportsRequest,
-        auth: Option<PasswordAuth>,
     ) -> Result<ReportsPlatformResult, DcCmdError> {
         let client = AuthService::new()
-            .connect_client(Self::reports_target(&cmd), auth, false)
+            .connect_client(Self::reports_target(&cmd), self.password_auth(), false)
             .await?;
         let service = ReportsService::new(client);
 

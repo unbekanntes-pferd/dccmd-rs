@@ -1,12 +1,5 @@
 use std::sync::{Arc, Mutex};
 
-use async_trait::async_trait;
-use dco3::{
-    models::{Range, RangedItems},
-    nodes::{models::NodeType, Node, NodeList},
-};
-use secrecy::SecretString;
-
 use crate::{
     app::{
         nodes::{
@@ -25,7 +18,12 @@ use crate::{
         },
     },
     command::{AppCommand, CreateContainerType},
-    core::models::{DcCmdError, ListOptions, PasswordAuth},
+    core::models::{DcCmdError, ListOptions},
+};
+use async_trait::async_trait;
+use dco3::{
+    models::{Range, RangedItems},
+    nodes::{models::NodeType, Node, NodeList},
 };
 
 use super::{
@@ -63,7 +61,6 @@ struct MockPlatform {
     deleted_nodes: Mutex<Vec<u64>>,
     deleted_batch_nodes: Mutex<Vec<Vec<u64>>>,
     prepare_recursive: Mutex<Vec<bool>>,
-    prepare_has_auth: Mutex<Vec<bool>>,
 }
 
 impl MockPlatform {
@@ -326,10 +323,6 @@ impl Platform for Arc<MockPlatform> {
             .lock()
             .expect("lock poisoned")
             .push(opts.recursive());
-        self.prepare_has_auth
-            .lock()
-            .expect("lock poisoned")
-            .push(opts.auth().is_some());
         self.preparation
             .lock()
             .expect("lock poisoned")
@@ -381,11 +374,7 @@ impl Platform for Arc<MockPlatform> {
             .unwrap_or_else(|| "created".to_string()))
     }
 
-    async fn users(
-        &self,
-        _cmd: UsersRequest,
-        _auth: Option<PasswordAuth>,
-    ) -> Result<UsersPlatformResult, DcCmdError> {
+    async fn users(&self, _cmd: UsersRequest) -> Result<UsersPlatformResult, DcCmdError> {
         if *self.users_error.lock().expect("lock poisoned") {
             return Err(DcCmdError::InvalidArgument("users failed".to_string()));
         }
@@ -401,11 +390,7 @@ impl Platform for Arc<MockPlatform> {
         ))
     }
 
-    async fn groups(
-        &self,
-        _cmd: GroupsRequest,
-        _auth: Option<PasswordAuth>,
-    ) -> Result<GroupsPlatformResult, DcCmdError> {
+    async fn groups(&self, _cmd: GroupsRequest) -> Result<GroupsPlatformResult, DcCmdError> {
         if *self.groups_error.lock().expect("lock poisoned") {
             return Err(DcCmdError::InvalidArgument("groups failed".to_string()));
         }
@@ -425,11 +410,7 @@ impl Platform for Arc<MockPlatform> {
         })
     }
 
-    async fn reports(
-        &self,
-        _cmd: ReportsRequest,
-        _auth: Option<PasswordAuth>,
-    ) -> Result<ReportsPlatformResult, DcCmdError> {
+    async fn reports(&self, _cmd: ReportsRequest) -> Result<ReportsPlatformResult, DcCmdError> {
         if *self.reports_error.lock().expect("lock poisoned") {
             return Err(DcCmdError::InvalidArgument("reports failed".to_string()));
         }
@@ -671,13 +652,7 @@ async fn test_rm_uses_delete_options_and_deletes_single_node() {
     let ui = Arc::new(MockUi::default());
     let app = App::new(platform.clone(), ui.clone());
 
-    let opts = CmdDeleteOptions::new(
-        true,
-        Some(PasswordAuth::new(
-            "test".to_string(),
-            SecretString::new("pw".into()),
-        )),
-    );
+    let opts = CmdDeleteOptions::new(true);
 
     let outcome = app
         .execute(AppCommand::Rm {
@@ -689,10 +664,6 @@ async fn test_rm_uses_delete_options_and_deletes_single_node() {
 
     assert_eq!(
         *platform.prepare_recursive.lock().expect("lock poisoned"),
-        vec![true]
-    );
-    assert_eq!(
-        *platform.prepare_has_auth.lock().expect("lock poisoned"),
         vec![true]
     );
     assert_eq!(
@@ -722,7 +693,7 @@ async fn test_rm_room_cancelled_writes_error() {
     let outcome = app
         .execute(AppCommand::Rm {
             source: "example.com/room-a".to_string(),
-            opts: CmdDeleteOptions::new(true, None),
+            opts: CmdDeleteOptions::new(true),
         })
         .await
         .unwrap();
@@ -848,7 +819,6 @@ async fn test_mkdir_alias_writes_deprecation_warning() {
                 Some(2),
                 None,
                 None,
-                None,
                 false,
             ),
             deprecated_alias: true,
@@ -883,7 +853,6 @@ async fn test_mkdir_default_folder_writes_success_without_warning() {
                 None,
                 Some("notes".to_string()),
                 None,
-                None,
                 false,
             ),
             deprecated_alias: false,
@@ -914,7 +883,6 @@ async fn test_ls_collects_info_outcome() {
                 false,
                 false,
                 false,
-                None,
             ),
         })
         .await
@@ -948,7 +916,6 @@ async fn test_ls_passes_render_flags_to_ui() {
                 true,
                 true,
                 false,
-                None,
             ),
         })
         .await
@@ -977,7 +944,6 @@ async fn test_ls_propagates_platform_error() {
                 false,
                 false,
                 false,
-                None,
             ),
         })
         .await;
@@ -998,7 +964,7 @@ async fn test_cp_writes_success_outcome() {
         .execute(AppCommand::Cp {
             source: "example.com/test/*".to_string(),
             target: "/target/".to_string(),
-            opts: CmdCopyOptions::new(None),
+            opts: CmdCopyOptions::new(),
         })
         .await
         .unwrap();
@@ -1021,7 +987,7 @@ async fn test_cp_propagates_platform_error() {
         .execute(AppCommand::Cp {
             source: "example.com/test/*".to_string(),
             target: "/target/".to_string(),
-            opts: CmdCopyOptions::new(None),
+            opts: CmdCopyOptions::new(),
         })
         .await;
 
@@ -1041,7 +1007,7 @@ async fn test_download_delegates_to_platform() {
         .execute(AppCommand::Download {
             source: "example.com/room/file.txt".to_string(),
             target: "/tmp/file.txt".to_string(),
-            opts: CmdDownloadOptions::new(false, None, None, None, None, false),
+            opts: CmdDownloadOptions::new(false, None, None, false),
         })
         .await
         .unwrap();
@@ -1124,9 +1090,7 @@ async fn test_upload_share_message_uses_ui_success_channel() {
         .execute(AppCommand::Upload {
             source: "/tmp/file.txt".to_string(),
             target: "example.com/room".to_string(),
-            opts: CmdUploadOptions::new(
-                false, false, false, false, true, None, None, None, None, None,
-            ),
+            opts: CmdUploadOptions::new(false, false, false, false, true, None, None, None),
         })
         .await
         .unwrap();
@@ -1220,7 +1184,7 @@ async fn test_download_partial_failure_writes_warning_and_details() {
         .execute(AppCommand::Download {
             source: "example.com/room/*".to_string(),
             target: "/tmp/".to_string(),
-            opts: CmdDownloadOptions::new(false, None, None, None, None, false),
+            opts: CmdDownloadOptions::new(false, None, None, false),
         })
         .await
         .unwrap();
@@ -1295,7 +1259,7 @@ async fn test_download_all_failed_writes_error_and_truncated_details() {
         .execute(AppCommand::Download {
             source: "example.com/room/*".to_string(),
             target: "/tmp/".to_string(),
-            opts: CmdDownloadOptions::new(false, None, None, None, None, false),
+            opts: CmdDownloadOptions::new(false, None, None, false),
         })
         .await
         .unwrap();
@@ -1350,9 +1314,7 @@ async fn test_upload_partial_failure_writes_warning_and_payload() {
         .execute(AppCommand::Upload {
             source: "/tmp/".to_string(),
             target: "example.com/room".to_string(),
-            opts: CmdUploadOptions::new(
-                false, false, true, false, false, None, None, None, None, None,
-            ),
+            opts: CmdUploadOptions::new(false, false, true, false, false, None, None, None),
         })
         .await
         .unwrap();
@@ -1404,9 +1366,7 @@ async fn test_upload_all_failed_writes_error_and_payload() {
         .execute(AppCommand::Upload {
             source: "/tmp/".to_string(),
             target: "example.com/room".to_string(),
-            opts: CmdUploadOptions::new(
-                false, false, true, false, false, None, None, None, None, None,
-            ),
+            opts: CmdUploadOptions::new(false, false, true, false, false, None, None, None),
         })
         .await
         .unwrap();
@@ -1438,7 +1398,7 @@ async fn test_download_propagates_platform_error() {
         .execute(AppCommand::Download {
             source: "example.com/room/file.txt".to_string(),
             target: "/tmp/file.txt".to_string(),
-            opts: CmdDownloadOptions::new(false, None, None, None, None, false),
+            opts: CmdDownloadOptions::new(false, None, None, false),
         })
         .await;
 
@@ -1479,7 +1439,7 @@ async fn test_rm_invalid_search_requires_recursive_writes_error() {
     let outcome = app
         .execute(AppCommand::Rm {
             source: "example.com/test/*".to_string(),
-            opts: CmdDeleteOptions::new(false, None),
+            opts: CmdDeleteOptions::new(false),
         })
         .await
         .unwrap();
@@ -1514,7 +1474,7 @@ async fn test_rm_container_requires_recursive_writes_error() {
     let outcome = app
         .execute(AppCommand::Rm {
             source: "example.com/test/folder".to_string(),
-            opts: CmdDeleteOptions::new(false, None),
+            opts: CmdDeleteOptions::new(false),
         })
         .await
         .unwrap();
@@ -1551,7 +1511,7 @@ async fn test_rm_search_confirmed_deletes_batch() {
     let outcome = app
         .execute(AppCommand::Rm {
             source: "example.com/test/*".to_string(),
-            opts: CmdDeleteOptions::new(true, None),
+            opts: CmdDeleteOptions::new(true),
         })
         .await
         .unwrap();
@@ -1580,7 +1540,7 @@ async fn test_rm_search_cancelled_skips_batch_delete() {
     let outcome = app
         .execute(AppCommand::Rm {
             source: "example.com/test/*".to_string(),
-            opts: CmdDeleteOptions::new(true, None),
+            opts: CmdDeleteOptions::new(true),
         })
         .await
         .unwrap();
@@ -1608,7 +1568,7 @@ async fn test_rm_room_confirmed_deletes_single_node() {
     let outcome = app
         .execute(AppCommand::Rm {
             source: "example.com/room-b".to_string(),
-            opts: CmdDeleteOptions::new(true, None),
+            opts: CmdDeleteOptions::new(true),
         })
         .await
         .unwrap();
@@ -1643,7 +1603,6 @@ async fn test_mkdir_propagates_platform_error() {
                 None,
                 None,
                 None,
-                None,
                 false,
             ),
             deprecated_alias: false,
@@ -1670,7 +1629,6 @@ async fn test_users_created_writes_success_and_info() {
 
     let outcome = app
         .execute(AppCommand::Users {
-            auth: None,
             cmd: UsersRequest::Ls {
                 target: "example.com".to_string(),
                 filter: None,
@@ -1709,7 +1667,6 @@ async fn test_users_listed_calls_ui_printer() {
 
     let outcome = app
         .execute(AppCommand::Users {
-            auth: None,
             cmd: UsersRequest::Ls {
                 target: "example.com".to_string(),
                 filter: None,
@@ -1744,7 +1701,6 @@ async fn test_users_removed_writes_success() {
 
     let outcome = app
         .execute(AppCommand::Users {
-            auth: None,
             cmd: UsersRequest::Rm {
                 target: "example.com".to_string(),
                 user_name: Some("alice".to_string()),
@@ -1776,7 +1732,6 @@ async fn test_users_imported_writes_summary_messages() {
 
     let outcome = app
         .execute(AppCommand::Users {
-            auth: None,
             cmd: UsersRequest::Import {
                 target: "example.com".to_string(),
                 source: "/tmp/users.csv".to_string(),
@@ -1816,7 +1771,6 @@ async fn test_users_info_calls_ui_printer() {
 
     let outcome = app
         .execute(AppCommand::Users {
-            auth: None,
             cmd: UsersRequest::Info {
                 target: "example.com".to_string(),
                 user_name: Some("alice".to_string()),
@@ -1850,7 +1804,6 @@ async fn test_users_switch_auth_writes_success() {
 
     let outcome = app
         .execute(AppCommand::Users {
-            auth: None,
             cmd: UsersRequest::SwitchAuth {
                 target: "example.com".to_string(),
                 current_method: "basic".to_string(),
@@ -1886,7 +1839,6 @@ async fn test_users_enforce_mfa_writes_success_and_info() {
 
     let outcome = app
         .execute(AppCommand::Users {
-            auth: None,
             cmd: UsersRequest::EnforceMfa {
                 target: "example.com".to_string(),
                 auth_method: None,
@@ -1917,7 +1869,6 @@ async fn test_users_propagates_platform_error() {
 
     let result = app
         .execute(AppCommand::Users {
-            auth: None,
             cmd: UsersRequest::Ls {
                 target: "example.com".to_string(),
                 filter: None,
@@ -1954,7 +1905,6 @@ async fn test_groups_result_variants_are_handled() {
 
     let outcome = app
         .execute(AppCommand::Groups {
-            auth: None,
             cmd: GroupsRequest::Ls {
                 target: "example.com".to_string(),
                 filter: None,
@@ -1990,7 +1940,6 @@ async fn test_groups_created_and_removed_write_success() {
 
     let outcome = app
         .execute(AppCommand::Groups {
-            auth: None,
             cmd: GroupsRequest::Create {
                 target: "example.com".to_string(),
                 name: "ops".to_string(),
@@ -2019,7 +1968,6 @@ async fn test_groups_users_listed_calls_ui_printer() {
 
     let outcome = app
         .execute(AppCommand::Groups {
-            auth: None,
             cmd: GroupsRequest::Users {
                 cmd: GroupsUsersRequest::Ls {
                     target: "example.com".to_string(),
@@ -2057,7 +2005,6 @@ async fn test_groups_user_added_writes_success() {
 
     let outcome = app
         .execute(AppCommand::Groups {
-            auth: None,
             cmd: GroupsRequest::Users {
                 cmd: GroupsUsersRequest::Add {
                     target: "example.com".to_string(),
@@ -2086,7 +2033,6 @@ async fn test_groups_propagates_platform_error() {
 
     let result = app
         .execute(AppCommand::Groups {
-            auth: None,
             cmd: GroupsRequest::Ls {
                 target: "example.com".to_string(),
                 filter: None,
@@ -2122,7 +2068,6 @@ async fn test_reports_events_calls_ui_printer() {
 
     let outcome = app
         .execute(AppCommand::Reports {
-            auth: None,
             cmd: ReportsRequest::Events {
                 target: "example.com".to_string(),
                 filter: None,
@@ -2164,7 +2109,6 @@ async fn test_reports_permissions_and_operation_types_call_ui() {
 
     let outcome = app
         .execute(AppCommand::Reports {
-            auth: None,
             cmd: ReportsRequest::Permissions {
                 target: "example.com".to_string(),
                 filter: None,
@@ -2198,7 +2142,6 @@ async fn test_reports_permissions_and_operation_types_call_ui() {
 
     let outcome = app
         .execute(AppCommand::Reports {
-            auth: None,
             cmd: ReportsRequest::OperationTypes {
                 target: "example.com".to_string(),
             },
@@ -2221,7 +2164,6 @@ async fn test_reports_propagates_platform_error() {
 
     let result = app
         .execute(AppCommand::Reports {
-            auth: None,
             cmd: ReportsRequest::OperationTypes {
                 target: "example.com".to_string(),
             },

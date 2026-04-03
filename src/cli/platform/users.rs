@@ -5,7 +5,7 @@ use crate::{
         results::UsersPlatformResult,
         users::{models::UsersSwitchAuthOptions, UsersService},
     },
-    core::models::{DcCmdError, ListOptions, PasswordAuth},
+    core::models::{DcCmdError, ListOptions},
 };
 
 use super::CliPlatform;
@@ -14,12 +14,11 @@ impl CliPlatform {
     pub(super) async fn execute_users_cmd(
         &self,
         cmd: UsersRequest,
-        auth: Option<PasswordAuth>,
     ) -> Result<UsersPlatformResult, DcCmdError> {
         let target = Self::users_target(&cmd);
         let is_import = matches!(cmd, UsersRequest::Import { .. });
         let client = AuthService::new()
-            .connect_client(target, auth, is_import)
+            .connect_client(target, self.password_auth(), is_import)
             .await?;
         let base_url = client.get_base_url().to_string();
         let service = UsersService::new(client);

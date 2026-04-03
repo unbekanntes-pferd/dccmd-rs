@@ -36,7 +36,7 @@ use crate::{
         users::models::UserInfo,
     },
     command::AppCommand,
-    core::models::{DcCmdError, PasswordAuth},
+    core::models::DcCmdError,
 };
 
 use self::{
@@ -115,23 +115,11 @@ pub trait Platform: Send + Sync {
         opts: CmdCreateContainerOptions,
     ) -> Result<String, DcCmdError>;
 
-    async fn users(
-        &self,
-        cmd: UsersRequest,
-        auth: Option<PasswordAuth>,
-    ) -> Result<UsersPlatformResult, DcCmdError>;
+    async fn users(&self, cmd: UsersRequest) -> Result<UsersPlatformResult, DcCmdError>;
 
-    async fn groups(
-        &self,
-        cmd: GroupsRequest,
-        auth: Option<PasswordAuth>,
-    ) -> Result<GroupsPlatformResult, DcCmdError>;
+    async fn groups(&self, cmd: GroupsRequest) -> Result<GroupsPlatformResult, DcCmdError>;
 
-    async fn reports(
-        &self,
-        cmd: ReportsRequest,
-        auth: Option<PasswordAuth>,
-    ) -> Result<ReportsPlatformResult, DcCmdError>;
+    async fn reports(&self, cmd: ReportsRequest) -> Result<ReportsPlatformResult, DcCmdError>;
 }
 
 pub trait Ui: Send + Sync {
@@ -208,9 +196,9 @@ impl<P: Platform, U: Ui> App<P, U> {
                 opts,
                 deprecated_alias,
             } => self.handle_mkdir(source, opts, deprecated_alias).await,
-            AppCommand::Users { cmd, auth } => self.handle_users(cmd, auth).await,
-            AppCommand::Groups { cmd, auth } => self.handle_groups(cmd, auth).await,
-            AppCommand::Reports { cmd, auth } => self.handle_reports(cmd, auth).await,
+            AppCommand::Users { cmd } => self.handle_users(cmd).await,
+            AppCommand::Groups { cmd } => self.handle_groups(cmd).await,
+            AppCommand::Reports { cmd } => self.handle_reports(cmd).await,
         }
     }
 

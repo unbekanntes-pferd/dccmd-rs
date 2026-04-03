@@ -1,7 +1,8 @@
 use clap::Parser;
 
 use super::{
-    config::ConfigCommand, CreateContainerType, GroupsCommand, ReportsCommand, UsersCommand,
+    config::ConfigCommand, CreateContainerType, GroupsCommand, McpCommand, ReportsCommand,
+    UsersCommand,
 };
 
 #[derive(Parser)]
@@ -235,12 +236,20 @@ pub enum DcCmdCommand {
         cmd: ReportsCommand,
     },
 
+    /// Run the stdio MCP server
+    Mcp {
+        #[clap(subcommand)]
+        cmd: McpCommand,
+    },
+
     /// Print current dccmd-rs version
     Version,
 }
 #[cfg(test)]
 mod tests {
     use clap::Parser;
+
+    use crate::command::McpCommand;
 
     use super::{CreateContainerType, DcCmd, DcCmdCommand};
 
@@ -254,6 +263,31 @@ mod tests {
                 assert_eq!(r#type, CreateContainerType::Folder);
             }
             _ => panic!("Expected mkdir command"),
+        }
+    }
+
+    #[test]
+    fn test_mcp_start_parses_fixed_target_and_destructive_flag() {
+        let parsed = DcCmd::try_parse_from([
+            "dccmd",
+            "mcp",
+            "start",
+            "https://dracoon.example.com",
+            "--allow-destructive",
+        ])
+        .unwrap();
+
+        match parsed.cmd {
+            DcCmdCommand::Mcp { cmd } => match cmd {
+                McpCommand::Start {
+                    target,
+                    allow_destructive,
+                } => {
+                    assert_eq!(target, "https://dracoon.example.com");
+                    assert!(allow_destructive);
+                }
+            },
+            _ => panic!("Expected MCP command"),
         }
     }
 

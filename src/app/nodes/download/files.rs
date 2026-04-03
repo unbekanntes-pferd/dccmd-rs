@@ -7,24 +7,22 @@ use std::{
 };
 
 use dco3::{
+    auth::Disconnected,
     nodes::{Node, NodesSearchFilter, NodesSearchSortBy},
-    Public, PublicDownload, SortOrder,
+    Dracoon, Public, PublicDownload, SortOrder,
 };
 use futures_util::{stream, StreamExt};
 use tracing::{debug, error, info, warn};
 
 use crate::{
-    app::{
-        auth::AuthService,
-        nodes::{
-            command::CmdDownloadOptions,
-            download::api::DownloadApi,
-            download::{
-                DownloadFailure, DownloadJobState, DownloadOutcome, NodesDownloadService,
-                TransferStateStore,
-            },
-            progress::{start_progress_bar, update_remaining_files_message},
+    app::nodes::{
+        command::CmdDownloadOptions,
+        download::api::DownloadApi,
+        download::{
+            DownloadFailure, DownloadJobState, DownloadOutcome, NodesDownloadService,
+            TransferStateStore,
         },
+        progress::{start_progress_bar, update_remaining_files_message},
     },
     core::{
         constants::{DEFAULT_CONCURRENT_MULTIPLIER, MAX_VELOCITY, MIN_VELOCITY},
@@ -74,6 +72,7 @@ where
 
     pub(super) async fn download_public_file(
         &self,
+        dracoon: &Dracoon<Disconnected>,
         source: String,
         target: String,
         download_opts: CmdDownloadOptions,
@@ -85,7 +84,6 @@ where
         }
 
         let access_key = Self::parse_public_download_access_key(&source)?;
-        let dracoon = AuthService::new().init_public(&source).await?;
         let public_download_share = dracoon
             .public()
             .get_public_download_share(access_key)
@@ -331,12 +329,15 @@ mod tests {
     use tokio::io::{AsyncWrite, AsyncWriteExt};
 
     use crate::{
-        app::nodes::{
-            api::NodesApi,
-            command::CmdDownloadOptions,
-            download::api::DownloadApi,
-            download::{DownloadJobState, NodesDownloadService, NoopTransferStateStore},
-            filesystem::OSFileSystem,
+        app::{
+            auth::AuthService,
+            nodes::{
+                api::NodesApi,
+                command::CmdDownloadOptions,
+                download::api::DownloadApi,
+                download::{DownloadJobState, NodesDownloadService, NoopTransferStateStore},
+                filesystem::OSFileSystem,
+            },
         },
         core::models::DcCmdError,
     };
@@ -382,6 +383,12 @@ mod tests {
 
     #[async_trait]
     impl NodesApi for MockDownloadApi {
+        async fn get_node(&self, _node_id: u64) -> Result<Node, DcCmdError> {
+            Err(DcCmdError::InvalidArgument(
+                "node lookup not configured".to_string(),
+            ))
+        }
+
         async fn get_node_from_path(&self, _node_path: &str) -> Result<Option<Node>, DcCmdError> {
             Ok(None)
         }
@@ -865,12 +872,17 @@ mod tests {
     #[tokio::test]
     async fn test_download_public_file_rejects_recursive() {
         let service = NodesDownloadService::new();
+        let dracoon = AuthService::new()
+            .init_public("https://example.com/public/download-shares/abc123")
+            .await
+            .expect("public client");
 
         let result = service
             .download_public_file(
+                &dracoon,
                 "https://example.com/public/download-shares/abc123".to_string(),
                 "/virtual/out.txt".to_string(),
-                CmdDownloadOptions::new(true, None, None, None, None, false),
+                CmdDownloadOptions::new(true, None, None, false),
             )
             .await;
 
@@ -959,11 +971,16 @@ mod tests {
             .expect("create dir");
 
         let service = NodesDownloadService::with_dependencies(OSFileSystem, NoopTransferStateStore);
+        let public_client = AuthService::new()
+            .init_public(&format!("{}/public/download-shares/test", server.url()))
+            .await
+            .expect("public client");
         let outcome = service
             .download_public_file(
+                &public_client,
                 format!("{}/public/download-shares/test", server.url()),
                 tmp_dir.to_string_lossy().to_string(),
-                CmdDownloadOptions::new(false, None, None, None, None, false),
+                CmdDownloadOptions::new(false, None, None, false),
             )
             .await
             .expect("public download should succeed");

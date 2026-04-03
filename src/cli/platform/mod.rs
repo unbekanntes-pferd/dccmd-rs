@@ -5,6 +5,7 @@ mod reports;
 mod users;
 
 use async_trait::async_trait;
+use secrecy::SecretString;
 
 use crate::{
     app::{
@@ -13,10 +14,8 @@ use crate::{
                 CmdCopyOptions, CmdCreateContainerOptions, CmdDeleteOptions, CmdDownloadOptions,
                 CmdListNodesOptions, CmdTransferOptions, CmdUploadOptions,
             },
-            download::{DownloadOutcome, NodesDownloadService, NoopTransferStateStore},
-            filesystem::OSFileSystem,
+            download::DownloadOutcome,
             transfer::TransferOutcome,
-            upload::NodesUploadService,
             upload::UploadOutcome,
             CopyNodesResult, DeleteNodesPreparation, ListNodesResult,
         },
@@ -28,11 +27,32 @@ use crate::{
     core::models::{DcCmdError, PasswordAuth},
 };
 
-pub struct CliPlatform;
+pub struct CliPlatform {
+    password_auth: Option<PasswordAuth>,
+    encryption_password: Option<SecretString>,
+}
 
 impl CliPlatform {
-    pub fn new() -> Self {
-        Self
+    pub fn new(
+        password_auth: Option<PasswordAuth>,
+        encryption_password: Option<SecretString>,
+    ) -> Self {
+        Self {
+            password_auth,
+            encryption_password,
+        }
+    }
+
+    fn password_auth(&self) -> Option<PasswordAuth> {
+        self.password_auth.clone()
+    }
+
+    fn encryption_password(&self) -> Option<SecretString> {
+        self.encryption_password.clone()
+    }
+
+    fn progress_reporter(&self) -> std::sync::Arc<IndicatifProgressReporter> {
+        std::sync::Arc::new(IndicatifProgressReporter::new())
     }
 }
 
@@ -51,9 +71,7 @@ impl Platform for CliPlatform {
         target: String,
         opts: CmdUploadOptions,
     ) -> Result<UploadOutcome, DcCmdError> {
-        NodesUploadService::with_progress(std::sync::Arc::new(IndicatifProgressReporter::new()))
-            .upload(source.into(), target, opts)
-            .await
+        self.execute_nodes_upload(source, target, opts).await
     }
 
     async fn download(
@@ -62,13 +80,7 @@ impl Platform for CliPlatform {
         target: String,
         opts: CmdDownloadOptions,
     ) -> Result<DownloadOutcome, DcCmdError> {
-        NodesDownloadService::with_progress(
-            OSFileSystem,
-            NoopTransferStateStore,
-            std::sync::Arc::new(IndicatifProgressReporter::new()),
-        )
-        .download(source, target, opts)
-        .await
+        self.execute_nodes_download(source, target, opts).await
     }
 
     async fn transfer(
@@ -131,27 +143,15 @@ impl Platform for CliPlatform {
         self.execute_nodes_mkdir(source, opts).await
     }
 
-    async fn users(
-        &self,
-        cmd: UsersRequest,
-        auth: Option<PasswordAuth>,
-    ) -> Result<UsersPlatformResult, DcCmdError> {
-        self.execute_users_cmd(cmd, auth).await
+    async fn users(&self, cmd: UsersRequest) -> Result<UsersPlatformResult, DcCmdError> {
+        self.execute_users_cmd(cmd).await
     }
 
-    async fn groups(
-        &self,
-        cmd: GroupsRequest,
-        auth: Option<PasswordAuth>,
-    ) -> Result<GroupsPlatformResult, DcCmdError> {
-        self.execute_groups_cmd(cmd, auth).await
+    async fn groups(&self, cmd: GroupsRequest) -> Result<GroupsPlatformResult, DcCmdError> {
+        self.execute_groups_cmd(cmd).await
     }
 
-    async fn reports(
-        &self,
-        cmd: ReportsRequest,
-        auth: Option<PasswordAuth>,
-    ) -> Result<ReportsPlatformResult, DcCmdError> {
-        self.execute_reports_cmd(cmd, auth).await
+    async fn reports(&self, cmd: ReportsRequest) -> Result<ReportsPlatformResult, DcCmdError> {
+        self.execute_reports_cmd(cmd).await
     }
 }

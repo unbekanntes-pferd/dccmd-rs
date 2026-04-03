@@ -14,6 +14,8 @@ pub trait GroupsApi: Send + Sync {
         params: Option<ListAllParams>,
     ) -> Result<RangedItems<Group>, DcCmdError>;
 
+    async fn get_group(&self, group_id: u64) -> Result<Group, DcCmdError>;
+
     async fn get_group_users(
         &self,
         group_id: u64,
@@ -24,7 +26,8 @@ pub trait GroupsApi: Send + Sync {
 
     async fn delete_group(&self, group_id: u64) -> Result<(), DcCmdError>;
 
-    async fn add_group_users(&self, group_id: u64, user_ids: Vec<u64>) -> Result<(), DcCmdError>;
+    async fn add_group_users(&self, group_id: u64, user_ids: Vec<u64>)
+        -> Result<Group, DcCmdError>;
 }
 
 #[async_trait]
@@ -34,6 +37,10 @@ impl GroupsApi for Dracoon<Connected> {
         params: Option<ListAllParams>,
     ) -> Result<RangedItems<Group>, DcCmdError> {
         self.groups().get_groups(params).await.map_err(Into::into)
+    }
+
+    async fn get_group(&self, group_id: u64) -> Result<Group, DcCmdError> {
+        self.groups().get_group(group_id).await.map_err(Into::into)
     }
 
     async fn get_group_users(
@@ -59,12 +66,15 @@ impl GroupsApi for Dracoon<Connected> {
             .map_err(Into::into)
     }
 
-    async fn add_group_users(&self, group_id: u64, user_ids: Vec<u64>) -> Result<(), DcCmdError> {
+    async fn add_group_users(
+        &self,
+        group_id: u64,
+        user_ids: Vec<u64>,
+    ) -> Result<Group, DcCmdError> {
         let req = ChangeGroupMembersRequest::new(user_ids);
         self.groups()
             .add_group_users(group_id, req)
             .await
-            .map(|_| ())
             .map_err(Into::into)
     }
 }

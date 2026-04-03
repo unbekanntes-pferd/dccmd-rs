@@ -9,21 +9,19 @@ use std::{
 
 use async_trait::async_trait;
 use dco3::{
+    auth::Disconnected,
     nodes::{models::NodeType, Node, NodeList, NodesSearchFilter, NodesSearchSortBy},
-    ListAllParams,
+    Dracoon, ListAllParams,
 };
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 
 use crate::{
-    app::{
-        auth::AuthService,
-        nodes::{api::NodesApi, command::CmdDownloadOptions},
-    },
-    core::{models::DcCmdError, utils::strings::parse_path},
+    app::nodes::{api::NodesApi, command::CmdDownloadOptions, download::api::DownloadApi},
+    core::models::DcCmdError,
 };
 
 use super::{
-    common::{is_search_query, NodesPathPaginationHelper},
+    common::NodesPathPaginationHelper,
     filesystem::{Filesystem, OSFileSystem},
     progress::{NoopProgressReporter, ProgressReporter},
 };
@@ -98,6 +96,19 @@ pub struct DownloadContainerPlan {
     pub root_target: String,
     pub directories: Vec<String>,
     pub file_targets: HashMap<u64, String>,
+}
+
+#[derive(Debug, Clone)]
+pub enum PreparedDownloadSource {
+    SearchQuery {
+        source: String,
+        search_string: String,
+        parent_path: String,
+    },
+    Node {
+        source: String,
+        node: Box<Node>,
+    },
 }
 
 const SEARCH_PAGE_SIZE: u64 = 500;
@@ -324,8 +335,9 @@ impl<F: Filesystem, S: TransferStateStore> NodesDownloadService<F, S> {
         Ok(nodes)
     }
 
-    pub async fn download(
+    pub async fn download_public(
         &self,
+        dracoon: &Dracoon<Disconnected>,
         source: String,
         target: String,
         download_opts: CmdDownloadOptions,
@@ -333,77 +345,59 @@ impl<F: Filesystem, S: TransferStateStore> NodesDownloadService<F, S> {
         debug!("Downloading {} to {}", source, target);
         debug!("Velocity: {}", download_opts.velocity.unwrap_or(1));
 
-        if source.contains("/public/download-shares/") {
-            return self
-                .download_public_file(source, target, download_opts)
-                .await;
-        }
+        self.download_public_file(dracoon, source, target, download_opts)
+            .await
+    }
 
-        let auth_service = AuthService::new();
-        let mut session = auth_service
-            .connect(&source, download_opts.auth, true)
-            .await?;
+    pub async fn download_with_client<A: DownloadApi + Clone + Send + Sync + 'static>(
+        &self,
+        api_client: A,
+        source: PreparedDownloadSource,
+        target: String,
+        download_opts: CmdDownloadOptions,
+    ) -> Result<DownloadOutcome, DcCmdError> {
+        debug!("Downloading prepared source to {}", target);
+        debug!("Velocity: {}", download_opts.velocity.unwrap_or(1));
 
-        let (parent_path, node_name, _) = parse_path(&source, session.base_url())
-            .or(Err(DcCmdError::InvalidPath(source.clone())))?;
-        let node_path = format!("{parent_path}{node_name}/");
+        match source {
+            PreparedDownloadSource::SearchQuery {
+                source,
+                search_string,
+                parent_path,
+            } => {
+                info!("Attempting download of search query {}.", search_string);
+                let files = self
+                    .search_query_files(&api_client, &search_string, &parent_path)
+                    .await?;
+                info!("Found {} files.", files.len());
 
-        let lookup_api = session.client().clone();
-        let node = if is_search_query(&node_name) {
-            debug!("Searching for query {}", node_name);
-            debug!("Parent path {}", parent_path);
-            lookup_api.get_node_from_path(&parent_path).await?
-        } else {
-            lookup_api.get_node_from_path(&node_path).await?
-        };
+                let file_refs = files.iter().map(RemoteNodeRef::from).collect::<Vec<_>>();
+                let targets = self.resolve_targets_from_base(&target, &file_refs);
+                let job_id = self.state_store.get_or_create_job(&source, &target).await?;
+                let completed_file_ids = self.state_store.get_completed_file_ids(&job_id).await?;
+                let job_state = DownloadJobState {
+                    job_id: &job_id,
+                    completed_file_ids: &completed_file_ids,
+                };
 
-        let Some(node) = node else {
-            error!("Node not found");
-            return Err(DcCmdError::InvalidPath(source));
-        };
+                let outcome = self
+                    .download_files_with_state(
+                        &api_client,
+                        files,
+                        targets,
+                        download_opts.velocity,
+                        &target,
+                        &job_state,
+                    )
+                    .await?;
 
-        if node.is_encrypted == Some(true) {
-            session = auth_service
-                .ensure_encryption(session, download_opts.encryption_password)
-                .await?;
-        }
+                if outcome.failed == 0 {
+                    self.state_store.complete_job(&job_id).await?;
+                }
 
-        let api_client = session.into_client();
-
-        if is_search_query(&node_name) {
-            info!("Attempting download of search query {}.", node_name);
-            let files = self
-                .search_query_files(&api_client, &node_name, &parent_path)
-                .await?;
-            info!("Found {} files.", files.len());
-
-            let file_refs = files.iter().map(RemoteNodeRef::from).collect::<Vec<_>>();
-            let targets = self.resolve_targets_from_base(&target, &file_refs);
-            let job_id = self.state_store.get_or_create_job(&source, &target).await?;
-            let completed_file_ids = self.state_store.get_completed_file_ids(&job_id).await?;
-            let job_state = DownloadJobState {
-                job_id: &job_id,
-                completed_file_ids: &completed_file_ids,
-            };
-
-            let outcome = self
-                .download_files_with_state(
-                    &api_client,
-                    files,
-                    targets,
-                    download_opts.velocity,
-                    &target,
-                    &job_state,
-                )
-                .await?;
-
-            if outcome.failed == 0 {
-                self.state_store.complete_job(&job_id).await?;
+                Ok(outcome)
             }
-
-            Ok(outcome)
-        } else {
-            match node.node_type {
+            PreparedDownloadSource::Node { source, node } => match node.node_type {
                 NodeType::File => self.download_single_file(&api_client, &node, &target).await,
                 _ => {
                     if download_opts.recursive {
@@ -436,7 +430,7 @@ impl<F: Filesystem, S: TransferStateStore> NodesDownloadService<F, S> {
                         ))
                     }
                 }
-            }
+            },
         }
     }
 

@@ -17,8 +17,9 @@ use crate::{
         results::{AppResult, AppStatus},
         App,
     },
-    command::{AppCommand, CreateContainerType, DcCmdCommand},
+    command::{AppCommand, CreateContainerType, DcCmdCommand, McpCommand},
     core::models::{DcCmdError, ListOptions, PasswordAuth},
+    mcp,
 };
 
 #[async_trait]
@@ -33,27 +34,28 @@ impl AppExecutor for App<CliPlatform, TermUi> {
     }
 }
 
-pub struct CliRunner<E: AppExecutor = App<CliPlatform, TermUi>> {
+pub(crate) struct CliRunner<E: AppExecutor = App<CliPlatform, TermUi>> {
     app: E,
-    term: Term,
-    password_auth: Option<PasswordAuth>,
     encryption_password: Option<SecretString>,
+    term: Term,
 }
 
 impl CliRunner<App<CliPlatform, TermUi>> {
-    pub fn new(
+    pub(crate) fn new(
         term: Term,
         err_term: Term,
         password_auth: Option<PasswordAuth>,
         encryption_password: Option<SecretString>,
     ) -> Self {
-        let app = App::new(CliPlatform::new(), TermUi::new(term.clone(), err_term));
+        let app = App::new(
+            CliPlatform::new(password_auth.clone(), encryption_password.clone()),
+            TermUi::new(term.clone(), err_term),
+        );
 
         CliRunner {
             app,
-            term,
-            password_auth,
             encryption_password,
+            term,
         }
     }
 }
@@ -63,18 +65,17 @@ impl<E: AppExecutor> CliRunner<E> {
     fn new_with_executor(
         app: E,
         term: Term,
-        password_auth: Option<PasswordAuth>,
+        _password_auth: Option<PasswordAuth>,
         encryption_password: Option<SecretString>,
     ) -> Self {
         Self {
             app,
-            term,
-            password_auth,
             encryption_password,
+            term,
         }
     }
 
-    pub async fn execute(&self, cmd: DcCmdCommand) -> Result<(), DcCmdError> {
+    pub(crate) async fn execute(&self, cmd: DcCmdCommand) -> Result<(), DcCmdError> {
         match cmd {
             DcCmdCommand::Download {
                 source,
@@ -90,8 +91,6 @@ impl<E: AppExecutor> CliRunner<E> {
                     opts: CmdDownloadOptions::new(
                         recursive,
                         velocity,
-                        self.password_auth.clone(),
-                        self.encryption_password.clone(),
                         share_password,
                         include_rooms,
                     ),
@@ -121,8 +120,6 @@ impl<E: AppExecutor> CliRunner<E> {
                         share,
                         classification,
                         velocity,
-                        self.password_auth.clone(),
-                        self.encryption_password.clone(),
                         share_password,
                     ),
                 })
@@ -161,13 +158,7 @@ impl<E: AppExecutor> CliRunner<E> {
                 limit,
             } => {
                 let list_opts = ListOptions::new(filter, offset, limit, all, false);
-                let opts = CmdListNodesOptions::new(
-                    list_opts,
-                    human_readable,
-                    long,
-                    managed,
-                    self.password_auth.clone(),
-                );
+                let opts = CmdListNodesOptions::new(list_opts, human_readable, long, managed);
 
                 self.run_app_command(AppCommand::Ls { source, opts }).await
             }
@@ -175,7 +166,7 @@ impl<E: AppExecutor> CliRunner<E> {
                 self.run_app_command(AppCommand::Cp {
                     source,
                     target,
-                    opts: CmdCopyOptions::new(self.password_auth.clone()),
+                    opts: CmdCopyOptions::new(),
                 })
                 .await
             }
@@ -193,7 +184,6 @@ impl<E: AppExecutor> CliRunner<E> {
                         r#type,
                         classification,
                         notes,
-                        self.password_auth.clone(),
                         admin_users,
                         inherit_permissions,
                     ),
@@ -213,7 +203,6 @@ impl<E: AppExecutor> CliRunner<E> {
                         CreateContainerType::Room,
                         classification,
                         None,
-                        self.password_auth.clone(),
                         admin_users,
                         inherit_permissions,
                     ),
@@ -224,31 +213,29 @@ impl<E: AppExecutor> CliRunner<E> {
             DcCmdCommand::Rm { source, recursive } => {
                 self.run_app_command(AppCommand::Rm {
                     source,
-                    opts: CmdDeleteOptions::new(recursive, self.password_auth.clone()),
+                    opts: CmdDeleteOptions::new(recursive),
                 })
                 .await
             }
             DcCmdCommand::Users { cmd } => {
                 self.run_app_command(AppCommand::Users {
                     cmd: map_users_request(cmd),
-                    auth: self.password_auth.clone(),
                 })
                 .await
             }
             DcCmdCommand::Groups { cmd } => {
                 self.run_app_command(AppCommand::Groups {
                     cmd: map_groups_request(cmd),
-                    auth: self.password_auth.clone(),
                 })
                 .await
             }
             DcCmdCommand::Reports { cmd } => {
                 self.run_app_command(AppCommand::Reports {
                     cmd: map_reports_request(cmd),
-                    auth: self.password_auth.clone(),
                 })
                 .await
             }
+            DcCmdCommand::Mcp { cmd } => self.execute_mcp(cmd).await,
             DcCmdCommand::Version => self.execute_version(),
             DcCmdCommand::Config { cmd } => {
                 self.run_app_command(AppCommand::Config {
@@ -261,6 +248,15 @@ impl<E: AppExecutor> CliRunner<E> {
 
     pub(super) fn execute_version(&self) -> Result<(), DcCmdError> {
         TermUi::write_version(&self.term)
+    }
+
+    async fn execute_mcp(&self, cmd: McpCommand) -> Result<(), DcCmdError> {
+        match cmd {
+            McpCommand::Start {
+                target,
+                allow_destructive,
+            } => mcp::start(target, allow_destructive, self.encryption_password.clone()).await,
+        }
     }
 
     async fn run_app_command(&self, command: AppCommand) -> Result<(), DcCmdError> {

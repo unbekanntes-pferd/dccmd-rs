@@ -4,6 +4,7 @@ use dco3::{
     nodes::{
         models::{CreateFolderRequest, NodeList},
         rooms::models::CreateRoomRequest,
+        Node,
     },
     Dracoon, Folders, ListAllParams, Nodes, Rooms,
 };
@@ -12,10 +13,9 @@ use crate::core::models::DcCmdError;
 
 #[async_trait]
 pub trait NodesApi: Send + Sync {
-    async fn get_node_from_path(
-        &self,
-        node_path: &str,
-    ) -> Result<Option<dco3::nodes::Node>, DcCmdError>;
+    async fn get_node(&self, node_id: u64) -> Result<Node, DcCmdError>;
+
+    async fn get_node_from_path(&self, node_path: &str) -> Result<Option<Node>, DcCmdError>;
 
     async fn get_nodes(
         &self,
@@ -59,10 +59,11 @@ pub trait NodesApi: Send + Sync {
 
 #[async_trait]
 impl NodesApi for Dracoon<Connected> {
-    async fn get_node_from_path(
-        &self,
-        node_path: &str,
-    ) -> Result<Option<dco3::nodes::Node>, DcCmdError> {
+    async fn get_node(&self, node_id: u64) -> Result<Node, DcCmdError> {
+        self.nodes().get_node(node_id).await.map_err(Into::into)
+    }
+
+    async fn get_node_from_path(&self, node_path: &str) -> Result<Option<Node>, DcCmdError> {
         self.nodes()
             .get_node_from_path(node_path)
             .await

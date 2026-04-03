@@ -1,7 +1,7 @@
 use crate::{
     app::requests::{GroupsRequest, GroupsUsersRequest},
     app::{auth::AuthService, groups::GroupsService, results::GroupsPlatformResult},
-    core::models::{DcCmdError, ListOptions, PasswordAuth},
+    core::models::{DcCmdError, ListOptions},
 };
 
 use super::CliPlatform;
@@ -10,10 +10,9 @@ impl CliPlatform {
     pub(super) async fn execute_groups_cmd(
         &self,
         cmd: GroupsRequest,
-        auth: Option<PasswordAuth>,
     ) -> Result<GroupsPlatformResult, DcCmdError> {
         let client = AuthService::new()
-            .connect_client(Self::groups_target(&cmd), auth, false)
+            .connect_client(Self::groups_target(&cmd), self.password_auth(), false)
             .await?;
         let service = GroupsService::new(client);
 

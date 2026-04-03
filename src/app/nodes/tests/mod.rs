@@ -61,6 +61,14 @@ impl MockNodesApi {
 
 #[async_trait]
 impl NodesApi for MockNodesApi {
+    async fn get_node(&self, node_id: u64) -> Result<Node, DcCmdError> {
+        self.node_by_path
+            .values()
+            .find(|node| node.id == node_id)
+            .cloned()
+            .ok_or_else(|| DcCmdError::InvalidArgument(format!("Node not found: {node_id}")))
+    }
+
     async fn get_node_from_path(&self, node_path: &str) -> Result<Option<Node>, DcCmdError> {
         Ok(self.node_by_path.get(node_path).cloned())
     }

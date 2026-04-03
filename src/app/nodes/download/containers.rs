@@ -194,6 +194,12 @@ mod tests {
 
     #[async_trait]
     impl NodesApi for MockDownloadApi {
+        async fn get_node(&self, _node_id: u64) -> Result<Node, DcCmdError> {
+            Err(DcCmdError::InvalidArgument(
+                "node lookup not configured".to_string(),
+            ))
+        }
+
         async fn get_node_from_path(&self, _node_path: &str) -> Result<Option<Node>, DcCmdError> {
             Ok(None)
         }

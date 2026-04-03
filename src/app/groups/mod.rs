@@ -1,5 +1,7 @@
 pub mod api;
 
+use std::collections::HashSet;
+
 use dco3::{
     groups::{Group, GroupUser, GroupsFilter},
     ListAllParams, RangedItems,
@@ -56,19 +58,25 @@ impl<C: GroupsApi> GroupsService<C> {
         group_name: Option<String>,
         group_id: Option<u64>,
     ) -> Result<u64, DcCmdError> {
-        let group_id = match (group_name, group_id) {
-            (_, Some(id)) => id,
-            (Some(name), _) => self.find_group_by_name(&name).await?.id,
-            _ => {
-                return Err(DcCmdError::InvalidArgument(
-                    "Either group name or id must be provided".to_string(),
-                ));
-            }
-        };
+        let group_id = self.get_group(group_name, group_id).await?.id;
 
         self.api.delete_group(group_id).await?;
 
         Ok(group_id)
+    }
+
+    pub async fn get_group(
+        &self,
+        group_name: Option<String>,
+        group_id: Option<u64>,
+    ) -> Result<Group, DcCmdError> {
+        match (group_name, group_id) {
+            (_, Some(id)) => self.api.get_group(id).await,
+            (Some(name), None) => self.find_group_by_name(&name).await,
+            _ => Err(DcCmdError::InvalidArgument(
+                "Either group name or id must be provided".to_string(),
+            )),
+        }
     }
 
     pub async fn list_group_users(
@@ -79,7 +87,22 @@ impl<C: GroupsApi> GroupsService<C> {
         limit: Option<u32>,
         all: bool,
     ) -> Result<Vec<GroupUsersPage>, DcCmdError> {
-        let groups = if let Some(group_name) = group_name.filter(|name| !name.is_empty()) {
+        self.list_group_users_by_selector(group_name, None, filter, offset, limit, all)
+            .await
+    }
+
+    pub async fn list_group_users_by_selector(
+        &self,
+        group_name: Option<&str>,
+        group_id: Option<u64>,
+        filter: &Option<String>,
+        offset: Option<u32>,
+        limit: Option<u32>,
+        all: bool,
+    ) -> Result<Vec<GroupUsersPage>, DcCmdError> {
+        let groups = if let Some(group_id) = group_id {
+            vec![self.api.get_group(group_id).await?]
+        } else if let Some(group_name) = group_name.filter(|name| !name.is_empty()) {
             vec![self.find_group_by_name(group_name).await?]
         } else {
             self.list_all_groups().await?
@@ -145,6 +168,20 @@ impl<C: GroupsApi> GroupsService<C> {
 }
 
 impl<C: GroupsApi + UsersApi> GroupsService<C> {
+    pub async fn add_group_users(
+        &self,
+        group_name: Option<String>,
+        group_id: Option<u64>,
+        user_names: Vec<String>,
+        user_ids: Vec<u64>,
+    ) -> Result<(Group, Vec<u64>), DcCmdError> {
+        let group = self.get_group(group_name, group_id).await?;
+        let user_ids = self.resolve_user_ids(user_names, user_ids).await?;
+        let updated_group = self.api.add_group_users(group.id, user_ids.clone()).await?;
+
+        Ok((updated_group, user_ids))
+    }
+
     pub async fn add_group_user(
         &self,
         group_name: Option<String>,
@@ -152,29 +189,54 @@ impl<C: GroupsApi + UsersApi> GroupsService<C> {
         user_name: Option<String>,
         user_id: Option<u64>,
     ) -> Result<(u64, u64), DcCmdError> {
-        let group_id = if let Some(id) = group_id {
-            id
-        } else if let Some(name) = group_name {
-            self.find_group_by_name(&name).await?.id
-        } else {
-            return Err(DcCmdError::InvalidArgument(
-                "Either group name or id must be provided".to_string(),
-            ));
-        };
+        let (group, user_ids) = self
+            .add_group_users(
+                group_name,
+                group_id,
+                user_name.into_iter().collect(),
+                user_id.into_iter().collect(),
+            )
+            .await?;
+        let user_id = *user_ids
+            .first()
+            .expect("single-user add must resolve one user id");
 
-        let user_id = if let Some(id) = user_id {
-            id
-        } else if let Some(name) = user_name {
-            self.api.find_user_id_by_username(&name).await?
-        } else {
+        Ok((group.id, user_id))
+    }
+
+    async fn resolve_user_ids(
+        &self,
+        user_names: Vec<String>,
+        user_ids: Vec<u64>,
+    ) -> Result<Vec<u64>, DcCmdError> {
+        let mut resolved = Vec::new();
+        let mut seen = HashSet::new();
+
+        for user_id in user_ids {
+            if seen.insert(user_id) {
+                resolved.push(user_id);
+            }
+        }
+
+        for user_name in user_names {
+            let user_name = user_name.trim();
+            if user_name.is_empty() {
+                continue;
+            }
+
+            let user_id = self.api.find_user_id_by_username(user_name).await?;
+            if seen.insert(user_id) {
+                resolved.push(user_id);
+            }
+        }
+
+        if resolved.is_empty() {
             return Err(DcCmdError::InvalidArgument(
                 "Either user name or id must be provided".to_string(),
             ));
-        };
+        }
 
-        self.api.add_group_users(group_id, vec![user_id]).await?;
-
-        Ok((group_id, user_id))
+        Ok(resolved)
     }
 }
 
@@ -242,6 +304,20 @@ mod tests {
             }
         }
 
+        async fn get_group(&self, group_id: u64) -> Result<Group, crate::core::models::DcCmdError> {
+            let pages = self.pages.lock().expect("lock poisoned");
+            pages
+                .iter()
+                .flat_map(|page| page.items.iter())
+                .find(|group| group.id == group_id)
+                .cloned()
+                .ok_or_else(|| {
+                    crate::core::models::DcCmdError::InvalidArgument(format!(
+                        "No group found with id: {group_id}"
+                    ))
+                })
+        }
+
         async fn create_group(&self, name: &str) -> Result<Group, crate::core::models::DcCmdError> {
             self.created
                 .lock()
@@ -277,12 +353,12 @@ mod tests {
             &self,
             group_id: u64,
             user_ids: Vec<u64>,
-        ) -> Result<(), crate::core::models::DcCmdError> {
+        ) -> Result<Group, crate::core::models::DcCmdError> {
             self.added_group_users
                 .lock()
                 .expect("lock poisoned")
                 .push((group_id, user_ids));
-            Ok(())
+            self.get_group(group_id).await
         }
     }
 

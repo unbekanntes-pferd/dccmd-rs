@@ -1,17 +1,17 @@
 use std::{path::PathBuf, sync::Arc};
 
+use dco3::{
+    auth::{Connected, Disconnected},
+    nodes::Node,
+    Dracoon,
+};
 use files::{upload_file, upload_public_file};
 use folders::upload_container;
 
 use tracing::error;
 
 use crate::app::{nodes::command::CmdUploadOptions, shares::DracoonDownloadShareLinkCreator};
-use crate::{
-    app::auth::AuthService,
-    app::nodes::progress::ProgressReporter,
-    core::{models::DcCmdError, utils::strings::parse_path},
-};
-use dco3::nodes::Nodes;
+use crate::{app::nodes::progress::ProgressReporter, core::models::DcCmdError};
 
 mod api;
 mod files;
@@ -102,50 +102,30 @@ impl NodesUploadService {
         Self { progress }
     }
 
-    pub async fn upload(
+    pub async fn upload_public(
         &self,
+        dracoon: &Dracoon<Disconnected>,
         source: PathBuf,
         target: String,
+    ) -> Result<UploadOutcome, DcCmdError> {
+        if source.is_file() {
+            upload_public_file(dracoon, source, target, self.progress.as_ref()).await?;
+            return Ok(UploadOutcome::success("public upload share", 1));
+        }
+
+        error!("Public upload shares only support file uploads.");
+        Err(DcCmdError::InvalidPath(
+            source.to_string_lossy().to_string(),
+        ))
+    }
+
+    pub async fn upload_with_client(
+        &self,
+        dracoon: &Dracoon<Connected>,
+        source: PathBuf,
+        parent_node: &Node,
         opts: CmdUploadOptions,
     ) -> Result<UploadOutcome, DcCmdError> {
-        // this is a public upload share
-        match (target.contains("/public/upload-shares/"), source.is_file()) {
-            (true, true) => {
-                upload_public_file(source, target, self.progress.as_ref()).await?;
-                return Ok(UploadOutcome::success("public upload share", 1));
-            }
-            (true, false) => {
-                error!("Public upload shares only support file uploads.");
-                return Err(DcCmdError::InvalidPath(
-                    source.to_string_lossy().to_string(),
-                ));
-            }
-            _ => (),
-        }
-
-        let auth = AuthService::new();
-        let mut dracoon = auth
-            .connect_client(&target, opts.auth.clone(), true)
-            .await?;
-
-        let (parent_path, node_name, _) = parse_path(&target, dracoon.get_base_url().as_str())
-            .or(Err(DcCmdError::InvalidPath(target.clone())))?;
-        let node_path = format!("{parent_path}{node_name}/");
-
-        let parent_node = dracoon.nodes().get_node_from_path(&node_path).await?;
-
-        let Some(parent_node) = parent_node else {
-            error!("Target path not found: {}", target);
-            return Err(DcCmdError::InvalidPath(target.clone()));
-        };
-
-        if parent_node.is_encrypted == Some(true) {
-            let base_url = dracoon.get_base_url().to_string();
-            dracoon = auth
-                .ensure_encryption_client(base_url, dracoon, opts.encryption_password.clone())
-                .await?;
-        }
-
         if parent_node.is_encrypted.unwrap_or(false) && opts.share {
             error!("Parent node is encrypted. Cannot upload to encrypted nodes.");
             return Err(DcCmdError::InvalidArgument(
@@ -159,9 +139,9 @@ impl NodesUploadService {
             (true, _, _) => {
                 let share_link_creator = DracoonDownloadShareLinkCreator::new(dracoon.clone());
                 let share_message = upload_file(
-                    &dracoon,
+                    dracoon,
                     source,
-                    &parent_node,
+                    parent_node,
                     opts.clone(),
                     &share_link_creator,
                     self.progress.as_ref(),
@@ -172,14 +152,7 @@ impl NodesUploadService {
             }
             // is a directory and recursive flag is set
             (_, true, true) => {
-                upload_container(
-                    &dracoon,
-                    source,
-                    &parent_node,
-                    &opts,
-                    self.progress.as_ref(),
-                )
-                .await
+                upload_container(dracoon, source, parent_node, &opts, self.progress.as_ref()).await
             }
             // is a directory and recursive flag is not set
             (_, true, false) => Err(DcCmdError::InvalidArgument(

@@ -42,6 +42,7 @@ pub struct SystemInfo {
 #[async_trait]
 pub trait SystemApi: Send + Sync {
     async fn get_refresh_token_info(&self) -> Result<RefreshTokenInfo, DcCmdError>;
+    async fn get_oidc_idp_configs(&self) -> Result<Vec<OpenIdConfigInfo>, DcCmdError>;
     async fn get_system_info(&self) -> Result<SystemInfo, DcCmdError>;
 }
 
@@ -58,22 +59,26 @@ impl SystemApi for Dracoon<Connected> {
         })
     }
 
-    async fn get_system_info(&self) -> Result<SystemInfo, DcCmdError> {
+    async fn get_oidc_idp_configs(&self) -> Result<Vec<OpenIdConfigInfo>, DcCmdError> {
         let oidc_info = self.system().auth.get_openid_idp_configurations().await?;
+
+        Ok(oidc_info
+            .into_iter()
+            .map(|cfg| OpenIdConfigInfo {
+                id: cfg.id,
+                name: cfg.name.unwrap_or_default(),
+            })
+            .collect())
+    }
+
+    async fn get_system_info(&self) -> Result<SystemInfo, DcCmdError> {
+        let oidc_configs = self.get_oidc_idp_configs().await?;
         let ad_info = self
             .system()
             .auth
             .get_active_directory_configurations()
             .await?;
         let customer_info = self.user().get_customer_info().await?;
-
-        let oidc_configs = oidc_info
-            .into_iter()
-            .map(|cfg| OpenIdConfigInfo {
-                id: cfg.id,
-                name: cfg.name.unwrap_or_default(),
-            })
-            .collect::<Vec<_>>();
 
         let ad_configs = ad_info
             .items

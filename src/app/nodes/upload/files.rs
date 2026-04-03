@@ -8,7 +8,7 @@ use std::{
 };
 
 use dco3::{
-    auth::Connected,
+    auth::{Connected, Disconnected},
     nodes::{Node, ResolutionStrategy, UploadOptions},
     Dracoon, Public, PublicUpload, Upload,
 };
@@ -17,7 +17,6 @@ use tracing::{debug, error, info, warn};
 
 use crate::{
     app::{
-        auth::AuthService,
         nodes::{
             command::CmdUploadOptions,
             progress::{start_progress_bar, update_remaining_files_message, ProgressReporter},
@@ -42,6 +41,7 @@ pub struct UploadFailure {
 }
 
 pub async fn upload_public_file(
+    dracoon: &Dracoon<Disconnected>,
     source: PathBuf,
     target: String,
     progress: &dyn ProgressReporter,
@@ -61,8 +61,6 @@ pub async fn upload_public_file(
             source.to_string_lossy().to_string(),
         ));
     }
-
-    let dracoon = AuthService::new().init_public(&target).await?;
 
     let access_key = target
         .split('/')
@@ -359,6 +357,7 @@ mod tests {
 
     use crate::{
         app::{
+            auth::AuthService,
             nodes::{
                 command::CmdUploadOptions, progress::NoopProgressReporter, upload::UploadOutcome,
             },
@@ -698,8 +697,13 @@ mod tests {
         tokio::fs::write(&source, b"ABCD")
             .await
             .expect("write test source");
+        let public_client = AuthService::new()
+            .init_public(&format!("{}/public/upload-shares/test", server.url()))
+            .await
+            .expect("public client");
 
         upload_public_file(
+            &public_client,
             source.clone(),
             format!("{}/public/upload-shares/test", server.url()),
             &NoopProgressReporter,
@@ -758,18 +762,7 @@ mod tests {
             &target,
             files,
             parent_nodes,
-            CmdUploadOptions::new(
-                false,
-                false,
-                true,
-                false,
-                false,
-                None,
-                Some(1),
-                None,
-                None,
-                None,
-            ),
+            CmdUploadOptions::new(false, false, true, false, false, None, Some(1), None),
             &NoopProgressReporter,
         )
         .await
@@ -815,18 +808,7 @@ mod tests {
             &target,
             files,
             parent_nodes,
-            CmdUploadOptions::new(
-                false,
-                false,
-                true,
-                false,
-                false,
-                None,
-                Some(1),
-                None,
-                None,
-                None,
-            ),
+            CmdUploadOptions::new(false, false, true, false, false, None, Some(1), None),
             &NoopProgressReporter,
         )
         .await

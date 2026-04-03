@@ -5,17 +5,16 @@ use crate::{
         results::{AppResult, UsersPlatformResult},
         App, Platform, Ui,
     },
-    core::models::{DcCmdError, PasswordAuth},
+    core::models::DcCmdError,
 };
 
 impl<P: Platform, U: Ui> App<P, U> {
     pub(in crate::app) async fn handle_users(
         &self,
         cmd: UsersRequest,
-        auth: Option<PasswordAuth>,
     ) -> Result<AppResult, DcCmdError> {
         let mut outcome = CommandOutcome::default();
-        match self.platform.users(cmd, auth).await? {
+        match self.platform.users(cmd).await? {
             UsersPlatformResult::Created {
                 user_name,
                 user_id,

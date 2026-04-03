@@ -5,17 +5,16 @@ use crate::{
         results::{AppResult, GroupsPlatformResult},
         App, Platform, Ui,
     },
-    core::models::{DcCmdError, PasswordAuth},
+    core::models::DcCmdError,
 };
 
 impl<P: Platform, U: Ui> App<P, U> {
     pub(in crate::app) async fn handle_groups(
         &self,
         cmd: GroupsRequest,
-        auth: Option<PasswordAuth>,
     ) -> Result<AppResult, DcCmdError> {
         let mut outcome = CommandOutcome::default();
-        match self.platform.groups(cmd, auth).await? {
+        match self.platform.groups(cmd).await? {
             GroupsPlatformResult::Created {
                 group_name,
                 group_id,
