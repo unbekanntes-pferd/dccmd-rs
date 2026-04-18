@@ -8,21 +8,18 @@ use std::{
 };
 
 use dco3::{
-    auth::{Connected, Disconnected},
-    nodes::{Node, ResolutionStrategy, UploadOptions},
-    Dracoon, Public, PublicUpload, Upload,
+    auth::Disconnected,
+    nodes::{Node, UploadOptions},
+    Dracoon, Public, PublicUpload,
 };
 use futures_util::{stream, StreamExt};
 use tracing::{debug, error, info, warn};
 
 use crate::{
-    app::{
-        nodes::{
-            command::CmdUploadOptions,
-            progress::{start_progress_bar, update_remaining_files_message, ProgressReporter},
-            upload::UploadOutcome,
-        },
-        shares::DownloadShareLinkCreator,
+    app::nodes::{
+        command::CmdUploadOptions,
+        progress::{start_progress_bar, update_remaining_files_message, ProgressReporter},
+        upload::UploadOutcome,
     },
     core::{
         constants::{
@@ -98,12 +95,11 @@ pub async fn upload_public_file(
     Ok(())
 }
 
-pub async fn upload_file(
-    dracoon: &Dracoon<Connected>,
+pub async fn upload_file<A: UploadApi>(
+    api: &A,
     source: PathBuf,
     target_node: &Node,
     opts: CmdUploadOptions,
-    share_link_creator: &dyn DownloadShareLinkCreator,
     progress: &dyn ProgressReporter,
 ) -> Result<Option<String>, DcCmdError> {
     info!("Attempting upload of file: {}.", source.to_string_lossy());
@@ -132,67 +128,40 @@ pub async fn upload_file(
     let progress_bar_mv = progress_bar.clone();
 
     let classification = opts.classification.unwrap_or(2);
-    let resolution_strategy = if opts.overwrite {
-        ResolutionStrategy::Overwrite
-    } else {
-        ResolutionStrategy::AutoRename
-    };
-
-    // only keep share links if overwrite is set
-    let keep_share_links = match resolution_strategy {
-        ResolutionStrategy::Overwrite => opts.keep_share_links,
-        _ => false,
-    };
-
-    let upload_options = UploadOptions::builder(file_meta)
-        .with_classification(classification)
-        .with_resolution_strategy(resolution_strategy)
-        .with_keep_share_links(keep_share_links)
-        .build();
-
-    let reader = tokio::io::BufReader::new(file);
-
-    let node = dracoon
-        .upload(
+    let node = api
+        .upload_local_file(
+            source.clone(),
             target_node,
-            upload_options,
-            reader,
-            Some(Box::new(move |progress, _| {
+            classification,
+            opts.overwrite,
+            opts.keep_share_links,
+            Some(Arc::new(move |progress| {
                 progress_bar_mv.inc(progress);
             })),
-            Some(DEFAULT_CHUNK_SIZE),
         )
         .await?;
 
     progress_bar.finish_with_message(&format!("Upload of {file_name} complete"));
     info!("Upload of {} complete.", source.to_string_lossy());
 
-    let share_message = maybe_build_share_message(
-        &node,
-        &file_name,
-        opts.share,
-        opts.share_password,
-        share_link_creator,
-    )
-    .await?;
+    let share_message =
+        maybe_build_share_message(api, &node, &file_name, opts.share, opts.share_password).await?;
 
     Ok(share_message)
 }
 
-async fn maybe_build_share_message(
+async fn maybe_build_share_message<A: UploadApi>(
+    api: &A,
     node: &Node,
     file_name: &str,
     share_enabled: bool,
     share_password: Option<String>,
-    share_link_creator: &dyn DownloadShareLinkCreator,
 ) -> Result<Option<String>, DcCmdError> {
     if !share_enabled || node.is_encrypted.unwrap_or(false) {
         return Ok(None);
     }
 
-    let link = share_link_creator
-        .create_download_share_link(node, share_password)
-        .await?;
+    let link = api.create_download_share_link(node, share_password).await?;
     Ok(Some(format!("Shared {file_name}.\n▶︎▶︎ {link}")))
 }
 
@@ -264,9 +233,9 @@ pub async fn upload_files<A: UploadApi + Clone + Send + Sync + 'static>(
             update_remaining_files_message(progress_bar_inc.as_ref(), "Uploading", remaining);
 
             match result {
-                Ok(file_name) => {
+                Ok(node) => {
                     uploaded_files.fetch_add(1, Ordering::Relaxed);
-                    debug!("Uploaded file: {}", file_name);
+                    debug!("Uploaded file: {}", node.name);
                     None
                 }
                 Err(err) => {
@@ -361,7 +330,6 @@ mod tests {
             nodes::{
                 command::CmdUploadOptions, progress::NoopProgressReporter, upload::UploadOutcome,
             },
-            shares::DownloadShareLinkCreator,
         },
         core::models::DcCmdError,
     };
@@ -406,27 +374,28 @@ mod tests {
         peak_in_flight.load(Ordering::SeqCst)
     }
 
-    #[derive(Default)]
-    struct MockShareLinkCreator {
-        calls: AtomicUsize,
-    }
-
     #[derive(Clone, Default)]
     struct MockUploadApi {
-        results: Arc<Mutex<HashMap<String, Result<String, DcCmdError>>>>,
+        results: Arc<Mutex<HashMap<String, Result<Node, DcCmdError>>>>,
         calls: Arc<Mutex<Vec<String>>>,
+        share_link_calls: Arc<AtomicUsize>,
     }
 
     impl MockUploadApi {
-        fn with_results(results: Vec<(String, Result<String, DcCmdError>)>) -> Self {
+        fn with_results(results: Vec<(String, Result<Node, DcCmdError>)>) -> Self {
             Self {
                 results: Arc::new(Mutex::new(results.into_iter().collect())),
                 calls: Arc::new(Mutex::new(Vec::new())),
+                share_link_calls: Arc::new(AtomicUsize::new(0)),
             }
         }
 
         fn calls(&self) -> Vec<String> {
             self.calls.lock().expect("lock poisoned").clone()
+        }
+
+        fn share_link_calls(&self) -> usize {
+            self.share_link_calls.load(Ordering::SeqCst)
         }
     }
 
@@ -440,7 +409,7 @@ mod tests {
             _overwrite: bool,
             _keep_share_links: bool,
             on_progress: Option<UploadProgressFn>,
-        ) -> Result<String, DcCmdError> {
+        ) -> Result<Node, DcCmdError> {
             let source_display = source.to_string_lossy().to_string();
             self.calls
                 .lock()
@@ -456,23 +425,23 @@ mod tests {
                 .expect("lock poisoned")
                 .remove(&source_display)
                 .unwrap_or_else(|| {
-                    Ok(source
-                        .file_name()
-                        .expect("file name")
-                        .to_string_lossy()
-                        .to_string())
+                    Ok(Node {
+                        name: source
+                            .file_name()
+                            .expect("file name")
+                            .to_string_lossy()
+                            .to_string(),
+                        ..file_node(999, Some(false))
+                    })
                 })
         }
-    }
 
-    #[async_trait]
-    impl DownloadShareLinkCreator for MockShareLinkCreator {
         async fn create_download_share_link(
             &self,
             _node: &Node,
             _share_password: Option<String>,
         ) -> Result<String, DcCmdError> {
-            self.calls.fetch_add(1, Ordering::SeqCst);
+            self.share_link_calls.fetch_add(1, Ordering::SeqCst);
             Ok("https://example.com/public/download-shares/mock-link".to_string())
         }
     }
@@ -598,11 +567,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_maybe_build_share_message_uses_injected_creator_for_share_uploads() {
-        let creator = MockShareLinkCreator::default();
+        let api = MockUploadApi::default();
         let node = file_node(1, Some(false));
 
         let message =
-            maybe_build_share_message(&node, "file.txt", true, Some("pw".to_string()), &creator)
+            maybe_build_share_message(&api, &node, "file.txt", true, Some("pw".to_string()))
                 .await
                 .expect("share link message should be created");
 
@@ -610,21 +579,21 @@ mod tests {
             message.as_deref(),
             Some("Shared file.txt.\n▶︎▶︎ https://example.com/public/download-shares/mock-link")
         );
-        assert_eq!(creator.calls.load(Ordering::SeqCst), 1);
+        assert_eq!(api.share_link_calls(), 1);
     }
 
     #[tokio::test]
     async fn test_maybe_build_share_message_skips_creator_for_encrypted_nodes() {
-        let creator = MockShareLinkCreator::default();
+        let api = MockUploadApi::default();
         let node = file_node(1, Some(true));
 
         let message =
-            maybe_build_share_message(&node, "file.txt", true, Some("pw".to_string()), &creator)
+            maybe_build_share_message(&api, &node, "file.txt", true, Some("pw".to_string()))
                 .await
                 .expect("encrypted nodes should not be shared");
 
         assert!(message.is_none());
-        assert_eq!(creator.calls.load(Ordering::SeqCst), 0);
+        assert_eq!(api.share_link_calls(), 0);
     }
 
     #[tokio::test]

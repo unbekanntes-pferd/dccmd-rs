@@ -8,18 +8,18 @@ use async_recursion::async_recursion;
 use async_trait::async_trait;
 use dashmap::DashMap;
 use dco3::{
-    auth::Connected,
-    nodes::{models::NodeType, CreateFolderRequest, Node},
-    Dracoon, Folders, ListAllParams, Nodes,
+    nodes::{models::NodeType, Node},
+    ListAllParams,
 };
 use futures_util::{stream, StreamExt};
 
 use tracing::{debug, error, info};
 use unicode_normalization::UnicodeNormalization;
 
-use super::files::upload_files;
+use super::{api::UploadApi, files::upload_files};
 use crate::{
     app::nodes::{
+        api::NodesApi,
         command::CmdUploadOptions,
         progress::{start_item_progress_bar, start_spinner, ProgressReporter},
         upload::UploadOutcome,
@@ -31,8 +31,8 @@ use crate::{
 };
 
 #[allow(clippy::too_many_lines)]
-pub async fn upload_container(
-    dracoon: &Dracoon<Connected>,
+pub async fn upload_container<A: UploadApi + NodesApi + Clone + Send + Sync + 'static>(
+    api: &A,
     source: PathBuf,
     target: &Node,
     opts: &CmdUploadOptions,
@@ -62,7 +62,7 @@ pub async fn upload_container(
         info!("Skipping root folder.");
         target.clone()
     } else {
-        create_root_folder(dracoon, &root_name, target.id).await?
+        create_root_folder(api, &root_name, target.id).await?
     };
 
     let (files, folders) = match tokio::try_join!(list_files(&source), list_directories(&source)) {
@@ -97,7 +97,7 @@ pub async fn upload_container(
 
     for depth_level in folders {
         let depth_results = stream::iter(depth_level.into_iter().map(|folder| {
-            let dracoon = dracoon.clone();
+            let api = api.clone();
             let created_nodes = created_nodes.clone();
             let progress_bar = progress_bar.clone();
             let root_path = root_path.clone();
@@ -132,16 +132,14 @@ pub async fn upload_container(
                     .ok_or(DcCmdError::InvalidPath(
                         source.to_string_lossy().to_string(),
                     ))?;
-                let folder = CreateFolderRequest::builder(&name, parent_id).build();
-
-                match dracoon.nodes().create_folder(folder).await {
+                match api.create_folder(&name, parent_id, None, None).await {
                     Ok(folder) => {
                         let folder_path = format!("{normalized_parent}/{name}").nfc().collect();
                         created_nodes.insert(folder_path, folder);
                         progress_bar.inc(1);
                     }
-                    Err(e) if e.is_conflict() => {
-                        let folder = find_existing_child_folder(&dracoon, parent_id, &name)
+                    Err(error) if is_conflict_error(&error) => {
+                        let folder = find_existing_child_folder(&api, parent_id, &name)
                             .await?
                             .ok_or_else(|| {
                                 error!(
@@ -155,9 +153,9 @@ pub async fn upload_container(
                         created_nodes.insert(folder_path, folder);
                         progress_bar.inc(1);
                     }
-                    Err(e) => {
-                        error!("Error creating folder: {}", e);
-                        return Err(e.into());
+                    Err(error) => {
+                        error!("Error creating folder: {}", error);
+                        return Err(error);
                     }
                 }
 
@@ -184,15 +182,7 @@ pub async fn upload_container(
         .collect::<HashMap<_, _>>();
 
     // upload files
-    let outcome = upload_files(
-        dracoon,
-        target,
-        file_map,
-        parent_nodes,
-        opts.clone(),
-        progress,
-    )
-    .await?;
+    let outcome = upload_files(api, target, file_map, parent_nodes, opts.clone(), progress).await?;
 
     info!("Upload of {} complete.", source.to_string_lossy());
 
@@ -314,17 +304,15 @@ async fn list_files_with(fs: &dyn FsReader, root_path: &Path) -> Result<Vec<Path
     Ok(file_paths)
 }
 
-async fn create_root_folder(
-    dracoon: &Dracoon<Connected>,
+async fn create_root_folder<A: NodesApi>(
+    api: &A,
     name: &str,
     parent_id: u64,
 ) -> Result<Node, DcCmdError> {
-    let root_folder = CreateFolderRequest::builder(name, parent_id).build();
-
-    let root_folder = match dracoon.nodes().create_folder(root_folder).await {
+    let root_folder = match api.create_folder(name, parent_id, None, None).await {
         Ok(folder) => folder,
-        Err(e) if e.is_conflict() => {
-            find_existing_child_folder(dracoon, parent_id, name)
+        Err(error) if is_conflict_error(&error) => {
+            find_existing_child_folder(api, parent_id, name)
                 .await?
                 .ok_or_else(|| {
                     error!(
@@ -335,28 +323,25 @@ async fn create_root_folder(
                     ))
                 })?
         }
-        Err(e) => {
-            error!("Not a conflict - error creating root folder: {:?}", e);
-            debug!("Is conflict: {}", e.is_conflict());
-            return Err(e.into());
+        Err(error) => {
+            error!("Not a conflict - error creating root folder: {:?}", error);
+            debug!("Is conflict: {}", is_conflict_error(&error));
+            return Err(error);
         }
     };
 
     Ok(root_folder)
 }
 
-async fn find_existing_child_folder(
-    dracoon: &Dracoon<Connected>,
+async fn find_existing_child_folder<A: NodesApi>(
+    api: &A,
     parent_id: u64,
     folder_name: &str,
 ) -> Result<Option<Node>, DcCmdError> {
     let mut offset = 0_u64;
     loop {
         let params = ListAllParams::builder().with_offset(offset).build();
-        let nodes = dracoon
-            .nodes()
-            .get_nodes(Some(parent_id), None, Some(params))
-            .await?;
+        let nodes = api.get_nodes(Some(parent_id), None, Some(params)).await?;
 
         if let Some(folder) = nodes
             .items
@@ -378,6 +363,10 @@ async fn find_existing_child_folder(
     }
 
     Ok(None)
+}
+
+fn is_conflict_error(error: &DcCmdError) -> bool {
+    matches!(error, DcCmdError::DracoonError(response) if response.is_conflict())
 }
 
 fn group_folders_by_depth(folders: Vec<PathBuf>) -> Vec<Vec<(PathBuf, usize)>> {

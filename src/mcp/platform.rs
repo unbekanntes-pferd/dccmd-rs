@@ -4,6 +4,7 @@ use std::{
     task::{Context, Poll},
 };
 
+use async_trait::async_trait;
 use dco3::{
     auth::Connected,
     nodes::{
@@ -28,7 +29,7 @@ use crate::{
             },
             filesystem::OSFileSystem,
             progress::{start_progress_bar, ProgressReporter},
-            upload::{NodesUploadService, UploadOutcome},
+            upload::{NodesUploadService, UploadApi, UploadOutcome},
             DeleteNodesPreparation, NodesService,
         },
         users::{
@@ -63,11 +64,80 @@ use crate::{
 const DEFAULT_PAGE_LIMIT: u64 = 500;
 const MAX_READ_BYTES: usize = 1_048_576;
 
-#[derive(Debug, Clone)]
+pub(crate) trait McpBackend:
+    NodesApi + DownloadApi + UploadApi + UsersApi + UsersCommandApi + GroupsApi + SystemApi
+{
+}
+
+impl<T> McpBackend for T where
+    T: NodesApi + DownloadApi + UploadApi + UsersApi + UsersCommandApi + GroupsApi + SystemApi
+{
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+#[derive(Clone)]
+pub(crate) enum McpSession {
+    Dracoon(dco3::Dracoon<Connected>),
+    Mock(Arc<dyn McpBackend>),
+}
+
+#[async_trait]
+pub(crate) trait McpSessionProvider: Send + Sync {
+    async fn connect(&self, target: &str) -> Result<McpSession, DcCmdError>;
+
+    async fn ensure_encryption(
+        &self,
+        target: &str,
+        session: McpSession,
+        encryption_password: Option<SecretString>,
+    ) -> Result<McpSession, DcCmdError>;
+}
+
+#[derive(Debug, Default)]
+struct DefaultMcpSessionProvider;
+
+#[derive(Clone)]
 pub struct McpPlatform {
     target: String,
     encryption_password: Option<SecretString>,
     path_guard: WorkspacePathGuard,
+    session_provider: Arc<dyn McpSessionProvider>,
+}
+
+#[async_trait]
+impl McpSessionProvider for DefaultMcpSessionProvider {
+    async fn connect(&self, target: &str) -> Result<McpSession, DcCmdError> {
+        let config = ConfigService::new();
+        let refresh_token = config.get_refresh_token(target)?;
+        let session = AuthService::new()
+            .connect_with_refresh_token(target, refresh_token)
+            .await?;
+        Ok(McpSession::Dracoon(session.into_client()))
+    }
+
+    async fn ensure_encryption(
+        &self,
+        target: &str,
+        session: McpSession,
+        encryption_password: Option<SecretString>,
+    ) -> Result<McpSession, DcCmdError> {
+        if encryption_password.is_none() && !ConfigService::new().has_encryption_secret(target)? {
+            return Err(DcCmdError::InvalidArgument(
+                "Encrypted node access requires a stored encryption secret or startup --encryption-password.".to_string(),
+            ));
+        }
+
+        let McpSession::Dracoon(client) = session else {
+            return Err(DcCmdError::InvalidArgument(
+                "Encrypted node access is not available for the current MCP backend.".to_string(),
+            ));
+        };
+
+        let encrypted = AuthService::new()
+            .ensure_encryption_client(target.to_string(), client, encryption_password)
+            .await?;
+        Ok(McpSession::Dracoon(encrypted))
+    }
 }
 
 impl McpPlatform {
@@ -83,6 +153,25 @@ impl McpPlatform {
             target,
             encryption_password,
             path_guard,
+            session_provider: Arc::new(DefaultMcpSessionProvider),
+        })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_session_provider(
+        target: String,
+        encryption_password: Option<SecretString>,
+        path_guard: WorkspacePathGuard,
+        session_provider: Arc<dyn McpSessionProvider>,
+    ) -> Result<Self, DcCmdError> {
+        let config = ConfigService::new();
+        let target = config.normalize_base_url(&target)?;
+
+        Ok(Self {
+            target,
+            encryption_password,
+            path_guard,
+            session_provider,
         })
     }
 
@@ -445,33 +534,13 @@ impl McpPlatform {
         })
     }
 
-    async fn connect_client(&self) -> Result<dco3::Dracoon<Connected>, DcCmdError> {
-        let config = ConfigService::new();
-        let refresh_token = config.get_refresh_token(&self.target)?;
-        let session = AuthService::new()
-            .connect_with_refresh_token(&self.target, refresh_token)
-            .await?;
-        Ok(session.into_client())
+    async fn connect_client(&self) -> Result<McpSession, DcCmdError> {
+        self.session_provider.connect(&self.target).await
     }
 
-    async fn ensure_encryption_client(
-        &self,
-        client: dco3::Dracoon<Connected>,
-    ) -> Result<dco3::Dracoon<Connected>, DcCmdError> {
-        if self.encryption_password.is_none()
-            && !ConfigService::new().has_encryption_secret(&self.target)?
-        {
-            return Err(DcCmdError::InvalidArgument(
-                "Encrypted node access requires a stored encryption secret or startup --encryption-password.".to_string(),
-            ));
-        }
-
-        AuthService::new()
-            .ensure_encryption_client(
-                self.target.clone(),
-                client,
-                self.encryption_password.clone(),
-            )
+    async fn ensure_encryption_client(&self, client: McpSession) -> Result<McpSession, DcCmdError> {
+        self.session_provider
+            .ensure_encryption(&self.target, client, self.encryption_password.clone())
             .await
     }
 
@@ -874,6 +943,388 @@ impl McpPlatform {
     }
 }
 
+#[async_trait]
+impl NodesApi for McpSession {
+    async fn get_node(&self, node_id: u64) -> Result<Node, DcCmdError> {
+        match self {
+            Self::Dracoon(client) => client.get_node(node_id).await,
+            Self::Mock(api) => api.get_node(node_id).await,
+        }
+    }
+
+    async fn get_node_from_path(&self, node_path: &str) -> Result<Option<Node>, DcCmdError> {
+        match self {
+            Self::Dracoon(client) => NodesApi::get_node_from_path(client, node_path).await,
+            Self::Mock(api) => NodesApi::get_node_from_path(api.as_ref(), node_path).await,
+        }
+    }
+
+    async fn get_nodes(
+        &self,
+        parent_id: Option<u64>,
+        managed: Option<bool>,
+        params: Option<ListAllParams>,
+    ) -> Result<NodeList, DcCmdError> {
+        match self {
+            Self::Dracoon(client) => client.get_nodes(parent_id, managed, params).await,
+            Self::Mock(api) => api.get_nodes(parent_id, managed, params).await,
+        }
+    }
+
+    async fn search_nodes(
+        &self,
+        search_string: &str,
+        parent_id: Option<u64>,
+        depth_level: Option<i8>,
+        params: Option<ListAllParams>,
+    ) -> Result<NodeList, DcCmdError> {
+        match self {
+            Self::Dracoon(client) => {
+                client
+                    .search_nodes(search_string, parent_id, depth_level, params)
+                    .await
+            }
+            Self::Mock(api) => {
+                api.search_nodes(search_string, parent_id, depth_level, params)
+                    .await
+            }
+        }
+    }
+
+    async fn delete_node(&self, node_id: u64) -> Result<(), DcCmdError> {
+        match self {
+            Self::Dracoon(client) => client.delete_node(node_id).await,
+            Self::Mock(api) => api.delete_node(node_id).await,
+        }
+    }
+
+    async fn delete_nodes(&self, node_ids: Vec<u64>) -> Result<(), DcCmdError> {
+        match self {
+            Self::Dracoon(client) => client.delete_nodes(node_ids).await,
+            Self::Mock(api) => api.delete_nodes(node_ids).await,
+        }
+    }
+
+    async fn copy_nodes(
+        &self,
+        node_ids: Vec<u64>,
+        target_parent_id: u64,
+    ) -> Result<(), DcCmdError> {
+        match self {
+            Self::Dracoon(client) => client.copy_nodes(node_ids, target_parent_id).await,
+            Self::Mock(api) => api.copy_nodes(node_ids, target_parent_id).await,
+        }
+    }
+
+    async fn create_folder(
+        &self,
+        node_name: &str,
+        parent_id: u64,
+        classification: Option<u8>,
+        notes: Option<String>,
+    ) -> Result<Node, DcCmdError> {
+        match self {
+            Self::Dracoon(client) => {
+                client
+                    .create_folder(node_name, parent_id, classification, notes)
+                    .await
+            }
+            Self::Mock(api) => {
+                api.create_folder(node_name, parent_id, classification, notes)
+                    .await
+            }
+        }
+    }
+
+    async fn create_room(
+        &self,
+        node_name: &str,
+        parent_id: u64,
+        classification: u8,
+        inherit_permissions: bool,
+        admin_ids: Option<Vec<u64>>,
+    ) -> Result<(), DcCmdError> {
+        match self {
+            Self::Dracoon(client) => {
+                client
+                    .create_room(
+                        node_name,
+                        parent_id,
+                        classification,
+                        inherit_permissions,
+                        admin_ids,
+                    )
+                    .await
+            }
+            Self::Mock(api) => {
+                api.create_room(
+                    node_name,
+                    parent_id,
+                    classification,
+                    inherit_permissions,
+                    admin_ids,
+                )
+                .await
+            }
+        }
+    }
+}
+
+#[async_trait]
+impl DownloadApi for McpSession {
+    async fn download_node<'w>(
+        &'w self,
+        node: &Node,
+        writer: &'w mut (dyn tokio::io::AsyncWrite + Send + Unpin),
+        callback: Option<dco3::nodes::models::DownloadProgressCallback>,
+    ) -> Result<(), DcCmdError> {
+        match self {
+            Self::Dracoon(client) => client.download_node(node, writer, callback).await,
+            Self::Mock(api) => api.download_node(node, writer, callback).await,
+        }
+    }
+}
+
+#[async_trait]
+impl UploadApi for McpSession {
+    async fn upload_local_file(
+        &self,
+        source: std::path::PathBuf,
+        target_node: &Node,
+        classification: u8,
+        overwrite: bool,
+        keep_share_links: bool,
+        on_progress: Option<crate::app::nodes::upload::UploadProgressFn>,
+    ) -> Result<Node, DcCmdError> {
+        match self {
+            Self::Dracoon(client) => {
+                client
+                    .upload_local_file(
+                        source,
+                        target_node,
+                        classification,
+                        overwrite,
+                        keep_share_links,
+                        on_progress,
+                    )
+                    .await
+            }
+            Self::Mock(api) => {
+                api.upload_local_file(
+                    source,
+                    target_node,
+                    classification,
+                    overwrite,
+                    keep_share_links,
+                    on_progress,
+                )
+                .await
+            }
+        }
+    }
+
+    async fn create_download_share_link(
+        &self,
+        node: &Node,
+        share_password: Option<String>,
+    ) -> Result<String, DcCmdError> {
+        match self {
+            Self::Dracoon(client) => {
+                client
+                    .create_download_share_link(node, share_password)
+                    .await
+            }
+            Self::Mock(api) => api.create_download_share_link(node, share_password).await,
+        }
+    }
+}
+
+#[async_trait]
+impl UsersApi for McpSession {
+    async fn find_user_id_by_username(&self, user_name: &str) -> Result<u64, DcCmdError> {
+        match self {
+            Self::Dracoon(client) => client.find_user_id_by_username(user_name).await,
+            Self::Mock(api) => api.find_user_id_by_username(user_name).await,
+        }
+    }
+}
+
+#[async_trait]
+impl UsersCommandApi for McpSession {
+    async fn create_user(
+        &self,
+        req: dco3::users::CreateUserRequest,
+    ) -> Result<dco3::users::UserData, DcCmdError> {
+        match self {
+            Self::Dracoon(client) => client.create_user(req).await,
+            Self::Mock(api) => api.create_user(req).await,
+        }
+    }
+
+    async fn get_users(
+        &self,
+        params: Option<ListAllParams>,
+    ) -> Result<dco3::RangedItems<dco3::users::UserItem>, DcCmdError> {
+        match self {
+            Self::Dracoon(client) => client.get_users(params).await,
+            Self::Mock(api) => api.get_users(params).await,
+        }
+    }
+
+    async fn delete_user(&self, user_id: u64) -> Result<(), DcCmdError> {
+        match self {
+            Self::Dracoon(client) => client.delete_user(user_id).await,
+            Self::Mock(api) => api.delete_user(user_id).await,
+        }
+    }
+
+    async fn get_user(&self, user_id: u64) -> Result<dco3::users::UserData, DcCmdError> {
+        match self {
+            Self::Dracoon(client) => client.get_user(user_id).await,
+            Self::Mock(api) => api.get_user(user_id).await,
+        }
+    }
+
+    async fn update_user(
+        &self,
+        user_id: u64,
+        req: dco3::users::UpdateUserRequest,
+    ) -> Result<dco3::users::UserData, DcCmdError> {
+        match self {
+            Self::Dracoon(client) => client.update_user(user_id, req).await,
+            Self::Mock(api) => api.update_user(user_id, req).await,
+        }
+    }
+
+    async fn add_group_users(&self, group_id: u64, user_ids: Vec<u64>) -> Result<(), DcCmdError> {
+        match self {
+            Self::Dracoon(client) => {
+                UsersCommandApi::add_group_users(client, group_id, user_ids).await
+            }
+            Self::Mock(api) => {
+                UsersCommandApi::add_group_users(api.as_ref(), group_id, user_ids).await
+            }
+        }
+    }
+
+    async fn get_group_users(
+        &self,
+        group_id: u64,
+        params: Option<ListAllParams>,
+    ) -> Result<dco3::RangedItems<dco3::groups::GroupUser>, DcCmdError> {
+        match self {
+            Self::Dracoon(client) => {
+                UsersCommandApi::get_group_users(client, group_id, params).await
+            }
+            Self::Mock(api) => {
+                UsersCommandApi::get_group_users(api.as_ref(), group_id, params).await
+            }
+        }
+    }
+
+    async fn get_node_from_path(&self, path: &str) -> Result<Option<Node>, DcCmdError> {
+        match self {
+            Self::Dracoon(client) => UsersCommandApi::get_node_from_path(client, path).await,
+            Self::Mock(api) => UsersCommandApi::get_node_from_path(api.as_ref(), path).await,
+        }
+    }
+
+    async fn invite_guest_users(
+        &self,
+        room_id: u64,
+        users: Vec<dco3::nodes::RoomGuestUserInvitation>,
+    ) -> Result<(), DcCmdError> {
+        match self {
+            Self::Dracoon(client) => client.invite_guest_users(room_id, users).await,
+            Self::Mock(api) => api.invite_guest_users(room_id, users).await,
+        }
+    }
+}
+
+#[async_trait]
+impl GroupsApi for McpSession {
+    async fn get_groups(
+        &self,
+        params: Option<ListAllParams>,
+    ) -> Result<dco3::RangedItems<dco3::groups::Group>, DcCmdError> {
+        match self {
+            Self::Dracoon(client) => client.get_groups(params).await,
+            Self::Mock(api) => api.get_groups(params).await,
+        }
+    }
+
+    async fn get_group(&self, group_id: u64) -> Result<dco3::groups::Group, DcCmdError> {
+        match self {
+            Self::Dracoon(client) => client.get_group(group_id).await,
+            Self::Mock(api) => api.get_group(group_id).await,
+        }
+    }
+
+    async fn get_group_users(
+        &self,
+        group_id: u64,
+        params: Option<ListAllParams>,
+    ) -> Result<dco3::RangedItems<dco3::groups::GroupUser>, DcCmdError> {
+        match self {
+            Self::Dracoon(client) => GroupsApi::get_group_users(client, group_id, params).await,
+            Self::Mock(api) => GroupsApi::get_group_users(api.as_ref(), group_id, params).await,
+        }
+    }
+
+    async fn create_group(&self, name: &str) -> Result<dco3::groups::Group, DcCmdError> {
+        match self {
+            Self::Dracoon(client) => client.create_group(name).await,
+            Self::Mock(api) => api.create_group(name).await,
+        }
+    }
+
+    async fn delete_group(&self, group_id: u64) -> Result<(), DcCmdError> {
+        match self {
+            Self::Dracoon(client) => client.delete_group(group_id).await,
+            Self::Mock(api) => api.delete_group(group_id).await,
+        }
+    }
+
+    async fn add_group_users(
+        &self,
+        group_id: u64,
+        user_ids: Vec<u64>,
+    ) -> Result<dco3::groups::Group, DcCmdError> {
+        match self {
+            Self::Dracoon(client) => GroupsApi::add_group_users(client, group_id, user_ids).await,
+            Self::Mock(api) => GroupsApi::add_group_users(api.as_ref(), group_id, user_ids).await,
+        }
+    }
+}
+
+#[async_trait]
+impl SystemApi for McpSession {
+    async fn get_refresh_token_info(
+        &self,
+    ) -> Result<crate::app::config::api::RefreshTokenInfo, DcCmdError> {
+        match self {
+            Self::Dracoon(client) => SystemApi::get_refresh_token_info(client).await,
+            Self::Mock(api) => SystemApi::get_refresh_token_info(api.as_ref()).await,
+        }
+    }
+
+    async fn get_oidc_idp_configs(
+        &self,
+    ) -> Result<Vec<crate::app::config::api::OpenIdConfigInfo>, DcCmdError> {
+        match self {
+            Self::Dracoon(client) => SystemApi::get_oidc_idp_configs(client).await,
+            Self::Mock(api) => SystemApi::get_oidc_idp_configs(api.as_ref()).await,
+        }
+    }
+
+    async fn get_system_info(&self) -> Result<crate::app::config::api::SystemInfo, DcCmdError> {
+        match self {
+            Self::Dracoon(client) => SystemApi::get_system_info(client).await,
+            Self::Mock(api) => SystemApi::get_system_info(api.as_ref()).await,
+        }
+    }
+}
+
 #[derive(Debug)]
 struct ResolvedNodeSelection {
     path: String,
@@ -1108,8 +1559,8 @@ mod tests {
             _parent_id: u64,
             _classification: Option<u8>,
             _notes: Option<String>,
-        ) -> Result<(), DcCmdError> {
-            Ok(())
+        ) -> Result<Node, DcCmdError> {
+            Ok(node(999, "mock-folder", NodeType::Folder, None, None, None))
         }
 
         async fn create_room(

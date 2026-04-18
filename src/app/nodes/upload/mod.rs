@@ -1,22 +1,19 @@
 use std::{path::PathBuf, sync::Arc};
 
-use dco3::{
-    auth::{Connected, Disconnected},
-    nodes::Node,
-    Dracoon,
-};
+use dco3::{auth::Disconnected, nodes::Node, Dracoon};
 use files::{upload_file, upload_public_file};
 use folders::upload_container;
 
 use tracing::error;
 
-use crate::app::{nodes::command::CmdUploadOptions, shares::DracoonDownloadShareLinkCreator};
+use crate::app::nodes::{api::NodesApi, command::CmdUploadOptions};
 use crate::{app::nodes::progress::ProgressReporter, core::models::DcCmdError};
 
 mod api;
 mod files;
 mod folders;
 
+pub use self::api::{UploadApi, UploadProgressFn};
 pub use self::files::UploadFailure;
 
 const UPLOAD_FAILURE_PREVIEW_LIMIT: usize = 5;
@@ -119,9 +116,9 @@ impl NodesUploadService {
         ))
     }
 
-    pub async fn upload_with_client(
+    pub async fn upload_with_client<A: UploadApi + NodesApi + Clone + Send + Sync + 'static>(
         &self,
-        dracoon: &Dracoon<Connected>,
+        api: &A,
         source: PathBuf,
         parent_node: &Node,
         opts: CmdUploadOptions,
@@ -137,13 +134,11 @@ impl NodesUploadService {
         match (source.is_file(), source.is_dir(), opts.recursive) {
             // is a file
             (true, _, _) => {
-                let share_link_creator = DracoonDownloadShareLinkCreator::new(dracoon.clone());
                 let share_message = upload_file(
-                    dracoon,
+                    api,
                     source,
                     parent_node,
                     opts.clone(),
-                    &share_link_creator,
                     self.progress.as_ref(),
                 )
                 .await?;
@@ -152,7 +147,7 @@ impl NodesUploadService {
             }
             // is a directory and recursive flag is set
             (_, true, true) => {
-                upload_container(dracoon, source, parent_node, &opts, self.progress.as_ref()).await
+                upload_container(api, source, parent_node, &opts, self.progress.as_ref()).await
             }
             // is a directory and recursive flag is not set
             (_, true, false) => Err(DcCmdError::InvalidArgument(

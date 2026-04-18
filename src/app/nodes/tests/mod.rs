@@ -130,14 +130,14 @@ impl NodesApi for MockNodesApi {
         parent_id: u64,
         classification: Option<u8>,
         notes: Option<String>,
-    ) -> Result<(), DcCmdError> {
+    ) -> Result<Node, DcCmdError> {
         self.created_folders.lock().expect("lock poisoned").push((
             node_name.to_string(),
             parent_id,
             classification,
             notes,
         ));
-        Ok(())
+        Ok(node(parent_id + 1000, node_name, NodeType::Folder, "/"))
     }
 
     async fn create_room(

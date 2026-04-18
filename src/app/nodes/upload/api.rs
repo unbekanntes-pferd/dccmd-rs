@@ -14,7 +14,10 @@ use dco3::{
 use tracing::error;
 use unicode_normalization::UnicodeNormalization;
 
-use crate::core::{models::DcCmdError, utils::dates::to_datetime_utc};
+use crate::{
+    app::shares::{DownloadShareLinkCreator, DracoonDownloadShareLinkCreator},
+    core::{models::DcCmdError, utils::dates::to_datetime_utc},
+};
 
 pub type UploadProgressFn = Arc<dyn Fn(u64) + Send + Sync>;
 
@@ -28,6 +31,12 @@ pub trait UploadApi: Send + Sync {
         overwrite: bool,
         keep_share_links: bool,
         on_progress: Option<UploadProgressFn>,
+    ) -> Result<Node, DcCmdError>;
+
+    async fn create_download_share_link(
+        &self,
+        node: &Node,
+        share_password: Option<String>,
     ) -> Result<String, DcCmdError>;
 }
 
@@ -41,7 +50,7 @@ impl UploadApi for Dracoon<Connected> {
         overwrite: bool,
         keep_share_links: bool,
         on_progress: Option<UploadProgressFn>,
-    ) -> Result<String, DcCmdError> {
+    ) -> Result<Node, DcCmdError> {
         let file = tokio::fs::File::open(&source).await.map_err(|err| {
             error!("Error opening file: {}", err);
             DcCmdError::IoError
@@ -59,7 +68,6 @@ impl UploadApi for Dracoon<Connected> {
         }
 
         let file_meta = get_file_meta(&file_meta, &source)?;
-        let file_name = file_meta.name.clone();
 
         let resolution_strategy = if overwrite {
             ResolutionStrategy::Overwrite
@@ -87,9 +95,17 @@ impl UploadApi for Dracoon<Connected> {
 
         self.upload(target_node, upload_options, reader, callback, None)
             .await
-            .map_err(DcCmdError::from)?;
+            .map_err(DcCmdError::from)
+    }
 
-        Ok(file_name)
+    async fn create_download_share_link(
+        &self,
+        node: &Node,
+        share_password: Option<String>,
+    ) -> Result<String, DcCmdError> {
+        DracoonDownloadShareLinkCreator::new(self.clone())
+            .create_download_share_link(node, share_password)
+            .await
     }
 }
 

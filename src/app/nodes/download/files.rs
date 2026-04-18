@@ -439,12 +439,12 @@ mod tests {
 
         async fn create_folder(
             &self,
-            _node_name: &str,
-            _parent_id: u64,
+            node_name: &str,
+            parent_id: u64,
             _classification: Option<u8>,
             _notes: Option<String>,
-        ) -> Result<(), DcCmdError> {
-            Ok(())
+        ) -> Result<Node, DcCmdError> {
+            Ok(node(parent_id + 1000, node_name, NodeType::Folder, "/"))
         }
 
         async fn create_room(

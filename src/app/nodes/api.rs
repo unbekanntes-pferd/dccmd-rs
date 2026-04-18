@@ -45,7 +45,7 @@ pub trait NodesApi: Send + Sync {
         parent_id: u64,
         classification: Option<u8>,
         notes: Option<String>,
-    ) -> Result<(), DcCmdError>;
+    ) -> Result<Node, DcCmdError>;
 
     async fn create_room(
         &self,
@@ -124,7 +124,7 @@ impl NodesApi for Dracoon<Connected> {
         parent_id: u64,
         classification: Option<u8>,
         notes: Option<String>,
-    ) -> Result<(), DcCmdError> {
+    ) -> Result<Node, DcCmdError> {
         let req = CreateFolderRequest::builder(node_name.to_string(), parent_id);
         let req = if let Some(classification) = classification {
             req.with_classification(classification)
@@ -140,7 +140,6 @@ impl NodesApi for Dracoon<Connected> {
         self.nodes()
             .create_folder(req.build())
             .await
-            .map(|_| ())
             .map_err(Into::into)
     }
 
