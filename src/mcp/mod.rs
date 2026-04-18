@@ -4,6 +4,8 @@ mod paths;
 mod platform;
 mod progress;
 mod server;
+#[cfg(test)]
+mod tests;
 mod users;
 
 use secrecy::SecretString;

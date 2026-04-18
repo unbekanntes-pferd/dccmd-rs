@@ -14,6 +14,8 @@ use crate::mcp::server::DccmdMcpServer;
 
 pub use copy::{NodesCopyRequest, NodesCopyResponse};
 pub use download::NodesDownloadRequest;
+#[cfg(test)]
+pub use download::NodesDownloadResponse;
 pub use list::{NodesListRequest, NodesListResponse};
 pub use mkdir::{NodesMkdirRequest, NodesMkdirResponse};
 pub(crate) use models::ReadableTextNode;
@@ -23,6 +25,8 @@ pub use models::{
 pub use read::{NodesReadRequest, NodesReadResponse};
 pub use rm::{NodesRmRequest, NodesRmResponse};
 pub use upload::NodesUploadRequest;
+#[cfg(test)]
+pub use upload::NodesUploadResponse;
 
 pub fn router() -> ToolRouter<DccmdMcpServer> {
     ToolRouter::new()
